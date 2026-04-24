@@ -54,6 +54,7 @@ const ORG_SCOPED_TABLES = [
   "portal_about_settings",
   "organization_about",
   "rs_templates",
+  "rs_generated_posts",
   "contact_messages",
   "press_releases",
   "gallery_images",
@@ -61,36 +62,34 @@ const ORG_SCOPED_TABLES = [
   "activity_logs",
   "cupmetrics_historical_cups",
   "cupmetrics_historical_producers",
-  "cupmetrics_historical_results",
   "producers",
   "jury_profiles",
 ] as const;
 
 /**
- * Tables that reference cups / categories / registrations / etc.
- * These are copied by filtering on the parent primary keys that belong
- * to the Platinum organization. Order matters.
+ * Tables that reference cups (cup_id column).
  */
 const CHILD_TABLES_BY_CUP = [
   "categories",
   "cup_labels",
-  "rating_criteria",
   "registrations",
   "cup_sponsors",
   "jury_invitations",
   "cup_juries",
   "public_jury_tokens",
   "jury_invitation_codes",
-  "rs_generated_posts",
-  "lab_analyses",
 ] as const;
 
 const CHILD_TABLES_BY_REGISTRATION = ["products"] as const;
-const CHILD_TABLES_BY_CATEGORY = ["jury_invitation_code_categories"] as const;
+const CHILD_TABLES_BY_CATEGORY = [
+  "rating_criteria",
+  "jury_invitation_code_categories",
+] as const;
 const CHILD_TABLES_BY_CUP_JURY = ["jury_category_assignments"] as const;
 const CHILD_TABLES_BY_PRODUCT = [
   "product_ratings",
   "criterion_scores",
+  "lab_analyses",
 ] as const;
 
 async function fetchColumns(
@@ -376,6 +375,25 @@ async function main() {
     } catch (e) {
       console.warn(`  ${table} failed:`, (e as Error).message);
     }
+  }
+
+  // 3b. Historical cups → historical results (children by historical_cup_id)
+  try {
+    const histCupIds = await fetchIds(
+      "cupmetrics_historical_cups",
+      "organization_id = $1",
+      [PLATINUM_ORG_ID],
+    );
+    if (histCupIds.length > 0) {
+      const count = await copyTableByParentIds(
+        "cupmetrics_historical_results",
+        "historical_cup_id",
+        histCupIds,
+      );
+      console.log(`  cupmetrics_historical_results: ${count}`);
+    }
+  } catch (e) {
+    console.warn(`  cupmetrics_historical_results failed:`, (e as Error).message);
   }
 
   // 4. Get Platinum cup ids
