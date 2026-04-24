@@ -1,0 +1,72 @@
+services:
+  # ============================================
+  # Platinum CBD Cup - Next.js app
+  # ============================================
+  platinum-app:
+    image: ghcr.io/felixdacraft/platinum-cbd-cup:latest
+    container_name: platinum-app
+    restart: unless-stopped
+    depends_on:
+      platinum-postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    volumes:
+      - ./uploads:/app/public/uploads
+    networks:
+      - proxy
+      - platinum-internal
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
+      - "traefik.http.routers.platinum.rule=Host(`platinum.aynn.fr`)"
+      - "traefik.http.routers.platinum.entrypoints=websecure"
+      - "traefik.http.routers.platinum.tls=true"
+      - "traefik.http.routers.platinum.tls.certresolver=letsencrypt"
+      - "traefik.http.services.platinum.loadbalancer.server.port=3000"
+      # Security headers
+      - "traefik.http.routers.platinum.middlewares=platinum-headers"
+      - "traefik.http.middlewares.platinum-headers.headers.stsSeconds=31536000"
+      - "traefik.http.middlewares.platinum-headers.headers.stsIncludeSubdomains=true"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    ports:
+      # Fallback direct access if Traefik is unavailable
+      - "3017:3000"
+
+  # ============================================
+  # Postgres 16
+  # ============================================
+  platinum-postgres:
+    image: postgres:16-alpine
+    container_name: platinum-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-platinum}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB:-platinum_cbd_cup}
+    volumes:
+      - platinum-pgdata:/var/lib/postgresql/data
+    networks:
+      - platinum-internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  platinum-pgdata:
+
+networks:
+  proxy:
+    external: true
+  platinum-internal:
+    driver: bridge

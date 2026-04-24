@@ -1,0 +1,72 @@
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+
+/**
+ * Single-tenant auth middleware for Platinum CBD Cup.
+ *
+ * No subdomain parsing, no portal rewrites, no context headers — this app
+ * is the portal. Only responsibility: redirect unauthenticated users away
+ * from protected paths to `/login`.
+ */
+
+/**
+ * Path prefixes that require an authenticated session.
+ * A match is triggered when pathname === prefix OR pathname starts with `${prefix}/`.
+ * `/jury` is protected, except `/jury/public/*` which is public (handled below).
+ */
+const PROTECTED_PREFIXES = ["/producer", "/jury", "/dashboard"];
+
+/**
+ * Explicit public exceptions that sit underneath a protected prefix.
+ * Checked before PROTECTED_PREFIXES so e.g. `/jury/public/xyz` stays public.
+ */
+const PROTECTED_PUBLIC_EXCEPTIONS = ["/jury/public"];
+
+function matchesPrefix(pathname: string, prefix: string): boolean {
+  return pathname === prefix || pathname.startsWith(`${prefix}/`);
+}
+
+function isProtectedPath(pathname: string): boolean {
+  // Public exceptions override protected prefixes.
+  if (PROTECTED_PUBLIC_EXCEPTIONS.some((p) => matchesPrefix(pathname, p))) {
+    return false;
+  }
+  return PROTECTED_PREFIXES.some((p) => matchesPrefix(pathname, p));
+}
+
+export function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
+  if (!isProtectedPath(pathname)) {
+    return NextResponse.next();
+  }
+
+  // better-auth session cookie — secure (HTTPS) and non-secure (dev HTTP) names
+  const sessionToken =
+    request.cookies.get("__Secure-better-auth.session_token") ??
+    request.cookies.get("better-auth.session_token");
+
+  if (!sessionToken) {
+    const loginUrl = new URL("/login", request.url);
+    loginUrl.searchParams.set("callbackUrl", pathname);
+    return NextResponse.redirect(loginUrl);
+  }
+
+  return NextResponse.next();
+}
+
+export const config = {
+  matcher: [
+    /*
+     * Match all request paths except:
+     * - /api/           (API routes handle their own auth)
+     * - /_next/static   (Next.js static assets)
+     * - /_next/image    (Next.js image optimizer)
+     * - /fonts/         (Louize Display & other local fonts — must not be rewritten)
+     * - favicon.ico
+     * - sw.js           (service worker)
+     * - static image files at any depth
+     */
+    "/((?!api/|_next/static|_next/image|fonts/|favicon.ico|sw\\.js|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+  ],
+};

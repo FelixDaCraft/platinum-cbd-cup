@@ -1,0 +1,62 @@
+# dependencies
+node_modules
+.pnp
+.pnp.js
+.yarn/install-state.gz
+
+# testing
+coverage
+test-results
+playwright-report
+blob-report
+.playwright
+
+# next.js
+.next
+out
+next-env.d.ts
+tsconfig.tsbuildinfo
+
+# production
+build
+dist
+
+# misc
+.DS_Store
+*.pem
+.vscode
+.idea
+Thumbs.db
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.production
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+
+# Claude / tools scratch
+.claude
+_bmad-output
+tmpclaude-*
+
+# Uploads (local/dev uploads)
+public/uploads/*
+!public/uploads/.gitkeep
+
+# Certificates
+certificates
+*.pem

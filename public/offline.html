@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hors ligne - CupMetrics</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #0a0f1a 0%, #1a1f2e 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #e2e8f0;
+    }
+    .container {
+      text-align: center;
+      padding: 2rem;
+      max-width: 400px;
+    }
+    .icon {
+      font-size: 4rem;
+      margin-bottom: 1.5rem;
+    }
+    h1 {
+      font-size: 1.5rem;
+      margin-bottom: 1rem;
+      color: #f1f5f9;
+    }
+    p {
+      color: #94a3b8;
+      margin-bottom: 2rem;
+      line-height: 1.6;
+    }
+    button {
+      background: #3b82f6;
+      color: white;
+      border: none;
+      padding: 0.75rem 2rem;
+      border-radius: 0.5rem;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    button:hover {
+      background: #2563eb;
+    }
+    button:active {
+      transform: scale(0.98);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="icon">📡</div>
+    <h1>Vous êtes hors ligne</h1>
+    <p>
+      Impossible de se connecter à CupMetrics.
+      Vérifiez votre connexion internet et réessayez.
+    </p>
+    <button onclick="window.location.reload()">
+      Réessayer
+    </button>
+  </div>
+</body>
+</html>

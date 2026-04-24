@@ -1,0 +1,25 @@
+{
+  "name": "Platinum CBD Cup",
+  "short_name": "Platinum Cup",
+  "description": "Le concours de référence dédié aux meilleurs CBD de France.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0a0a0f",
+  "theme_color": "#d4af37",
+  "lang": "fr",
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
