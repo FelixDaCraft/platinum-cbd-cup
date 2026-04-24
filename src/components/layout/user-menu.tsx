@@ -8,7 +8,6 @@ import { toast } from "sonner";
 
 import { useSession, signOut } from "~/lib/auth-client";
 import { api } from "~/trpc/react";
-import { buildPortalUrl } from "~/lib/utils";
 import { Button } from "~/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar";
 import {
@@ -77,19 +76,13 @@ export function UserMenu({
 
   if (rolesData?.roles) {
     const { roles } = rolesData;
-    if (roles.organizer && roles.organizer.organizations.length > 0) {
-      // Use the first organization's portal
-      const org = roles.organizer.organizations[0];
-      if (org?.slug) {
-        const portalPath = roles.organizer.isWriter ? "/articles" : "/dashboard";
-        dashboardLinks.push({
-          href: buildPortalUrl(org.slug, portalPath),
-          label: "Espace Organisateur",
-          icon: Building2,
-          isActive: false, // External link, never active on main domain
-          isExternal: true,
-        });
-      }
+    if (roles.organizer) {
+      dashboardLinks.push({
+        href: roles.organizer.href ?? "/dashboard",
+        label: "Espace Organisateur",
+        icon: Building2,
+        isActive: pathname.startsWith("/dashboard"),
+      });
     }
     if (roles.producer) {
       dashboardLinks.push({

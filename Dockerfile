@@ -15,8 +15,19 @@ FROM base AS builder
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-# Skip env validation during build (runtime env validation still applies)
-RUN SKIP_ENV_VALIDATION=1 pnpm run build
+# Next.js "collect page data" imports route modules, which eagerly construct
+# Resend/Stripe clients. Supply placeholder env values during build — the
+# container reads real values from env_file at runtime.
+RUN SKIP_ENV_VALIDATION=1 \
+    DATABASE_URL="postgresql://build:build@localhost:5432/build" \
+    BETTER_AUTH_SECRET="build-time-placeholder-secret-32chars" \
+    BETTER_AUTH_URL="http://localhost:3000" \
+    RESEND_API_KEY="re_build_placeholder" \
+    STRIPE_SECRET_KEY="sk_test_build_placeholder" \
+    STRIPE_WEBHOOK_SECRET="whsec_build_placeholder" \
+    NEXT_PUBLIC_APP_URL="http://localhost:3000" \
+    NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY="pk_test_build_placeholder" \
+    pnpm run build
 
 # ============ Runner ============
 FROM node:20-alpine AS runner

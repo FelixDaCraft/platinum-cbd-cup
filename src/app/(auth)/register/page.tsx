@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { Suspense, useState, useCallback, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -14,29 +14,37 @@ import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { cn } from "~/lib/utils";
+import { signUp } from "~/lib/auth-client";
 import { PASSWORD_CRITERIA } from "~/lib/validations/auth";
 import {
   producerRegisterSchema,
   type ProducerRegisterInput,
 } from "~/lib/validations/producer";
-import { usePortalTheme } from "~/lib/portal/context";
-import { api } from "~/trpc/react";
+import { useOrganization, usePortalTheme } from "~/lib/portal/context";
 
 /**
  * Portal Registration Page
  * - intent=jury: Creates user account only (jury profile created on code activation)
- * - default: Creates user account + organization-scoped producer profile
+ * - default: Creates user account + producer profile
  */
 export default function PortalRegisterPage() {
+  return (
+    <Suspense fallback={null}>
+      <RegisterInner />
+    </Suspense>
+  );
+}
+
+function RegisterInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const organization = useOrganization();
   const theme = usePortalTheme();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [passwordValue, setPasswordValue] = useState("");
   const [focusedField, setFocusedField] = useState<string | null>(null);
-
-  const isJuryIntent = searchParams.get("intent") === "jury";
+  const [isSubmittingForm, setIsSubmittingForm] = useState(false);
 
   const {
     register,
@@ -74,64 +82,47 @@ export default function PortalRegisterPage() {
     }
   }, [errors, setFocus]);
 
-  const onMutationSuccess = useCallback(() => {
-    toast.success("Inscription réussie ! Vérifiez votre email.");
-    const cb = searchParams.get("callbackUrl");
-    const loginUrl = cb
-      ? `/login?registered=true&callbackUrl=${encodeURIComponent(cb)}`
-      : "/login?registered=true";
-    router.push(loginUrl);
-  }, [router, searchParams]);
-
-  const onMutationError = useCallback((error: { message?: string }) => {
-    const message = error.message?.toLowerCase() ?? "";
-    if (message.includes("existe déjà") || message.includes("already")) {
-      toast.error("Cet email est déjà utilisé. Connectez-vous à la place.");
-    } else {
-      toast.error("Une erreur est survenue. Veuillez réessayer.");
-    }
-  }, []);
-
-  const registerProducerMutation = api.portal.registerProducer.useMutation({
-    onSuccess: onMutationSuccess,
-    onError: onMutationError,
-  });
-
-  const registerUserMutation = api.portal.registerUser.useMutation({
-    onSuccess: onMutationSuccess,
-    onError: onMutationError,
-  });
-
-  const registerMutation = isJuryIntent ? registerUserMutation : registerProducerMutation;
-
   const onSubmit = useCallback(
-    (data: ProducerRegisterInput) => {
-      const callbackUrl = searchParams.get("callbackUrl");
-      // Build the callbackURL for the verification email
-      // This URL is where better-auth redirects after email verification
-      const verificationCallbackURL = callbackUrl
-        ? `${window.location.origin}/login?callbackUrl=${encodeURIComponent(callbackUrl)}`
-        : `${window.location.origin}/login`;
+    async (data: ProducerRegisterInput) => {
+      setIsSubmittingForm(true);
+      try {
+        const result = await signUp.email({
+          email: data.email,
+          password: data.password,
+          name: data.name,
+        });
 
-      if (isJuryIntent) {
-        registerUserMutation.mutate({
-          email: data.email,
-          password: data.password,
-          name: data.name,
-          callbackURL: verificationCallbackURL,
-        });
-      } else {
-        registerProducerMutation.mutate({
-          email: data.email,
-          password: data.password,
-          name: data.name,
-          companyName: data.companyName,
-          brandName: data.brandName,
-          callbackURL: verificationCallbackURL,
-        });
+        if (result.error) {
+          const errorCode = result.error.code?.toUpperCase() ?? "";
+          const errorMessage = result.error.message?.toLowerCase() ?? "";
+
+          if (
+            errorCode.includes("USER_ALREADY_EXISTS") ||
+            errorCode.includes("ALREADY_EXISTS") ||
+            errorMessage.includes("already") ||
+            errorMessage.includes("exists") ||
+            errorMessage.includes("existe")
+          ) {
+            toast.error("Cet email est déjà utilisé. Connectez-vous à la place.");
+          } else {
+            toast.error("Une erreur est survenue. Veuillez réessayer.");
+          }
+          setIsSubmittingForm(false);
+          return;
+        }
+
+        toast.success("Inscription réussie ! Vérifiez votre email.");
+        const cb = searchParams.get("callbackUrl");
+        const loginUrl = cb
+          ? `/login?registered=true&callbackUrl=${encodeURIComponent(cb)}`
+          : "/login?registered=true";
+        router.push(loginUrl);
+      } catch {
+        toast.error("Erreur de connexion. Vérifiez votre connexion internet.");
+        setIsSubmittingForm(false);
       }
     },
-    [registerProducerMutation, registerUserMutation, isJuryIntent, searchParams]
+    [router, searchParams]
   );
 
   const checkCriteria = useCallback(
@@ -429,13 +420,13 @@ export default function PortalRegisterPage() {
                 <Button
                   type="submit"
                   className="w-full h-12 rounded-xl text-base font-medium relative overflow-hidden group"
-                  disabled={registerMutation.isPending}
+                  disabled={isSubmittingForm}
                   style={{
                     backgroundColor: theme.primaryColor,
                   }}
                 >
                   <span className="relative z-10 flex items-center justify-center gap-2">
-                    {registerMutation.isPending ? (
+                    {isSubmittingForm ? (
                       <>
                         <Loader2 className="h-4 w-4 animate-spin" />
                         Inscription en cours...

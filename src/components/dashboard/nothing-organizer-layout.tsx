@@ -30,7 +30,6 @@ import {
 } from "lucide-react";
 
 import { cn } from "~/lib/utils";
-import { api } from "~/trpc/react";
 import { useOrganization } from "~/lib/portal/context";
 import { authClient, useSession } from "~/lib/auth-client";
 import { PWAWrapper } from "~/components/pwa/pwa-wrapper";
@@ -217,8 +216,8 @@ function NothingOrgSidebar({ baseUrl = "" }: { baseUrl?: string }) {
   const router = useRouter();
   const organization = useOrganization();
   const { data: session } = useSession();
-  const { data: adminStatus } = api.admin.isAdmin.useQuery();
-  const isAdmin = adminStatus?.isAdmin;
+  const isAdmin =
+    (session?.user as { isAdmin?: boolean } | undefined)?.isAdmin === true;
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>(() => {
     const aboutPath = `${baseUrl}/settings/portal/about`;

@@ -5,8 +5,13 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { useSession } from "~/lib/auth-client";
-import { api } from "~/trpc/react";
 import { NothingOrganizerLayout } from "~/components/dashboard/nothing-organizer-layout";
+
+type SessionUserWithRole = {
+  id: string;
+  role?: "organizer" | "producer" | "jury" | string;
+  isAdmin?: boolean;
+};
 
 export default function PortalDashboardLayout({
   children,
@@ -24,43 +29,34 @@ export default function PortalDashboardLayout({
     lastUserId.current = session?.user?.id ?? null;
   }
 
-  // Check whether the signed-in user has organizer access.
-  const { data: accessData, isLoading: isAccessLoading } = api.portal.validateUserAccess.useQuery(
-    undefined,
-    {
-      enabled: !!session?.user,
-      staleTime: 60000,
-      refetchOnMount: false,
-      refetchOnWindowFocus: false,
-    }
-  );
-
   const isSessionDetermined = !isSessionLoading && session !== undefined;
-  const isLoading = !isSessionDetermined || (!!session?.user && isAccessLoading);
-  const isOrganizer = accessData?.role === "organizer";
+  const isLoading = !isSessionDetermined;
+  const sessionUser = session?.user as SessionUserWithRole | undefined;
+  const isOrganizer =
+    sessionUser?.isAdmin === true || sessionUser?.role === "organizer";
 
   useEffect(() => {
     if (!isSessionDetermined) return;
 
-    if (!session?.user) {
+    if (!sessionUser) {
       router.push("/login");
       return;
     }
 
-    if (!isAccessLoading && accessData && !isOrganizer) {
+    if (!isOrganizer) {
       if (!hasShownToast.current) {
         toast.error("Vous n'avez pas acces a l'espace organisateur");
         hasShownToast.current = true;
       }
-      if (accessData.role === "producer") {
+      if (sessionUser.role === "producer") {
         router.push("/producer");
-      } else if (accessData.role === "jury") {
+      } else if (sessionUser.role === "jury") {
         router.push("/jury");
       } else {
         router.push("/login");
       }
     }
-  }, [session, isSessionDetermined, accessData, isAccessLoading, isOrganizer, router]);
+  }, [sessionUser, isSessionDetermined, isOrganizer, router]);
 
   // Nothing-styled loading state
   if (isLoading) {

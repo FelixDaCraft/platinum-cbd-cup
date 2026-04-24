@@ -23,7 +23,6 @@ import { useOrganization, usePortalTheme } from "~/lib/portal/context";
 import { authClient } from "~/lib/auth-client";
 import { api } from "~/trpc/react";
 import { PWAWrapper } from "~/components/pwa/pwa-wrapper";
-import { buildPortalUrl } from "~/lib/utils";
 
 // ─── Nothing CSS ────────────────────────────────────────────────────────────
 
@@ -172,9 +171,8 @@ function NothingProdSidebar() {
   const dashboardLinks: Array<{ href: string; label: string; icon: LucideIcon; isExternal?: boolean }> = [];
   if (rolesData?.roles) {
     const { roles } = rolesData;
-    if (roles.organizer && roles.organizer.organizations.length > 0) {
-      const org = roles.organizer.organizations[0];
-      if (org?.slug) dashboardLinks.push({ href: buildPortalUrl(org.slug, "/dashboard"), label: "ORGANISATEUR", icon: Building2, isExternal: true });
+    if (roles.organizer) {
+      dashboardLinks.push({ href: roles.organizer.href ?? "/dashboard", label: "ORGANISATEUR", icon: Building2 });
     }
     if (roles.jury) dashboardLinks.push({ href: "/jury/dashboard", label: "JURY", icon: Scale });
   }

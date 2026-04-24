@@ -17,9 +17,6 @@ vi.mock("~/server/db", () => ({
       cups: {
         findFirst: vi.fn(),
       },
-      members: {
-        findFirst: vi.fn(),
-      },
       registrations: {
         findMany: vi.fn(),
       },
@@ -81,38 +78,6 @@ describe("Product Router", () => {
       }
     });
 
-    it("should return FORBIDDEN if user is not member of organization", async () => {
-      const { auth } = await import("~/lib/auth");
-      vi.mocked(auth.api.getSession).mockResolvedValue({
-        user: { id: "user_123", email: "test@example.com" },
-        session: { id: "session_123" },
-      } as never);
-
-      const { db } = await import("~/server/db");
-      vi.mocked(db.query.cups.findFirst).mockResolvedValue({
-        id: "cup_123",
-        name: "Test Cup",
-        organizationId: "org_456",
-      } as never);
-      vi.mocked(db.query.members.findFirst).mockResolvedValue(null as never);
-
-      const { productRouter } = await import("./product");
-      const caller = productRouter.createCaller({
-        headers: new Headers(),
-        db,
-      } as never);
-
-      await expect(
-        caller.listByCupGroupedByCategory({ cupId: "cup_123" })
-      ).rejects.toThrow(TRPCError);
-
-      try {
-        await caller.listByCupGroupedByCategory({ cupId: "cup_123" });
-      } catch (error) {
-        expect((error as TRPCError).code).toBe("FORBIDDEN");
-      }
-    });
-
     it("should return products grouped by category", async () => {
       const { auth } = await import("~/lib/auth");
       vi.mocked(auth.api.getSession).mockResolvedValue({
@@ -124,13 +89,6 @@ describe("Product Router", () => {
       vi.mocked(db.query.cups.findFirst).mockResolvedValue({
         id: "cup_123",
         name: "Test Cup",
-        organizationId: "org_456",
-      } as never);
-      vi.mocked(db.query.members.findFirst).mockResolvedValue({
-        id: "member_1",
-        userId: "user_123",
-        organizationId: "org_456",
-        role: "owner",
       } as never);
       vi.mocked(db.query.registrations.findMany).mockResolvedValue([
         {
@@ -222,13 +180,6 @@ describe("Product Router", () => {
       vi.mocked(db.query.cups.findFirst).mockResolvedValue({
         id: "cup_123",
         name: "Test Cup",
-        organizationId: "org_456",
-      } as never);
-      vi.mocked(db.query.members.findFirst).mockResolvedValue({
-        id: "member_1",
-        userId: "user_123",
-        organizationId: "org_456",
-        role: "owner",
       } as never);
       vi.mocked(db.query.registrations.findMany).mockResolvedValue([
         {
@@ -282,13 +233,6 @@ describe("Product Router", () => {
       vi.mocked(db.query.cups.findFirst).mockResolvedValue({
         id: "cup_123",
         name: "Empty Cup",
-        organizationId: "org_456",
-      } as never);
-      vi.mocked(db.query.members.findFirst).mockResolvedValue({
-        id: "member_1",
-        userId: "user_123",
-        organizationId: "org_456",
-        role: "owner",
       } as never);
       vi.mocked(db.query.registrations.findMany).mockResolvedValue([] as never);
 
@@ -316,13 +260,6 @@ describe("Product Router", () => {
       vi.mocked(db.query.cups.findFirst).mockResolvedValue({
         id: "cup_123",
         name: "Test Cup",
-        organizationId: "org_456",
-      } as never);
-      vi.mocked(db.query.members.findFirst).mockResolvedValue({
-        id: "member_1",
-        userId: "user_123",
-        organizationId: "org_456",
-        role: "owner",
       } as never);
       vi.mocked(db.query.registrations.findMany).mockResolvedValue([
         {

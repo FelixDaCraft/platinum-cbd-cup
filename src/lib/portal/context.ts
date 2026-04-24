@@ -20,7 +20,13 @@ export type ColorMode = "light" | "dark";
 /**
  * Inlined header-style union (previously from portal_themes schema)
  */
-export type HeaderStyle = "classic" | "modern" | "minimal" | "bold";
+export type HeaderStyle =
+  | "classic"
+  | "modern"
+  | "minimal"
+  | "bold"
+  | "centered"
+  | "ultra-premium";
 
 /**
  * Inlined hero-template union (previously from portal_themes schema)
@@ -30,12 +36,15 @@ export type HeroTemplate =
   | "countdown"
   | "split"
   | "minimal"
-  | "video";
+  | "video"
+  | "immersive"
+  | "story-stats"
+  | "minimalist";
 
 /**
  * Inlined hero-media-type union (previously from portal_themes schema)
  */
-export type HeroMediaType = "image" | "video" | "gradient";
+export type HeroMediaType = "image" | "video" | "gradient" | "color";
 
 /**
  * Public-facing organization shape (previously from get-organization.ts).

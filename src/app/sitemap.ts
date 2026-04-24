@@ -1,6 +1,11 @@
 import type { MetadataRoute } from "next";
 import { db } from "~/server/db";
 
+// Query the DB at request time, not at build time — avoids connecting to a
+// placeholder DB during `next build`.
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 /**
  * Base URL for the single-tenant Platinum CBD Cup app.
  */

@@ -25,7 +25,6 @@ vi.mock("~/lib/auth", () => ({
 vi.mock("~/server/db", () => ({
   db: {
     query: {
-      members: { findFirst: vi.fn() },
       categories: { findFirst: vi.fn() },
       ratingCriteria: { findFirst: vi.fn(), findMany: vi.fn() },
     },
@@ -596,60 +595,6 @@ describe("Criteria Router", () => {
       const session = await auth.api.getSession({ headers: new Headers() });
       expect(session).toBeNull();
       // In actual router, this would throw UNAUTHORIZED
-    });
-
-    it("returns NOT_FOUND when user has no member record", async () => {
-      const { auth } = await import("~/lib/auth");
-      const { db } = await import("~/server/db");
-
-      vi.mocked(auth.api.getSession).mockResolvedValue({
-        user: { id: "user_123", name: "Test", email: "test@test.com", emailVerified: true },
-        session: { id: "session_123" },
-      } as never);
-
-      vi.mocked(db.query.members.findFirst).mockResolvedValue(undefined as never);
-
-      const member = await db.query.members.findFirst();
-      expect(member).toBeUndefined();
-      // In actual router, this would throw NOT_FOUND
-    });
-
-    it("validates organization ownership for category access", async () => {
-      // Simulate the authorization check logic
-      const memberOrgId = "org_123";
-      const categoryWithCup = {
-        id: "cat_123",
-        cupId: "cup_123",
-        name: "Test Category",
-        cup: {
-          id: "cup_123",
-          organizationId: "org_different", // Different org!
-          status: "draft",
-        },
-      };
-
-      // Should be rejected - different organizations
-      expect(memberOrgId).not.toBe(categoryWithCup.cup.organizationId);
-    });
-
-    it("allows access when organizations match", async () => {
-      // Simulate the authorization check logic
-      const memberOrgId = "org_123";
-      const categoryWithCup = {
-        id: "cat_123",
-        cupId: "cup_123",
-        name: "Test Category",
-        ratingScaleMin: 1,
-        ratingScaleMax: 10,
-        cup: {
-          id: "cup_123",
-          organizationId: "org_123", // Same org!
-          status: "draft",
-        },
-      };
-
-      // Should be allowed - same organization
-      expect(memberOrgId).toBe(categoryWithCup.cup.organizationId);
     });
   });
 

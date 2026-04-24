@@ -6,9 +6,11 @@ import "./src/env.js";
 
 /** @type {import("next").NextConfig} */
 const config = {
-  // Enable standalone output for Docker deployment
-  // Note: On Windows, this may fail due to symlink permissions - use Linux/macOS or CI/CD
-  output: "standalone",
+  // Enable standalone output for Docker deployment.
+  // On Windows the trace-file copy step fails with EPERM (symlinks require
+  // admin). Disable standalone outside Docker by unsetting NEXT_STANDALONE=1,
+  // or just build inside the Dockerfile (Linux handles symlinks fine).
+  output: process.env.NEXT_STANDALONE === "0" ? undefined : "standalone",
 
   // pdfjs-dist ships its own Node polyfills (DOMMatrix, etc.) inside the
   // legacy build. When bundled by webpack for Next.js server routes those

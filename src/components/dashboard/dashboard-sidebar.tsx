@@ -28,7 +28,7 @@ import {
 } from "lucide-react";
 
 import { cn } from "~/lib/utils";
-import { api } from "~/trpc/react";
+import { useSession } from "~/lib/auth-client";
 import { Button } from "~/components/ui/button";
 import {
   Sheet,
@@ -96,8 +96,9 @@ export function DashboardSidebar({ className, baseUrl = "" }: DashboardSidebarPr
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>(getInitialExpandedSections);
 
   // Check if user is admin - must be called before any early returns
-  const { data: adminStatus } = api.admin.isAdmin.useQuery();
-  const isAdmin = adminStatus?.isAdmin;
+  const { data: session } = useSession();
+  const isAdmin =
+    (session?.user as { isAdmin?: boolean } | undefined)?.isAdmin === true;
 
   // Hide sidebar when inside a cup detail (cup has its own sidebar)
   const inCupDetail = isInsideCupDetail(pathname, baseUrl);

@@ -27,7 +27,6 @@ import { cn } from "~/lib/utils";
 import { useOrganization, usePortalTheme } from "~/lib/portal/context";
 import { PortalButton } from "./portal-button";
 import { api } from "~/trpc/react";
-import { buildPortalUrl } from "~/lib/utils";
 
 // Map of icon names to components (for serialization from Server Components)
 const iconMap: Record<string, LucideIcon> = {
@@ -283,16 +282,12 @@ function UserSection({
     const { roles } = rolesData;
 
     // Organizer dashboard
-    if (roles.organizer && roles.organizer.organizations.length > 0) {
-      const org = roles.organizer.organizations[0];
-      if (org?.slug && currentBasePath !== "/dashboard") {
-        dashboardLinks.push({
-          href: buildPortalUrl(org.slug, "/dashboard"),
-          label: "Espace Organisateur",
-          icon: Building2,
-          isExternal: true,
-        });
-      }
+    if (roles.organizer && currentBasePath !== "/dashboard") {
+      dashboardLinks.push({
+        href: roles.organizer.href ?? "/dashboard",
+        label: "Espace Organisateur",
+        icon: Building2,
+      });
     }
 
     // Producer dashboard

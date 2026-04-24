@@ -4,6 +4,11 @@ import { type Metadata } from "next";
 import { Geist } from "next/font/google";
 
 import { Providers } from "~/components/providers";
+
+// Content is dynamic (cups, articles, results, palmares all read the DB on
+// every request). Opt out of static generation globally to avoid connecting
+// to the DB during `next build`.
+export const dynamic = "force-dynamic";
 import { PortalProvider } from "~/lib/portal/portal-provider";
 import type { PortalContextValue, PortalThemeConfig } from "~/lib/portal/context";
 import { generateCssVariables, sanitizeCustomCss } from "~/lib/portal/css-variables";

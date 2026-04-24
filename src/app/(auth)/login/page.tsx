@@ -16,8 +16,16 @@ import { Label } from "~/components/ui/label";
 import { signIn, useSession } from "~/lib/auth-client";
 import { loginSchema, type LoginInput } from "~/lib/validations/auth";
 import { useOrganization, usePortalTheme } from "~/lib/portal/context";
-import { api } from "~/trpc/react";
 import { cn } from "~/lib/utils";
+
+type SessionUserRole = "organizer" | "producer" | "jury" | string | null | undefined;
+
+function getRedirectPathForRole(role: SessionUserRole, isAdmin: boolean): string {
+  if (isAdmin || role === "organizer") return "/dashboard";
+  if (role === "producer") return "/producer/dashboard";
+  if (role === "jury") return "/jury/dashboard";
+  return "/";
+}
 
 export default function PortalLoginPage() {
   const theme = usePortalTheme();
@@ -82,7 +90,6 @@ function PortalLoginForm() {
   const [focusedField, setFocusedField] = useState<string | null>(null);
   const hasShownParamToast = useRef(false);
   const hasRedirected = useRef(false);
-  const utils = api.useUtils();
 
   // Session is determined when not loading and not undefined
   const isSessionDetermined = !isSessionLoading && session !== undefined;
@@ -108,62 +115,46 @@ function PortalLoginForm() {
     }
 
     if (session?.user) {
-      const checkAccessAndRedirect = async () => {
-        try {
-          const accessData = await utils.portal.validateUserAccess.fetch();
-
-          let redirectPath = "/";
-          if (accessData.hasAccess && accessData.role) {
-            switch (accessData.role) {
-              case "organizer":
-                redirectPath = "/dashboard";
-                break;
-              case "producer":
-                redirectPath = "/producer/dashboard";
-                break;
-              case "jury":
-                redirectPath = "/jury/dashboard";
-                break;
-            }
-          }
-
-          // Handle callbackUrl for redirects (decode in case of double-encoding from email verification)
-          let callbackUrl = searchParams.get("callbackUrl");
-          if (callbackUrl) {
-            try {
-              // Handle double-encoded URLs (e.g. %2Factivate → /activate)
-              if (callbackUrl.startsWith("%2F") || callbackUrl.startsWith("%2f")) {
-                callbackUrl = decodeURIComponent(callbackUrl);
-              }
-            } catch { /* ignore decode errors */ }
-            // Allow callbackUrl for jury-related and activation pages
-            if (callbackUrl.startsWith("/jury-invite/") || callbackUrl.startsWith("/jury/") || callbackUrl.startsWith("/activate")) {
-              redirectPath = callbackUrl;
-            }
-          }
-
-          // Fallback: check localStorage for pending jury activation code
-          if (!callbackUrl || !redirectPath.startsWith("/activate")) {
-            try {
-              const pendingCode = localStorage.getItem("pendingActivationCode");
-              if (pendingCode) {
-                redirectPath = `/activate?code=${pendingCode}`;
-              }
-            } catch { /* ignore localStorage errors */ }
-          }
-
-          hasRedirected.current = true;
-          window.location.href = redirectPath;
-        } catch (error) {
-          console.error("[Login] Error checking access:", error);
-          hasRedirected.current = true;
-          window.location.href = "/";
-        }
+      const sessionUser = session.user as {
+        role?: SessionUserRole;
+        isAdmin?: boolean;
       };
+      let redirectPath = getRedirectPathForRole(
+        sessionUser.role,
+        sessionUser.isAdmin === true
+      );
 
-      checkAccessAndRedirect();
+      // Handle callbackUrl for redirects (decode in case of double-encoding from email verification)
+      let callbackUrl = searchParams.get("callbackUrl");
+      if (callbackUrl) {
+        try {
+          if (callbackUrl.startsWith("%2F") || callbackUrl.startsWith("%2f")) {
+            callbackUrl = decodeURIComponent(callbackUrl);
+          }
+        } catch { /* ignore decode errors */ }
+        if (
+          callbackUrl.startsWith("/jury-invite/") ||
+          callbackUrl.startsWith("/jury/") ||
+          callbackUrl.startsWith("/activate")
+        ) {
+          redirectPath = callbackUrl;
+        }
+      }
+
+      // Fallback: check localStorage for pending jury activation code
+      if (!callbackUrl || !redirectPath.startsWith("/activate")) {
+        try {
+          const pendingCode = localStorage.getItem("pendingActivationCode");
+          if (pendingCode) {
+            redirectPath = `/activate?code=${pendingCode}`;
+          }
+        } catch { /* ignore localStorage errors */ }
+      }
+
+      hasRedirected.current = true;
+      window.location.href = redirectPath;
     }
-  }, [session, isSessionDetermined, searchParams, utils.portal.validateUserAccess]);
+  }, [session, isSessionDetermined, searchParams]);
 
   // Show toast for newly registered users
   useEffect(() => {
@@ -253,64 +244,50 @@ function PortalLoginForm() {
         toast.success("Connexion réussie !");
         setLoginSuccess(true);
 
-        // Check user's role for this organization and redirect accordingly
-        try {
-          const accessData = await utils.portal.validateUserAccess.fetch();
+        // Determine redirect path based on role (from the freshly-returned session)
+        const signedInUser = (result.data?.user ?? null) as
+          | { role?: SessionUserRole; isAdmin?: boolean }
+          | null;
+        let redirectPath = getRedirectPathForRole(
+          signedInUser?.role,
+          signedInUser?.isAdmin === true
+        );
 
-          // Determine redirect path based on role
-          let redirectPath = "/login"; // Default fallback
-          if (accessData.hasAccess && accessData.role) {
-            switch (accessData.role) {
-              case "organizer":
-                redirectPath = "/dashboard";
-                break;
-              case "producer":
-                redirectPath = "/producer/dashboard";
-                break;
-              case "jury":
-                redirectPath = "/jury/dashboard";
-                break;
+        // Handle callbackUrl for redirects (decode in case of double-encoding from email verification)
+        let callbackUrl = searchParams.get("callbackUrl");
+        if (callbackUrl) {
+          try {
+            if (callbackUrl.startsWith("%2F") || callbackUrl.startsWith("%2f")) {
+              callbackUrl = decodeURIComponent(callbackUrl);
             }
+          } catch { /* ignore decode errors */ }
+          if (
+            callbackUrl.startsWith("/jury-invite/") ||
+            callbackUrl.startsWith("/jury/") ||
+            callbackUrl.startsWith("/activate")
+          ) {
+            redirectPath = callbackUrl;
           }
-
-          // Handle callbackUrl for redirects (decode in case of double-encoding from email verification)
-          let callbackUrl = searchParams.get("callbackUrl");
-          if (callbackUrl) {
-            try {
-              // Handle double-encoded URLs (e.g. %2Factivate → /activate)
-              if (callbackUrl.startsWith("%2F") || callbackUrl.startsWith("%2f")) {
-                callbackUrl = decodeURIComponent(callbackUrl);
-              }
-            } catch { /* ignore decode errors */ }
-            // Allow callbackUrl for jury-related and activation pages
-            if (callbackUrl.startsWith("/jury-invite/") || callbackUrl.startsWith("/jury/") || callbackUrl.startsWith("/activate")) {
-              redirectPath = callbackUrl;
-            }
-          }
-
-          // Fallback: check localStorage for pending jury activation code
-          if (!callbackUrl || !redirectPath.startsWith("/activate")) {
-            try {
-              const pendingCode = localStorage.getItem("pendingActivationCode");
-              if (pendingCode) {
-                redirectPath = `/activate?code=${pendingCode}`;
-              }
-            } catch { /* ignore localStorage errors */ }
-          }
-
-          window.location.href = redirectPath;
-        } catch (error) {
-          // If role check fails, redirect to a safe default
-          console.error("[Login] Error checking access:", error);
-          window.location.href = "/";
         }
+
+        // Fallback: check localStorage for pending jury activation code
+        if (!callbackUrl || !redirectPath.startsWith("/activate")) {
+          try {
+            const pendingCode = localStorage.getItem("pendingActivationCode");
+            if (pendingCode) {
+              redirectPath = `/activate?code=${pendingCode}`;
+            }
+          } catch { /* ignore localStorage errors */ }
+        }
+
+        window.location.href = redirectPath;
         return;
       } catch {
         setIsLoggingIn(false);
         toast.error("Erreur de connexion. Vérifiez votre connexion internet.");
       }
     },
-    [searchParams, utils]
+    [searchParams]
   );
 
   // Show loading state

@@ -22,7 +22,6 @@ import { useOrganization, usePortalTheme } from "~/lib/portal/context";
 import { authClient } from "~/lib/auth-client";
 import { api } from "~/trpc/react";
 import { PWAWrapper } from "~/components/pwa/pwa-wrapper";
-import { buildPortalUrl } from "~/lib/utils";
 
 // ─── Nothing Design CSS ────────────────────────────────────────────────────
 
@@ -319,16 +318,12 @@ function NothingSidebar() {
   const dashboardLinks: Array<{ href: string; label: string; icon: LucideIcon; isExternal?: boolean }> = [];
   if (rolesData?.roles) {
     const { roles } = rolesData;
-    if (roles.organizer && roles.organizer.organizations.length > 0) {
-      const org = roles.organizer.organizations[0];
-      if (org?.slug) {
-        dashboardLinks.push({
-          href: buildPortalUrl(org.slug, "/dashboard"),
-          label: "ORGANISATEUR",
-          icon: Building2,
-          isExternal: true,
-        });
-      }
+    if (roles.organizer) {
+      dashboardLinks.push({
+        href: roles.organizer.href ?? "/dashboard",
+        label: "ORGANISATEUR",
+        icon: Building2,
+      });
     }
     if (roles.producer) {
       dashboardLinks.push({ href: "/producer/dashboard", label: "PRODUCTEUR", icon: Package });
