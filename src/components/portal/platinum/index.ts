@@ -1,9 +1,32 @@
+// ── CSS ──────────────────────────────────────────────────────────────────────
 export { platinumCSS } from "./platinum-styles";
+
+// ── Layout shells ─────────────────────────────────────────────────────────────
 export { PlatinumLayout } from "./platinum-layout";
 export type { PlatinumLayoutProps } from "./platinum-layout";
-export { PlatinumLanding } from "./platinum-landing";
-export { PlatinumResults } from "./platinum-results";
+export { PlatinumShell } from "./platinum-shell";
+
+// ── Primitives (design-faithful names) ──────────────────────────────────────
+export {
+  Pill,
+  Eyebrow,
+  Countdown,
+  Placeholder,
+  Ticker,
+  CodeChip,
+  Field,
+  Check,
+  LabelBadge,
+} from "./platinum-shared";
+
+// ── Legacy Pt-prefixed aliases (backward compat) ─────────────────────────────
+export {
+  PtPill,
+  PtEyebrow,
+  PtCountdown,
+  PtTicker,
+  PtCodeChip,
+} from "./platinum-shared";
+
+// ── Trophy ────────────────────────────────────────────────────────────────────
 export { PlatinumTrophy } from "./platinum-trophy";
-export { PlatinumCup } from "./platinum-cup";
-export { PlatinumCupsList } from "./platinum-cups-list";
-export { PtPill, PtEyebrow, PtCountdown, PtTicker, PtCodeChip } from "./platinum-shared";

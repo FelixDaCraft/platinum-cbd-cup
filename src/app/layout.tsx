@@ -12,7 +12,6 @@ export const dynamic = "force-dynamic";
 import { PortalProvider } from "~/lib/portal/portal-provider";
 import type { PortalContextValue, PortalThemeConfig } from "~/lib/portal/context";
 import { generateCssVariables, sanitizeCustomCss } from "~/lib/portal/css-variables";
-import { FontLoader } from "~/components/portal/font-loader";
 import { platinumCSS } from "~/components/portal/platinum/platinum-styles";
 
 /**
@@ -172,24 +171,28 @@ ${PORTAL_THEME.customCss ? sanitizeCustomCss(PORTAL_THEME.customCss) : ""}
 
   return (
     <html lang="fr" suppressHydrationWarning className={geist.variable}>
-      <body>
-        {/* Load Louize Display (Platinum headline font) — see platinum-styles.ts */}
-        <FontLoader fonts={["Louize Display"]} />
-
-        {/* Platinum design-system CSS (dark + gold theme, scoped to .platinum-portal) */}
+      <head>
+        {/* Google Fonts — Geist Mono + Inter (Louize Display served from public/fonts) */}
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@300;400;500;600&family=Inter:wght@300;400;500;600;700&display=swap"
+          rel="stylesheet"
+        />
+      </head>
+      <body data-theme="dark" data-density="regular" data-matrix="on">
+        {/* Platinum design-system CSS — :root vars, all utility classes, animations */}
         <style dangerouslySetInnerHTML={{ __html: platinumCSS }} />
 
         {/* Portal CSS variables (kept for components that consume --portal-* vars) */}
         <style dangerouslySetInnerHTML={{ __html: portalRootCss }} />
 
+        {/* Dot matrix decorative background */}
+        <div className="matrix" aria-hidden="true" />
+
         <Providers>
           <div
             id="portal-root"
-            className="min-h-screen antialiased"
-            style={{
-              backgroundColor: `hsl(${PORTAL_THEME.cssVariables["--portal-background"]})`,
-              color: `hsl(${PORTAL_THEME.cssVariables["--portal-foreground"]})`,
-            }}
             lang="fr"
           >
             <PortalProvider value={PORTAL_CONTEXT}>{children}</PortalProvider>

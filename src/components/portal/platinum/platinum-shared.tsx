@@ -1,41 +1,36 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
+import { useState, useEffect } from "react";
 
 // ---------------------------------------------------------------------------
-// PtPill
+// Pill
 // ---------------------------------------------------------------------------
 
-interface PtPillProps {
-  children: React.ReactNode;
+interface PillProps {
+  children: ReactNode;
   variant?: "default" | "accent" | "solid";
   dot?: boolean;
 }
 
 /**
- * Small status/label pill component.
- *
- * Variant mapping:
- *   "default" → .pt-pill
- *   "accent"  → .pt-pill.accent
- *   "solid"   → .pt-pill.solid
+ * Small status/label pill. Maps directly to .pill, .pill.accent, .pill.solid
+ * from the design package (unscoped CSS vars on :root).
  */
-export function PtPill({ children, variant = "default", dot = false }: PtPillProps) {
-  const variantClass = variant === "default" ? "pt-pill" : `pt-pill ${variant}`;
-
+export function Pill({ children, variant = "default", dot = false }: PillProps) {
+  const cls =
+    variant === "accent" ? "pill accent" : variant === "solid" ? "pill solid" : "pill";
   return (
-    <span className={variantClass}>
+    <span className={cls}>
       {dot && (
         <span
           aria-hidden="true"
           style={{
-            display: "inline-block",
             width: 6,
             height: 6,
             borderRadius: "50%",
-            background: "var(--pt-accent, #c8a03c)",
-            boxShadow: "0 0 5px var(--pt-accent-glow, rgba(200,160,60,0.6))",
-            marginRight: "0.4em",
+            background: "currentColor",
+            boxShadow: "0 0 8px currentColor",
             flexShrink: 0,
           }}
         />
@@ -46,165 +41,114 @@ export function PtPill({ children, variant = "default", dot = false }: PtPillPro
 }
 
 // ---------------------------------------------------------------------------
-// PtEyebrow
+// Eyebrow
 // ---------------------------------------------------------------------------
 
-interface PtEyebrowProps {
+interface EyebrowProps {
   idx?: number;
-  children: React.ReactNode;
+  children: ReactNode;
 }
 
 /**
- * Monospace uppercase section label.
- * When `idx` is supplied it renders a zero-padded 3-digit accent number before the text.
+ * Monospace uppercase section label. Renders:
+ *   <div class="eyebrow"><b>001</b> children</div>
+ * when idx is supplied, plain otherwise.
  */
-export function PtEyebrow({ idx, children }: PtEyebrowProps) {
+export function Eyebrow({ idx, children }: EyebrowProps) {
   return (
-    <p className="pt-eyebrow">
-      {idx !== undefined && (
-        <span
-          style={{
-            color: "var(--pt-accent, #c8a03c)",
-            fontFeatureSettings: "'tnum'",
-            marginRight: "0.6em",
-          }}
-        >
-          {String(idx).padStart(3, "0")}
-        </span>
-      )}
+    <div className="eyebrow">
+      {idx !== undefined && <b>{String(idx).padStart(3, "0")}</b>}{" "}
       {children}
-    </p>
+    </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// PtCountdown
+// Countdown
 // ---------------------------------------------------------------------------
 
-interface TimeLeft {
-  days: number;
-  hours: number;
-  minutes: number;
-  seconds: number;
-  expired: boolean;
-}
-
-function calcTimeLeft(target: number): TimeLeft {
-  const diff = target - Date.now();
-  if (diff <= 0) return { days: 0, hours: 0, minutes: 0, seconds: 0, expired: true };
-  return {
-    days: Math.floor(diff / 86_400_000),
-    hours: Math.floor((diff % 86_400_000) / 3_600_000),
-    minutes: Math.floor((diff % 3_600_000) / 60_000),
-    seconds: Math.floor((diff % 60_000) / 1_000),
-    expired: false,
-  };
-}
-
-interface PtCountdownProps {
-  /** Timestamp in milliseconds */
+interface CountdownProps {
+  /** Target timestamp in milliseconds */
   target: number;
   compact?: boolean;
 }
 
+const pad = (n: number, w = 2) => String(n).padStart(w, "0");
+
 /**
  * Live countdown to a target timestamp.
  *
- * `compact` → `DDD:HH:MM:SS` inline monospace string
- * default   → large digit blocks with DAYS / HRS / MIN / SEC labels
+ * compact → "DDD:HH:MM:SS" monospace inline
+ * default → 4 large tabular blocks with DAYS / HRS / MIN / SEC labels
  */
-export function PtCountdown({ target, compact = false }: PtCountdownProps) {
-  const [tl, setTl] = useState<TimeLeft>(() => calcTimeLeft(target));
+export function Countdown({ target, compact = false }: CountdownProps) {
+  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
-    if (tl.expired) return;
-    const id = setInterval(() => {
-      const next = calcTimeLeft(target);
-      setTl(next);
-      if (next.expired) clearInterval(id);
-    }, 1000);
+    const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
-  }, [target, tl.expired]);
+  }, []);
 
-  const pad = (n: number, w = 2) => String(n).padStart(w, "0");
+  const diff = Math.max(0, target - now);
+  const days = Math.floor(diff / 86400000);
+  const hours = Math.floor((diff % 86400000) / 3600000);
+  const mins = Math.floor((diff % 3600000) / 60000);
+  const secs = Math.floor((diff % 60000) / 1000);
 
   if (compact) {
     return (
-      <span
-        className="pt-countdown-compact"
-        style={{ fontFamily: "var(--font-mono, monospace)", tabularNums: "true" } as React.CSSProperties}
-      >
-        {pad(tl.days, 3)}:{pad(tl.hours)}:{pad(tl.minutes)}:{pad(tl.seconds)}
+      <span className="mono tabular" style={{ letterSpacing: ".05em" }}>
+        {pad(days, 3)}:{pad(hours)}:{pad(mins)}:{pad(secs)}
       </span>
     );
   }
 
-  const units: Array<{ label: string; value: number }> = [
-    { label: "DAYS", value: tl.days },
-    { label: "HRS", value: tl.hours },
-    { label: "MIN", value: tl.minutes },
-    { label: "SEC", value: tl.seconds },
+  const units = [
+    { v: pad(days, 3), l: "DAYS" },
+    { v: pad(hours), l: "HRS" },
+    { v: pad(mins), l: "MIN" },
+    { v: pad(secs), l: "SEC" },
   ];
 
   return (
     <div
-      className="pt-countdown"
-      style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem" }}
+      style={{
+        display: "flex",
+        gap: 18,
+        alignItems: "flex-end",
+        fontFamily: "var(--mono)",
+      }}
     >
-      {units.map((u, i) => (
-        <div key={u.label} style={{ display: "flex", alignItems: "flex-start" }}>
+      {units.map((x) => (
+        <div
+          key={x.l}
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "flex-start",
+            gap: 6,
+          }}
+        >
           <div
+            className="tabular"
             style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              minWidth: "3.5rem",
+              fontSize: "clamp(42px, 6vw, 72px)",
+              lineHeight: 1,
+              fontWeight: 300,
+              letterSpacing: "-0.03em",
             }}
           >
-            <span
-              className="pt-countdown-digit"
-              style={{
-                fontFamily: "var(--font-mono, monospace)",
-                fontSize: "clamp(2rem, 4vw, 3.5rem)",
-                fontWeight: 700,
-                lineHeight: 1,
-                letterSpacing: "-0.02em",
-                color: "var(--pt-foreground, #f0ede8)",
-              }}
-            >
-              {pad(u.value)}
-            </span>
-            <span
-              className="pt-countdown-label"
-              style={{
-                fontFamily: "var(--font-mono, monospace)",
-                fontSize: "0.6rem",
-                letterSpacing: "0.15em",
-                color: "var(--pt-accent, #c8a03c)",
-                marginTop: "0.25rem",
-              }}
-            >
-              {u.label}
-            </span>
+            {x.v}
           </div>
-          {/* Colon separator — hidden after last unit */}
-          {i < units.length - 1 && (
-            <span
-              aria-hidden="true"
-              style={{
-                fontFamily: "var(--font-mono, monospace)",
-                fontSize: "clamp(1.5rem, 3vw, 2.8rem)",
-                fontWeight: 700,
-                lineHeight: 1,
-                color: "var(--pt-accent-muted, rgba(200,160,60,0.4))",
-                margin: "0 0.15rem",
-                alignSelf: "flex-start",
-                paddingTop: "0.05em",
-              }}
-            >
-              :
-            </span>
-          )}
+          <div
+            style={{
+              fontSize: 10,
+              letterSpacing: ".15em",
+              color: "var(--fg-3)",
+            }}
+          >
+            {x.l}
+          </div>
         </div>
       ))}
     </div>
@@ -212,41 +156,66 @@ export function PtCountdown({ target, compact = false }: PtCountdownProps) {
 }
 
 // ---------------------------------------------------------------------------
-// PtTicker
+// Placeholder
 // ---------------------------------------------------------------------------
 
-interface PtTickerProps {
+interface PlaceholderProps {
+  label: string;
+  aspect?: string;
+  caption?: string;
+  style?: React.CSSProperties;
+}
+
+/**
+ * Monospace hatched placeholder for imagery — shows during layout/design phase.
+ */
+export function Placeholder({ label, aspect = "1/1", caption, style }: PlaceholderProps) {
+  return (
+    <div
+      style={{
+        aspectRatio: aspect,
+        border: "1px solid var(--line-strong)",
+        borderRadius: 12,
+        background:
+          "repeating-linear-gradient(135deg, transparent 0 10px, color-mix(in srgb, var(--fg) 4%, transparent) 10px 11px)",
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "space-between",
+        padding: 16,
+        fontFamily: "var(--mono)",
+        color: "var(--fg-3)",
+        fontSize: 10,
+        letterSpacing: ".1em",
+        textTransform: "uppercase",
+        ...style,
+      }}
+    >
+      <div>[ {label} ]</div>
+      {caption && <div style={{ alignSelf: "flex-end" }}>{caption}</div>}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Ticker
+// ---------------------------------------------------------------------------
+
+interface TickerProps {
   items: string[];
 }
 
 /**
  * Infinite horizontally-scrolling ticker bar.
- * Items are duplicated to create a seamless loop.
- * Uses `.pt-ticker` and `.pt-ticker-track` CSS classes.
+ * Items are duplicated for seamless loop. Uses .ticker + .ticker-track CSS classes.
  */
-export function PtTicker({ items }: PtTickerProps) {
+export function Ticker({ items }: TickerProps) {
   if (items.length === 0) return null;
-
-  // Duplicate for seamless loop
-  const doubled = [...items, ...items];
-
   return (
-    <div className="pt-ticker" aria-hidden="true">
-      <div className="pt-ticker-track">
-        {doubled.map((item, i) => (
-          <span key={i} className="pt-ticker-item">
-            {item}
-            <span
-              aria-hidden="true"
-              style={{
-                display: "inline-block",
-                margin: "0 1em",
-                color: "var(--pt-accent, #c8a03c)",
-                opacity: 0.6,
-              }}
-            >
-              ·
-            </span>
+    <div className="ticker">
+      <div className="ticker-track">
+        {[...items, ...items].map((t, i) => (
+          <span key={i}>
+            <span className="dot" /> {t}
           </span>
         ))}
       </div>
@@ -255,56 +224,227 @@ export function PtTicker({ items }: PtTickerProps) {
 }
 
 // ---------------------------------------------------------------------------
-// PtCodeChip
+// CodeChip
 // ---------------------------------------------------------------------------
 
-interface PtCodeChipProps {
+interface CodeChipProps {
   code: string;
   score?: number | null;
   rank: number;
 }
 
 /**
- * Small badge showing rank + anonymized code + optional numeric score.
- * Monospace font. Score rendered in accent colour.
+ * Strain/category code swatch — shows zero-padded rank, anonymized code, optional score.
  */
-export function PtCodeChip({ code, score, rank }: PtCodeChipProps) {
+export function CodeChip({ code, score, rank }: CodeChipProps) {
   return (
-    <span
-      className="pt-code-chip"
+    <div
       style={{
-        display: "inline-flex",
+        display: "flex",
         alignItems: "center",
-        gap: "0.4em",
-        fontFamily: "var(--font-mono, monospace)",
-        fontSize: "0.75rem",
-        padding: "0.2em 0.6em",
-        borderRadius: "0.25em",
-        background: "var(--pt-surface-2, rgba(255,255,255,0.04))",
-        border: "1px solid var(--pt-border, rgba(255,255,255,0.08))",
-        color: "var(--pt-muted, rgba(240,237,232,0.6))",
-        whiteSpace: "nowrap",
+        gap: 10,
+        border: "1px solid var(--line)",
+        borderRadius: 10,
+        padding: "10px 12px",
+        fontFamily: "var(--mono)",
+        fontSize: 12,
       }}
     >
       <span
         style={{
-          color: "var(--pt-accent, #c8a03c)",
-          fontWeight: 600,
-          minWidth: "1.4em",
-          textAlign: "right",
+          color: "var(--fg-3)",
+          fontSize: 10,
+          letterSpacing: ".1em",
         }}
       >
-        #{rank}
+        {String(rank).padStart(2, "0")}
       </span>
-      <span>{code}</span>
+      <span style={{ color: "var(--fg)", fontWeight: 500 }}>{code}</span>
       {score != null && (
-        <>
-          <span style={{ opacity: 0.3 }}>·</span>
-          <span style={{ color: "var(--pt-accent, #c8a03c)", fontWeight: 600 }}>
-            {score}
-          </span>
-        </>
+        <span
+          style={{ marginLeft: "auto", color: "var(--accent)" }}
+          className="tabular"
+        >
+          {score.toFixed(1)}
+        </span>
       )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Field
+// ---------------------------------------------------------------------------
+
+interface FieldProps {
+  label: string;
+  placeholder?: string;
+  value?: string;
+  onChange?: (v: string) => void;
+  hint?: string;
+  mono?: boolean;
+  type?: string;
+  required?: boolean;
+}
+
+/**
+ * Labeled input with hairline border and focus accent. Mono uppercase label.
+ * Stateful focus glow handled via inline event handlers (design fidelity).
+ */
+export function Field({
+  label,
+  placeholder,
+  value,
+  onChange,
+  hint,
+  mono = false,
+  type = "text",
+  required = false,
+}: FieldProps) {
+  return (
+    <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <span
+        className="mono"
+        style={{
+          fontSize: 10.5,
+          letterSpacing: ".1em",
+          color: "var(--fg-3)",
+          textTransform: "uppercase",
+        }}
+      >
+        {label}
+      </span>
+      <input
+        type={type}
+        required={required}
+        value={value ?? ""}
+        onChange={(e) => onChange?.(e.target.value)}
+        placeholder={placeholder}
+        className={`field-input${mono ? " mono" : ""}`}
+        onFocus={(e) => {
+          (e.target as HTMLInputElement).style.borderColor = "var(--accent)";
+        }}
+        onBlur={(e) => {
+          (e.target as HTMLInputElement).style.borderColor = "var(--line-strong)";
+        }}
+      />
+      {hint && (
+        <span
+          className="mono fg3"
+          style={{ fontSize: 10, letterSpacing: ".08em" }}
+        >
+          {hint}
+        </span>
+      )}
+    </label>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Check
+// ---------------------------------------------------------------------------
+
+interface CheckProps {
+  on: boolean;
+  onClick: () => void;
+}
+
+/**
+ * 18×18 checkbox primitive. Accent-filled when on, hairline border when off.
+ */
+export function Check({ on, onClick }: CheckProps) {
+  return (
+    <span
+      role="checkbox"
+      aria-checked={on}
+      onClick={onClick}
+      style={{
+        width: 18,
+        height: 18,
+        borderRadius: 5,
+        flexShrink: 0,
+        border: `1px solid ${on ? "var(--accent)" : "var(--line-strong)"}`,
+        background: on ? "var(--accent)" : "transparent",
+        display: "grid",
+        placeItems: "center",
+        color: "#002a00",
+        fontSize: 12,
+        cursor: "pointer",
+        transition: "border-color .15s ease, background .15s ease",
+      }}
+    >
+      {on && "✓"}
     </span>
   );
 }
+
+// ---------------------------------------------------------------------------
+// LabelBadge
+// ---------------------------------------------------------------------------
+
+type LabelValue = "PLATINUM" | "GOLD" | "SILVER" | "BRONZE";
+
+interface LabelBadgeProps {
+  label: LabelValue;
+}
+
+const LABEL_COLORS: Record<
+  LabelValue,
+  { bg: string; fg: string; bd: string }
+> = {
+  PLATINUM: {
+    bg: "var(--accent-dim)",
+    fg: "var(--accent)",
+    bd: "var(--accent)",
+  },
+  GOLD: {
+    bg: "transparent",
+    fg: "var(--fg)",
+    bd: "var(--line-strong)",
+  },
+  SILVER: {
+    bg: "transparent",
+    fg: "var(--fg-2)",
+    bd: "var(--line)",
+  },
+  BRONZE: {
+    bg: "transparent",
+    fg: "var(--fg-3)",
+    bd: "var(--line)",
+  },
+};
+
+/**
+ * Award label badge — PLATINUM / GOLD / SILVER / BRONZE.
+ * Ported from page-results.jsx LabelBadge.
+ */
+export function LabelBadge({ label }: LabelBadgeProps) {
+  const c = LABEL_COLORS[label] ?? LABEL_COLORS.SILVER;
+  return (
+    <span
+      style={{
+        display: "inline-block",
+        padding: "5px 10px",
+        borderRadius: 999,
+        fontSize: 10,
+        letterSpacing: ".12em",
+        fontFamily: "var(--mono)",
+        color: c.fg,
+        border: `1px solid ${c.bd}`,
+        background: c.bg,
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Legacy named exports for backward compat with index.ts
+// (previously PtPill, PtEyebrow, etc.)
+// ---------------------------------------------------------------------------
+export { Pill as PtPill };
+export { Eyebrow as PtEyebrow };
+export { Countdown as PtCountdown };
+export { Ticker as PtTicker };
+export { CodeChip as PtCodeChip };
