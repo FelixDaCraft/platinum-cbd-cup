@@ -1,0 +1,109 @@
+name: Deploy to homelab
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-homelab
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Typecheck, build & deploy
+    runs-on: [self-hosted, linux, homelab]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.27.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Sync docker-compose.yml to /opt/platinum-cbd-cup
+        run: |
+          set -e
+          DEST=/opt/platinum-cbd-cup
+          cp docker-compose.yml "$DEST/docker-compose.yml"
+          if [ ! -f "$DEST/.env" ]; then
+            echo "::error::$DEST/.env is missing on the homelab. Populate it once (see .env.example) before the first deploy."
+            exit 1
+          fi
+
+      - name: Build Docker image
+        run: docker build -t platinum-cbd-cup:latest -f Dockerfile .
+
+      - name: Start postgres
+        working-directory: /opt/platinum-cbd-cup
+        run: |
+          set -e
+          docker compose up -d platinum-postgres
+          for i in $(seq 1 30); do
+            if docker exec platinum-postgres pg_isready -U "$(grep '^POSTGRES_USER=' .env | cut -d= -f2- | tr -d '\"')" > /dev/null 2>&1; then
+              echo "postgres ready"
+              break
+            fi
+            sleep 2
+          done
+
+      - name: Run database migrations (drizzle-kit push)
+        working-directory: ${{ github.workspace }}
+        env:
+          # Runner reaches postgres via 127.0.0.1:5432 (bound by docker-compose)
+          # Password is picked up from /opt/platinum-cbd-cup/.env
+          DATABASE_URL_FILE: /opt/platinum-cbd-cup/.env
+        run: |
+          set -e
+          # Load DB vars from the deploy dir .env and build a runner-local DATABASE_URL
+          export POSTGRES_USER=$(grep '^POSTGRES_USER=' /opt/platinum-cbd-cup/.env | cut -d= -f2- | tr -d '"')
+          export POSTGRES_PASSWORD=$(grep '^POSTGRES_PASSWORD=' /opt/platinum-cbd-cup/.env | cut -d= -f2- | tr -d '"')
+          export POSTGRES_DB=$(grep '^POSTGRES_DB=' /opt/platinum-cbd-cup/.env | cut -d= -f2- | tr -d '"')
+          export DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:5432/${POSTGRES_DB}"
+          # Feed minimal env so env.js validates
+          export BETTER_AUTH_SECRET="runner-migration-secret-32chars-ok"
+          export BETTER_AUTH_URL="http://localhost:3000"
+          export RESEND_API_KEY="re_migrate"
+          export EMAIL_FROM="migrate@localhost"
+          export STRIPE_SECRET_KEY="sk_test_migrate"
+          export STRIPE_WEBHOOK_SECRET="whsec_migrate"
+          export NEXT_PUBLIC_APP_URL="http://localhost:3000"
+          export NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY="pk_test_migrate"
+          pnpm db:push
+
+      - name: Deploy app
+        working-directory: /opt/platinum-cbd-cup
+        run: |
+          set -e
+          docker compose up -d platinum-app
+          # Give the container a chance to boot before inspecting Health
+          sleep 5
+          for i in $(seq 1 40); do
+            STATUS=$(docker inspect --format '{{.State.Health.Status}}' platinum-app 2>/dev/null || echo "missing")
+            if [ "$STATUS" = "healthy" ]; then
+              echo "app healthy"
+              exit 0
+            fi
+            echo "health=$STATUS ($i/40)"
+            sleep 3
+          done
+          echo "::error::app failed to become healthy within 120s"
+          docker logs platinum-app --tail 80
+          exit 1
+
+      - name: Cleanup old images
+        if: success()
+        run: docker image prune -f

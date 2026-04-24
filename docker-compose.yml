@@ -3,7 +3,7 @@ services:
   # Platinum CBD Cup - Next.js app
   # ============================================
   platinum-app:
-    image: ghcr.io/felixdacraft/platinum-cbd-cup:latest
+    image: platinum-cbd-cup:latest
     container_name: platinum-app
     restart: unless-stopped
     depends_on:
@@ -17,29 +17,17 @@ services:
     volumes:
       - ./uploads:/app/public/uploads
     networks:
-      - proxy
       - platinum-internal
-    labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=proxy"
-      - "traefik.http.routers.platinum.rule=Host(`platinum.aynn.fr`)"
-      - "traefik.http.routers.platinum.entrypoints=websecure"
-      - "traefik.http.routers.platinum.tls=true"
-      - "traefik.http.routers.platinum.tls.certresolver=letsencrypt"
-      - "traefik.http.services.platinum.loadbalancer.server.port=3000"
-      # Security headers
-      - "traefik.http.routers.platinum.middlewares=platinum-headers"
-      - "traefik.http.middlewares.platinum-headers.headers.stsSeconds=31536000"
-      - "traefik.http.middlewares.platinum-headers.headers.stsIncludeSubdomains=true"
+    ports:
+      # Exposed on 127.0.0.1:3017 so only Cloudflare Tunnel (on the host) can
+      # reach it. The tunnel maps platinum.aynn.fr -> http://localhost:3017.
+      - "127.0.0.1:3017:3000"
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 60s
-    ports:
-      # Fallback direct access if Traefik is unavailable
-      - "3017:3000"
 
   # ============================================
   # Postgres 16
@@ -56,6 +44,10 @@ services:
       - platinum-pgdata:/var/lib/postgresql/data
     networks:
       - platinum-internal
+    ports:
+      # Bind to localhost only so the self-hosted GitHub runner (on the same
+      # host) can run migrations. Not reachable from the LAN.
+      - "127.0.0.1:5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s
@@ -66,7 +58,5 @@ volumes:
   platinum-pgdata:
 
 networks:
-  proxy:
-    external: true
   platinum-internal:
     driver: bridge
