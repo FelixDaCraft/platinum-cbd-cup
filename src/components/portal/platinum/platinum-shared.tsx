@@ -82,14 +82,19 @@ const pad = (n: number, w = 2) => String(n).padStart(w, "0");
  * default → 4 large tabular blocks with DAYS / HRS / MIN / SEC labels
  */
 export function Countdown({ target, compact = false }: CountdownProps) {
-  const [now, setNow] = useState(() => Date.now());
+  // Start mounted=false so SSR and first client render produce identical
+  // placeholders. The interval kicks in only after hydration → no mismatch.
+  const [mounted, setMounted] = useState(false);
+  const [now, setNow] = useState(target);
 
   useEffect(() => {
+    setMounted(true);
+    setNow(Date.now());
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, []);
 
-  const diff = Math.max(0, target - now);
+  const diff = mounted ? Math.max(0, target - now) : 0;
   const days = Math.floor(diff / 86400000);
   const hours = Math.floor((diff % 86400000) / 3600000);
   const mins = Math.floor((diff % 3600000) / 60000);
@@ -97,7 +102,11 @@ export function Countdown({ target, compact = false }: CountdownProps) {
 
   if (compact) {
     return (
-      <span className="mono tabular" style={{ letterSpacing: ".05em" }}>
+      <span
+        className="mono tabular"
+        style={{ letterSpacing: ".05em" }}
+        suppressHydrationWarning
+      >
         {pad(days, 3)}:{pad(hours)}:{pad(mins)}:{pad(secs)}
       </span>
     );
@@ -137,6 +146,7 @@ export function Countdown({ target, compact = false }: CountdownProps) {
               fontWeight: 300,
               letterSpacing: "-0.03em",
             }}
+            suppressHydrationWarning
           >
             {x.v}
           </div>

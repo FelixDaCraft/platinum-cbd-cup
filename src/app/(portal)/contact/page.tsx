@@ -3,7 +3,7 @@ import { Eyebrow } from "~/components/portal/platinum";
 import { ContactForm } from "./_components/contact-form";
 
 export const metadata: Metadata = {
-  title: "Contact — Platinum CBD Cup",
+  title: "Contact",
   description: "Contactez l'équipe Platinum CBD Cup pour toute question ou demande d'information.",
 };
 

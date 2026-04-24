@@ -4,7 +4,7 @@ import { Eyebrow, Pill } from "~/components/portal/platinum";
 import type { TeamMember } from "~/server/db/schema/organization-about";
 
 export const metadata: Metadata = {
-  title: "À Propos — Platinum CBD Cup",
+  title: "À Propos",
   description: "Notre mission, notre histoire et notre équipe derrière la seule compétition CBD évaluée à l'aveugle en Europe.",
 };
 

@@ -537,10 +537,6 @@ function PortalLoginForm() {
         </div>
       </div>
 
-      {/* Bottom text */}
-      <p className="text-center text-xs text-muted-foreground/60 mt-6">
-        Propulsé par CupMetrics
-      </p>
     </motion.div>
   );
 }
