@@ -36,6 +36,10 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
+# Next.js standalone defaults to HOSTNAME=localhost which only binds to the
+# container hostname resolution (not 127.0.0.1), so in-container healthchecks
+# and the published port both break. Bind to all interfaces instead.
+ENV HOSTNAME=0.0.0.0
 
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
