@@ -6,4 +6,4 @@
  */
 export const ORGANIZATION_NAME = "Platinum CBD Cup";
 export const ORGANIZATION_SLUG = "platinum-cbd-cup";
-export const ORGANIZATION_LOGO = "/uploads/logos/platinum-cbd-logo.png";
+export const ORGANIZATION_LOGO = "/brand/platinum-cbd-cup-logo.png";

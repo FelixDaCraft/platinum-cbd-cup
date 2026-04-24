@@ -10,13 +10,13 @@ interface PlatinumTrophyProps {
  *
  * Uses CSS 3D transforms (spin3d, spinRing, shadowPulse keyframes)
  * declared in platinum-styles.ts. The logo path is hardcoded to the
- * single-tenant asset at /uploads/logos/platinum-cbd-logo.png.
+ * single-tenant asset at /brand/platinum-cbd-cup-logo.png.
  *
  * Orbit text ring: "PLATINUM CBD CUP · EDITION 03 · EUROPE · INDEPENDENT
  * · 2026 · BLIND PANEL · ISO 17025" — repeats to fill the full 360°.
  */
 export function PlatinumTrophy({ size = 420, glow = true }: PlatinumTrophyProps) {
-  const logoUrl = "/uploads/logos/platinum-cbd-logo.png";
+  const logoUrl = "/brand/platinum-cbd-cup-logo.png";
 
   return (
     <div

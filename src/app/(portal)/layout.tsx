@@ -1,21 +1,13 @@
-import type { Metadata } from "next";
-
-export const metadata: Metadata = {
-  title: "Connexion",
-};
+import type { ReactNode } from "react";
+import { PlatinumShell } from "~/components/portal/platinum";
 
 /**
- * Portal auth layout
- * Simple centered layout for login/register pages
+ * Public portal layout — wraps every public-facing page in the Platinum
+ * design shell (sticky topbar + page container + footer).
+ *
+ * Auth pages (login/register/etc.) live as siblings inside this same layout
+ * so they get the topbar/footer and just center their card content.
  */
-export default function PortalAuthLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4 py-12">
-      {children}
-    </div>
-  );
+export default function PortalLayout({ children }: { children: ReactNode }) {
+  return <PlatinumShell>{children}</PlatinumShell>;
 }

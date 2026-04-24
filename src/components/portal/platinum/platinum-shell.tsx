@@ -72,7 +72,7 @@ export function PlatinumShell({ children }: PlatinumShellProps) {
         <Link href="/" className="brand" aria-label="Platinum CBD Cup — Accueil">
           <span className="brand-mark">
             <img
-              src="/uploads/logos/platinum-cbd-logo.png"
+              src="/brand/platinum-cbd-cup-logo.png"
               alt="Platinum CBD Cup"
               width={34}
               height={34}
