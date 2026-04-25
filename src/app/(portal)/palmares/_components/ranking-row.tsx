@@ -10,6 +10,7 @@ interface ProductRow {
   score: number;
   scoreFormatted: string;
   labelName: string | null;
+  labelColor: string | null;
 }
 
 interface RankingRowProps {
@@ -104,22 +105,27 @@ export function RankingRow({ row, isLast, showLabel = true }: RankingRowProps) {
         {row.scoreFormatted}
       </span>
 
-      {/* Label — omitted entirely in podium-only publication mode */}
+      {/* Label — colored from cup_labels.color, omitted in podium-only mode */}
       {showLabel && (
         <span style={{ textAlign: "right" }}>
           {row.labelName ? (
             <span
               className="mono"
-              style={{
-                display: "inline-block",
-                padding: "4px 10px",
-                borderRadius: 999,
-                fontSize: 10,
-                letterSpacing: ".12em",
-                border: "1px solid var(--accent)",
-                color: "var(--accent)",
-                background: "var(--accent-dim)",
-              }}
+              style={
+                {
+                  display: "inline-block",
+                  padding: "4px 10px",
+                  borderRadius: 999,
+                  fontSize: 10,
+                  letterSpacing: ".12em",
+                  border: `1px solid ${row.labelColor ?? "var(--accent)"}`,
+                  color: row.labelColor ?? "var(--accent)",
+                  // Faint tinted background using the same color at low alpha
+                  background: row.labelColor
+                    ? `color-mix(in srgb, ${row.labelColor} 14%, transparent)`
+                    : "var(--accent-dim)",
+                } satisfies React.CSSProperties
+              }
             >
               {row.labelName}
             </span>

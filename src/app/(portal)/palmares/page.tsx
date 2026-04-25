@@ -17,6 +17,7 @@ interface CupLabel {
   name: string;
   minScore: number;
   maxScore: number | null;
+  color: string | null;
 }
 
 interface ProductRow {
@@ -29,6 +30,7 @@ interface ProductRow {
   score: number;
   scoreFormatted: string;
   labelName: string | null;
+  labelColor: string | null;
 }
 
 interface CategoryGroup {
@@ -43,15 +45,16 @@ interface CategoryGroup {
 
 /**
  * Resolves the cup_label tier for a given final score, picking the highest
- * threshold that the score meets. Falls back to null if no label matches.
+ * threshold that the score meets. Returns the full label so callers can also
+ * use its configured color. null if no tier matches.
  */
-function resolveLabel(score: number, labels: CupLabel[]): string | null {
+function resolveLabel(score: number, labels: CupLabel[]): CupLabel | null {
   // Sort descending by minScore so we pick the strongest tier first
   const sorted = [...labels].sort((a, b) => b.minScore - a.minScore);
   for (const l of sorted) {
     const passesMin = score >= l.minScore;
     const passesMax = l.maxScore == null || score <= l.maxScore;
-    if (passesMin && passesMax) return l.name;
+    if (passesMin && passesMax) return l;
   }
   return null;
 }
@@ -91,6 +94,7 @@ async function fetchCupLabels(cupId: string): Promise<CupLabel[]> {
     name: r.name,
     minScore: r.minScore,
     maxScore: r.maxScore,
+    color: r.color,
   }));
 }
 
@@ -149,6 +153,7 @@ async function fetchProducts(
     .filter((r) => r.anonymousCode != null && r.finalScore != null)
     .map((r) => {
       const score = parseFloat(r.finalScore!);
+      const label = resolveLabel(score, labels);
       return {
         rank: r.categoryRank ?? 0,
         code: r.anonymousCode!,
@@ -160,7 +165,8 @@ async function fetchProducts(
         categoryId: r.categoryId ?? "",
         score,
         scoreFormatted: formatScore(score, cup.ratingScale),
-        labelName: cleanLabel(resolveLabel(score, labels)),
+        labelName: cleanLabel(label?.name ?? null),
+        labelColor: label?.color ?? null,
       };
     });
 }
@@ -322,16 +328,28 @@ export default async function PalmaresPage({
     g.rows.push(row);
   }
 
-  const labelLegend = labels
-    .slice()
-    .sort((a, b) => b.minScore - a.minScore)
-    .map((l) => ({
-      name: cleanLabel(l.name) ?? l.name,
-      range:
-        l.maxScore != null
-          ? `${l.minScore.toFixed(1)} – ${l.maxScore.toFixed(1)}`
-          : `≥ ${l.minScore.toFixed(1)}`,
-    }));
+  // Dedupe labels by name (the prod data has duplicate rows like "Label OR" /
+  // "Label OR" or "Label Argent" / "Label ARGENT" — same threshold + color).
+  const labelLegend = Array.from(
+    labels
+      .slice()
+      .sort((a, b) => b.minScore - a.minScore)
+      .reduce((map, l) => {
+        const cleanName = cleanLabel(l.name) ?? l.name;
+        if (!map.has(cleanName)) {
+          map.set(cleanName, {
+            name: cleanName,
+            color: l.color ?? "var(--accent)",
+            range:
+              l.maxScore != null
+                ? `${l.minScore.toFixed(1)} – ${l.maxScore.toFixed(1)}`
+                : `≥ ${l.minScore.toFixed(1)}`,
+          });
+        }
+        return map;
+      }, new Map<string, { name: string; color: string; range: string }>())
+      .values(),
+  );
 
   return (
     <div className="page-enter">
@@ -430,7 +448,7 @@ export default async function PalmaresPage({
                     fontWeight: 400,
                     letterSpacing: ".05em",
                     marginTop: 4,
-                    color: "var(--accent)",
+                    color: top.labelColor ?? "var(--accent)",
                   }}
                 >
                   {top.labelName}
@@ -619,7 +637,7 @@ export default async function PalmaresPage({
                     <span
                       className="kv-k"
                       style={{
-                        color: "var(--accent)",
+                        color: l.color,
                         letterSpacing: ".15em",
                       }}
                     >
