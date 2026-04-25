@@ -153,7 +153,9 @@ async function fetchProducts(
         rank: r.categoryRank ?? 0,
         code: r.anonymousCode!,
         productName: r.productName ?? "",
-        producerName: r.brandName ?? r.companyName ?? "—",
+        // Company first (the entity), brand second as a fallback when the
+        // producer registered without a company (rare, single-person).
+        producerName: r.companyName ?? r.brandName ?? "—",
         categoryName: r.categoryName ?? "",
         categoryId: r.categoryId ?? "",
         score,
@@ -241,11 +243,45 @@ export default async function PalmaresPage({
     .getFullYear()
     .toString();
 
-  const [labels, allCategories, products] = await Promise.all([
+  const [labels, allCategories, allProducts] = await Promise.all([
     fetchCupLabels(selectedCup.id),
     fetchCategories(selectedCup.id),
     fetchPublishedCupProducts(selectedCup),
   ]);
+
+  // Apply the cup's resultsVisibility setting before rendering. Choices made
+  // by the organizer in the dashboard:
+  //  - "podium"            → top 3 ranks per category only
+  //  - "labels"            → only products that earned a label (Or/Argent/Bronze)
+  //  - "labels_and_podium" → union of the two
+  //  - "all"               → no filtering (every scored product shown)
+  const visibility = (selectedCup.resultsVisibility ?? "labels") as
+    | "podium"
+    | "labels"
+    | "labels_and_podium"
+    | "all";
+  const PODIUM_DEPTH = 3;
+  const products =
+    visibility === "all"
+      ? allProducts
+      : visibility === "podium"
+        ? allProducts.filter((p) => p.rank > 0 && p.rank <= PODIUM_DEPTH)
+        : visibility === "labels"
+          ? allProducts.filter((p) => p.labelName != null)
+          : // labels_and_podium
+            allProducts.filter(
+              (p) =>
+                p.labelName != null ||
+                (p.rank > 0 && p.rank <= PODIUM_DEPTH),
+            );
+
+  const visibilityCopy: Record<typeof visibility, string> = {
+    podium: "Podium uniquement — les 3 premiers de chaque catégorie",
+    labels: "Produits médaillés uniquement",
+    labels_and_podium:
+      "Podium + médaillés — top 3 de chaque catégorie et tous les produits avec un label",
+    all: "Palmarès intégral",
+  };
 
   if (products.length === 0) {
     return (
@@ -261,7 +297,7 @@ export default async function PalmaresPage({
     );
   }
 
-  // Best-in-show = highest absolute score across all categories
+  // Best-in-show = highest absolute score across all VISIBLE products
   const top = [...products].sort((a, b) => b.score - a.score)[0]!;
 
   // Filter chips use real category metadata (sorted)
@@ -400,6 +436,25 @@ export default async function PalmaresPage({
           </div>
         </div>
       </section>
+
+      {/* ── VISIBILITY NOTE ─────────────────────────────────────────── */}
+      <div
+        className="mono"
+        style={{
+          marginBottom: 16,
+          fontSize: 11,
+          letterSpacing: ".08em",
+          textTransform: "uppercase",
+          color: "var(--fg-3)",
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          flexWrap: "wrap",
+        }}
+      >
+        <span style={{ color: "var(--accent)" }}>· Mode</span>
+        <span>{visibilityCopy[visibility]}</span>
+      </div>
 
       {/* ── CATEGORY FILTER CHIPS ───────────────────────────────────── */}
       <div
