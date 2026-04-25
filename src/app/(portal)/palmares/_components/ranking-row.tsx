@@ -15,19 +15,23 @@ interface ProductRow {
 interface RankingRowProps {
   row: ProductRow;
   isLast: boolean;
+  /** Hide the trailing label column when the cup is podium-only. */
+  showLabel?: boolean;
 }
 
 /**
  * Single row in the public palmarès rankings table.
  * Client component for the hover interaction. Columns:
- * Rang · Code · Variété · Producteur · Score · Label
+ * Rang · Code · Variété · Producteur · Score · Label?
  */
-export function RankingRow({ row, isLast }: RankingRowProps) {
+export function RankingRow({ row, isLast, showLabel = true }: RankingRowProps) {
   return (
     <div
       style={{
         display: "grid",
-        gridTemplateColumns: "60px 80px 1.2fr 1fr 90px 110px",
+        gridTemplateColumns: showLabel
+          ? "60px 80px 1.2fr 1fr 90px 110px"
+          : "60px 80px 1.2fr 1fr 90px",
         padding: "16px 28px",
         alignItems: "center",
         borderBottom: isLast ? 0 : "1px solid var(--line)",
@@ -100,30 +104,32 @@ export function RankingRow({ row, isLast }: RankingRowProps) {
         {row.scoreFormatted}
       </span>
 
-      {/* Label */}
-      <span style={{ textAlign: "right" }}>
-        {row.labelName ? (
-          <span
-            className="mono"
-            style={{
-              display: "inline-block",
-              padding: "4px 10px",
-              borderRadius: 999,
-              fontSize: 10,
-              letterSpacing: ".12em",
-              border: "1px solid var(--accent)",
-              color: "var(--accent)",
-              background: "var(--accent-dim)",
-            }}
-          >
-            {row.labelName}
-          </span>
-        ) : (
-          <span className="fg3" style={{ fontSize: 10 }}>
-            —
-          </span>
-        )}
-      </span>
+      {/* Label — omitted entirely in podium-only publication mode */}
+      {showLabel && (
+        <span style={{ textAlign: "right" }}>
+          {row.labelName ? (
+            <span
+              className="mono"
+              style={{
+                display: "inline-block",
+                padding: "4px 10px",
+                borderRadius: 999,
+                fontSize: 10,
+                letterSpacing: ".12em",
+                border: "1px solid var(--accent)",
+                color: "var(--accent)",
+                background: "var(--accent-dim)",
+              }}
+            >
+              {row.labelName}
+            </span>
+          ) : (
+            <span className="fg3" style={{ fontSize: 10 }}>
+              —
+            </span>
+          )}
+        </span>
+      )}
     </div>
   );
 }

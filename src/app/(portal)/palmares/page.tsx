@@ -283,6 +283,10 @@ export default async function PalmaresPage({
     all: "Palmarès intégral",
   };
 
+  // When the organizer publishes podium-only, labels are deliberately hidden
+  // from the public view (no Or/Argent/Bronze pills, no methodology table).
+  const showLabels = visibility !== "podium";
+
   if (products.length === 0) {
     return (
       <div className="page-enter">
@@ -407,7 +411,7 @@ export default async function PalmaresPage({
               </div>
             </div>
 
-            {top.labelName && (
+            {showLabels && top.labelName && (
               <div>
                 <div
                   className="mono fg3"
@@ -556,7 +560,9 @@ export default async function PalmaresPage({
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "60px 80px 1.2fr 1fr 90px 110px",
+                  gridTemplateColumns: showLabels
+                    ? "60px 80px 1.2fr 1fr 90px 110px"
+                    : "60px 80px 1.2fr 1fr 90px",
                   padding: "10px 28px",
                   borderTop: "1px solid var(--line)",
                   borderBottom: "1px solid var(--line)",
@@ -572,7 +578,7 @@ export default async function PalmaresPage({
                 <span>Variété</span>
                 <span>Producteur</span>
                 <span style={{ textAlign: "right" }}>Score</span>
-                <span style={{ textAlign: "right" }}>Label</span>
+                {showLabels && <span style={{ textAlign: "right" }}>Label</span>}
               </div>
 
               {/* Rows */}
@@ -581,6 +587,7 @@ export default async function PalmaresPage({
                   key={row.code + row.categoryId}
                   row={row}
                   isLast={i === group.rows.length - 1}
+                  showLabel={showLabels}
                 />
               ))}
             </div>
@@ -589,37 +596,42 @@ export default async function PalmaresPage({
       </section>
 
       {/* ── METHODOLOGY ─────────────────────────────────────────────── */}
-      <section className="grid g-2" style={{ marginTop: 32 }}>
-        <div className="card">
-          <Eyebrow>
-            Méthodologie · Échelle {selectedCup.ratingScale ?? "0-20"}
-          </Eyebrow>
-          <div style={{ marginTop: 20 }}>
-            {labelLegend.length === 0 ? (
-              <p
-                className="lede"
-                style={{ marginTop: 4, color: "var(--fg-3)" }}
-              >
-                Aucun palier de label défini pour cette édition.
-              </p>
-            ) : (
-              labelLegend.map((l) => (
-                <div key={l.name} className="kv">
-                  <span
-                    className="kv-k"
-                    style={{
-                      color: "var(--accent)",
-                      letterSpacing: ".15em",
-                    }}
-                  >
-                    {l.name}
-                  </span>
-                  <span className="kv-v tabular">{l.range}</span>
-                </div>
-              ))
-            )}
+      <section
+        className={showLabels ? "grid g-2" : ""}
+        style={{ marginTop: 32 }}
+      >
+        {showLabels && (
+          <div className="card">
+            <Eyebrow>
+              Méthodologie · Échelle {selectedCup.ratingScale ?? "0-20"}
+            </Eyebrow>
+            <div style={{ marginTop: 20 }}>
+              {labelLegend.length === 0 ? (
+                <p
+                  className="lede"
+                  style={{ marginTop: 4, color: "var(--fg-3)" }}
+                >
+                  Aucun palier de label défini pour cette édition.
+                </p>
+              ) : (
+                labelLegend.map((l) => (
+                  <div key={l.name} className="kv">
+                    <span
+                      className="kv-k"
+                      style={{
+                        color: "var(--accent)",
+                        letterSpacing: ".15em",
+                      }}
+                    >
+                      {l.name}
+                    </span>
+                    <span className="kv-v tabular">{l.range}</span>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="card">
           <Eyebrow>Ledger public</Eyebrow>
