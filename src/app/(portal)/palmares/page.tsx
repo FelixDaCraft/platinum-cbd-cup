@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { eq, desc, isNotNull, and } from "drizzle-orm";
+import { eq, desc, isNotNull, and, asc } from "drizzle-orm";
 import { db } from "~/server/db";
 import * as schema from "~/server/db/schema";
 import {
@@ -13,102 +13,152 @@ import { RankingRow } from "./_components/ranking-row";
 // Types
 // ---------------------------------------------------------------------------
 
-type LabelTier = "PLATINUM" | "GOLD" | "SILVER" | "BRONZE";
+interface CupLabel {
+  name: string;
+  minScore: number;
+  maxScore: number | null;
+}
 
 interface ProductRow {
   rank: number;
   code: string;
-  catCode: string;
+  productName: string;
+  producerName: string;
+  categoryName: string;
+  categoryId: string;
   score: number;
-  labelTier: LabelTier;
+  scoreFormatted: string;
+  labelName: string | null;
+}
+
+interface CategoryGroup {
+  id: string;
+  name: string;
+  rows: ProductRow[];
 }
 
 // ---------------------------------------------------------------------------
-// Label tier computation
+// Helpers
 // ---------------------------------------------------------------------------
 
 /**
- * Computes a standard label tier from a 0-100 final score.
- *
- * Priority: if the stored label name is one of the four canonical tiers, use
- * it verbatim. Otherwise derive from score thresholds:
- *   ≥ 92 → PLATINUM
- *   ≥ 85 → GOLD
- *   ≥ 78 → SILVER
- *   anything else → BRONZE
+ * Resolves the cup_label tier for a given final score, picking the highest
+ * threshold that the score meets. Falls back to null if no label matches.
  */
-function computeLabelTier(score: number, storedLabelName: string | null): LabelTier {
-  const canonical = storedLabelName?.toUpperCase();
-  if (
-    canonical === "PLATINUM" ||
-    canonical === "GOLD" ||
-    canonical === "SILVER" ||
-    canonical === "BRONZE"
-  ) {
-    return canonical as LabelTier;
+function resolveLabel(score: number, labels: CupLabel[]): string | null {
+  // Sort descending by minScore so we pick the strongest tier first
+  const sorted = [...labels].sort((a, b) => b.minScore - a.minScore);
+  for (const l of sorted) {
+    const passesMin = score >= l.minScore;
+    const passesMax = l.maxScore == null || score <= l.maxScore;
+    if (passesMin && passesMax) return l.name;
   }
-  if (score >= 92) return "PLATINUM";
-  if (score >= 85) return "GOLD";
-  if (score >= 78) return "SILVER";
-  return "BRONZE";
+  return null;
+}
+
+/**
+ * Strip "Label" prefix (FR) from cup_label names for display: "Label OR" → "OR".
+ */
+function cleanLabel(name: string | null): string | null {
+  if (!name) return null;
+  return name.replace(/^Label\s+/i, "").trim().toUpperCase();
+}
+
+function formatScore(score: number, scale: string | null | undefined): string {
+  if (scale === "0-100") return score.toFixed(1);
+  if (scale === "0-5") return score.toFixed(2);
+  // 0-20 default
+  return score.toFixed(2);
 }
 
 // ---------------------------------------------------------------------------
-// Data fetching helpers
+// DB queries
 // ---------------------------------------------------------------------------
 
-async function fetchCups() {
+async function fetchPublishedCups() {
   return db.query.cups.findMany({
     where: (c, { isNotNull: inn }) => inn(c.resultsPublishedAt),
-    orderBy: (c, { desc: d }) => d(c.createdAt),
+    orderBy: (c, { desc: d }) => [d(c.eventDate), d(c.createdAt)],
   });
 }
 
-async function fetchProducts(cupId: string): Promise<ProductRow[]> {
+async function fetchCupLabels(cupId: string): Promise<CupLabel[]> {
+  const rows = await db.query.cupLabels.findMany({
+    where: (l, { eq: e }) => e(l.cupId, cupId),
+    orderBy: (l, { desc: d }) => [d(l.minScore)],
+  });
+  return rows.map((r) => ({
+    name: r.name,
+    minScore: r.minScore,
+    maxScore: r.maxScore,
+  }));
+}
+
+async function fetchCategories(cupId: string) {
+  return db.query.categories.findMany({
+    where: (c, { eq: e }) => e(c.cupId, cupId),
+    orderBy: (c, { asc: a }) => [a(c.sortOrder), a(c.name)],
+  });
+}
+
+async function fetchProducts(
+  cupId: string,
+  cup: { ratingScale: string | null },
+  labels: CupLabel[],
+): Promise<ProductRow[]> {
   const rows = await db
     .select({
+      productId: schema.products.id,
+      productName: schema.products.name,
       anonymousCode: schema.products.anonymousCode,
       finalScore: schema.products.finalScore,
+      categoryRank: schema.products.categoryRank,
+      categoryId: schema.categories.id,
       categoryName: schema.categories.name,
-      labelName: schema.cupLabels.name,
+      categorySort: schema.categories.sortOrder,
+      brandName: schema.producers.brandName,
+      companyName: schema.producers.companyName,
     })
     .from(schema.products)
     .innerJoin(
       schema.registrations,
-      eq(schema.products.registrationId, schema.registrations.id)
+      eq(schema.products.registrationId, schema.registrations.id),
+    )
+    .innerJoin(
+      schema.producers,
+      eq(schema.registrations.producerId, schema.producers.id),
     )
     .innerJoin(
       schema.categories,
-      eq(schema.products.categoryId, schema.categories.id)
-    )
-    .leftJoin(
-      schema.cupLabels,
-      eq(schema.products.labelId, schema.cupLabels.id)
+      eq(schema.products.categoryId, schema.categories.id),
     )
     .where(
       and(
         eq(schema.registrations.cupId, cupId),
-        eq(schema.registrations.status, "confirmed"),
         eq(schema.products.excludedFromResults, false),
-        isNotNull(schema.products.finalScore)
-      )
+        isNotNull(schema.products.finalScore),
+      ),
     )
-    .orderBy(desc(schema.products.finalScore));
+    .orderBy(
+      asc(schema.categories.sortOrder),
+      asc(schema.categories.name),
+      desc(schema.products.finalScore),
+    );
 
   return rows
     .filter((r) => r.anonymousCode != null && r.finalScore != null)
-    .map((r, i) => {
+    .map((r) => {
       const score = parseFloat(r.finalScore!);
-      // Derive a short category code from the first two uppercase letters of the name
-      const catCode = r.categoryName
-        ? r.categoryName.slice(0, 2).toUpperCase()
-        : "??";
       return {
-        rank: i + 1,
+        rank: r.categoryRank ?? 0,
         code: r.anonymousCode!,
-        catCode,
+        productName: r.productName ?? "",
+        producerName: r.brandName ?? r.companyName ?? "—",
+        categoryName: r.categoryName ?? "",
+        categoryId: r.categoryId ?? "",
         score,
-        labelTier: computeLabelTier(score, r.labelName ?? null),
+        scoreFormatted: formatScore(score, cup.ratingScale),
+        labelName: cleanLabel(resolveLabel(score, labels)),
       };
     });
 }
@@ -123,16 +173,8 @@ export default async function PalmaresPage({
   searchParams: Promise<{ edition?: string; cat?: string }>;
 }) {
   const sp = await searchParams;
+  const cups = await fetchPublishedCups();
 
-  const cups = await fetchCups();
-
-  // Edition selector data (one button per cup, labelled by year)
-  const editions = cups.map((c) => ({
-    id: c.id,
-    year: new Date(c.eventDate ?? c.createdAt).getFullYear().toString(),
-  }));
-
-  // ── Header (always rendered regardless of data) ───────────────────────
   const headerSection = (
     <section style={{ paddingTop: 40, paddingBottom: 32 }}>
       <div
@@ -151,16 +193,16 @@ export default async function PalmaresPage({
           </h1>
         </div>
 
-        {editions.length > 0 && (
+        {cups.length > 0 && (
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-            {editions.map((ed) => {
+            {cups.map((c) => {
               const isActive =
-                sp.edition === ed.year ||
-                (!sp.edition && ed.id === cups[0]?.id);
+                sp.edition === c.id || (!sp.edition && c.id === cups[0]?.id);
+              const label = c.name.replace(/^PlatinumCBD CUP /i, "Ed · ");
               return (
                 <Link
-                  key={ed.id}
-                  href={`?edition=${ed.year}`}
+                  key={c.id}
+                  href={`?edition=${c.id}`}
                   className="btn ghost"
                   style={{
                     padding: "10px 16px",
@@ -169,7 +211,7 @@ export default async function PalmaresPage({
                     textDecoration: "none",
                   }}
                 >
-                  Ed · {ed.year}
+                  {label}
                 </Link>
               );
             })}
@@ -179,7 +221,6 @@ export default async function PalmaresPage({
     </section>
   );
 
-  // ── Empty state: no cup with published results ────────────────────────
   if (cups.length === 0) {
     return (
       <div className="page-enter">
@@ -195,74 +236,75 @@ export default async function PalmaresPage({
     );
   }
 
-  // ── Resolve selected cup (from ?edition= or default to most recent) ───
-  const selectedCup =
-    cups.find(
-      (c) =>
-        new Date(c.eventDate ?? c.createdAt).getFullYear().toString() ===
-        sp.edition
-    ) ?? cups[0]!;
-
+  const selectedCup = cups.find((c) => c.id === sp.edition) ?? cups[0]!;
   const selectedYear = new Date(selectedCup.eventDate ?? selectedCup.createdAt)
     .getFullYear()
     .toString();
 
-  const products = await fetchProducts(selectedCup.id);
+  const [labels, allCategories, products] = await Promise.all([
+    fetchCupLabels(selectedCup.id),
+    fetchCategories(selectedCup.id),
+    fetchPublishedCupProducts(selectedCup),
+  ]);
 
-  // ── Empty state: cup exists but no scored products yet ────────────────
   if (products.length === 0) {
     return (
       <div className="page-enter">
         {headerSection}
         <div className="card">
-          <Eyebrow>Aucun palmarès publié</Eyebrow>
+          <Eyebrow>Pas encore de palmarès</Eyebrow>
           <p className="lede" style={{ marginTop: 14 }}>
-            Le palmarès de l&apos;édition en cours sera publié à l&apos;issue
-            de la cérémonie.
+            Aucun résultat publié pour cette édition.
           </p>
         </div>
       </div>
     );
   }
 
-  // ── Derived data ──────────────────────────────────────────────────────
-  const top = products[0]!;
+  // Best-in-show = highest absolute score across all categories
+  const top = [...products].sort((a, b) => b.score - a.score)[0]!;
 
-  // Unique category codes for filter chips (sorted alpha)
-  const allCatCodes = Array.from(new Set(products.map((p) => p.catCode))).sort();
+  // Filter chips use real category metadata (sorted)
+  const activeCategoryId = sp.cat;
+  const filtered = activeCategoryId
+    ? products.filter((p) => p.categoryId === activeCategoryId)
+    : products;
 
-  const activeCategory = sp.cat ?? "ALL";
-  const filtered =
-    activeCategory === "ALL"
-      ? products
-      : products.filter((p) => p.catCode === activeCategory);
+  // Group filtered rows by category (preserves the SQL order: by sort_order
+  // then category name then score desc within category)
+  const grouped: CategoryGroup[] = [];
+  for (const row of filtered) {
+    let g = grouped.find((x) => x.id === row.categoryId);
+    if (!g) {
+      g = { id: row.categoryId, name: row.categoryName, rows: [] };
+      grouped.push(g);
+    }
+    g.rows.push(row);
+  }
 
-  // Methodology rows: [label name, threshold display, CSS color var]
-  const methodologyRows: [string, string, string][] = [
-    ["PLATINUM", "≥ 92", "var(--accent)"],
-    ["GOLD", "≥ 85", "var(--fg)"],
-    ["SILVER", "≥ 78", "var(--fg-2)"],
-    ["BRONZE", "≥ 70", "var(--fg-3)"],
-  ];
+  const labelLegend = labels
+    .slice()
+    .sort((a, b) => b.minScore - a.minScore)
+    .map((l) => ({
+      name: cleanLabel(l.name) ?? l.name,
+      range:
+        l.maxScore != null
+          ? `${l.minScore.toFixed(1)} – ${l.maxScore.toFixed(1)}`
+          : `≥ ${l.minScore.toFixed(1)}`,
+    }));
 
   return (
     <div className="page-enter">
       {headerSection}
 
-      {/* ── BEST IN SHOW CARD ───────────────────────────────────────── */}
+      {/* ── BEST IN SHOW ─────────────────────────────────────────────── */}
       <section
         className="card"
         style={{ marginBottom: 32, position: "relative", overflow: "hidden" }}
       >
-        {/* Decorative trophy filigree — positioned absolute, purely visual */}
         <div
           aria-hidden="true"
-          style={{
-            position: "absolute",
-            right: -80,
-            top: -80,
-            opacity: 0.08,
-          }}
+          style={{ position: "absolute", right: -80, top: -80, opacity: 0.08 }}
         >
           <PlatinumTrophy size={340} glow={false} />
         </div>
@@ -275,13 +317,26 @@ export default async function PalmaresPage({
           <div
             className="display"
             style={{
-              fontSize: "clamp(56px, 8vw, 112px)",
+              fontSize: "clamp(48px, 7vw, 96px)",
               marginTop: 18,
-              marginBottom: 14,
+              marginBottom: 6,
             }}
           >
-            {top.code}
+            {top.productName || top.code}
             <em>.</em>
+          </div>
+
+          <div
+            className="mono"
+            style={{
+              fontSize: 13,
+              color: "var(--fg-2)",
+              letterSpacing: ".06em",
+              marginBottom: 22,
+            }}
+          >
+            {top.producerName} · {top.categoryName}
+            {top.code ? ` · ${top.code}` : ""}
           </div>
 
           <div
@@ -292,7 +347,6 @@ export default async function PalmaresPage({
               flexWrap: "wrap",
             }}
           >
-            {/* Final score */}
             <div>
               <div
                 className="mono fg3"
@@ -302,7 +356,7 @@ export default async function PalmaresPage({
                   textTransform: "uppercase",
                 }}
               >
-                Score final
+                Score final · {selectedCup.ratingScale ?? "0-20"}
               </div>
               <div
                 className="mono tabular"
@@ -313,49 +367,36 @@ export default async function PalmaresPage({
                   color: "var(--accent)",
                 }}
               >
-                {top.score.toFixed(1)}
+                {top.scoreFormatted}
               </div>
             </div>
 
-            {/* Criteria mini-grid — mock values per design spec.
-                Criterion scores would require a heavier join; the design
-                hardcodes {Aspect 98, Terpenes 96, Smoke 95, Effect 98}. */}
-            <div
-              style={{
-                display: "flex",
-                gap: 28,
-                fontFamily: "var(--mono)",
-                paddingBottom: 14,
-              }}
-            >
-              {(
-                [
-                  ["Aspect", 98],
-                  ["Terpenes", 96],
-                  ["Smoke", 95],
-                  ["Effect", 98],
-                ] as [string, number][]
-              ).map(([k, v]) => (
-                <div key={k}>
-                  <div
-                    className="mono fg3"
-                    style={{
-                      fontSize: 10,
-                      letterSpacing: ".1em",
-                      textTransform: "uppercase",
-                    }}
-                  >
-                    {k}
-                  </div>
-                  <div
-                    className="tabular"
-                    style={{ fontSize: 24, fontWeight: 300, marginTop: 4 }}
-                  >
-                    {v}
-                  </div>
+            {top.labelName && (
+              <div>
+                <div
+                  className="mono fg3"
+                  style={{
+                    fontSize: 11,
+                    letterSpacing: ".1em",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  Label
                 </div>
-              ))}
-            </div>
+                <div
+                  className="mono"
+                  style={{
+                    fontSize: 24,
+                    fontWeight: 400,
+                    letterSpacing: ".05em",
+                    marginTop: 4,
+                    color: "var(--accent)",
+                  }}
+                >
+                  {top.labelName}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </section>
@@ -365,74 +406,50 @@ export default async function PalmaresPage({
         style={{
           display: "flex",
           gap: 8,
-          marginBottom: 20,
+          marginBottom: 24,
           flexWrap: "wrap",
         }}
       >
-        {(["ALL", ...allCatCodes] as string[]).map((c) => {
-          const isActive = activeCategory === c;
-          const href =
-            c === "ALL"
-              ? `?edition=${selectedYear}`
-              : `?edition=${selectedYear}&cat=${c}`;
-          return (
-            <Link
-              key={c}
-              href={href}
-              className="mono"
-              style={{
-                padding: "8px 14px",
-                cursor: "pointer",
-                fontSize: 11,
-                letterSpacing: ".1em",
-                textTransform: "uppercase",
-                borderRadius: 999,
-                background: isActive ? "var(--fg)" : "transparent",
-                color: isActive ? "var(--bg)" : "var(--fg-2)",
-                border: `1px solid ${isActive ? "var(--fg)" : "var(--line-strong)"}`,
-                textDecoration: "none",
-              }}
-            >
-              {c}
-            </Link>
-          );
-        })}
+        {[{ id: "ALL", name: "Toutes" } as { id: string; name: string }]
+          .concat(allCategories.map((c) => ({ id: c.id, name: c.name })))
+          .map((c) => {
+            const isActive =
+              c.id === "ALL" ? !activeCategoryId : activeCategoryId === c.id;
+            const href =
+              c.id === "ALL"
+                ? `?edition=${selectedCup.id}`
+                : `?edition=${selectedCup.id}&cat=${c.id}`;
+            return (
+              <Link
+                key={c.id}
+                href={href}
+                className="mono"
+                style={{
+                  padding: "8px 14px",
+                  fontSize: 11,
+                  letterSpacing: ".1em",
+                  textTransform: "uppercase",
+                  borderRadius: 999,
+                  background: isActive ? "var(--fg)" : "transparent",
+                  color: isActive ? "var(--bg)" : "var(--fg-2)",
+                  border: `1px solid ${
+                    isActive ? "var(--fg)" : "var(--line-strong)"
+                  }`,
+                  textDecoration: "none",
+                }}
+              >
+                {c.name}
+              </Link>
+            );
+          })}
       </div>
 
-      {/* ── RANKINGS TABLE ──────────────────────────────────────────── */}
-      <section className="card" style={{ padding: 0, overflow: "hidden" }}>
-        {/* Table header */}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "70px 90px 1fr 110px 110px 120px",
-            padding: "16px 28px",
-            borderBottom: "1px solid var(--line)",
-            fontFamily: "var(--mono)",
-            fontSize: 10,
-            letterSpacing: ".12em",
-            textTransform: "uppercase",
-            color: "var(--fg-3)",
-          }}
-        >
-          <span>Rank</span>
-          <span>Code</span>
-          <span>Producteur</span>
-          <span>Cat</span>
-          <span style={{ textAlign: "right" }}>Score</span>
-          <span style={{ textAlign: "right" }}>Label</span>
-        </div>
-
-        {/* Data rows (client component for hover effect) */}
-        {filtered.map((w, i) => (
-          <RankingRow
-            key={w.code}
-            row={w}
-            isLast={i === filtered.length - 1}
-          />
-        ))}
-
-        {filtered.length === 0 && (
+      {/* ── RANKINGS GROUPED BY CATEGORY ────────────────────────────── */}
+      <section
+        className="card"
+        style={{ padding: 0, overflow: "hidden", marginBottom: 24 }}
+      >
+        {grouped.length === 0 ? (
           <div
             style={{
               padding: "32px 28px",
@@ -443,30 +460,112 @@ export default async function PalmaresPage({
           >
             Aucun produit dans cette catégorie.
           </div>
+        ) : (
+          grouped.map((group, gi) => (
+            <div key={group.id}>
+              {/* Category header */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "baseline",
+                  justifyContent: "space-between",
+                  padding: "20px 28px 14px",
+                  borderTop: gi === 0 ? 0 : "1px solid var(--line)",
+                  background: "var(--bg)",
+                }}
+              >
+                <div
+                  className="mono"
+                  style={{
+                    fontSize: 17,
+                    letterSpacing: "-0.01em",
+                    textTransform: "uppercase",
+                    color: "var(--fg)",
+                  }}
+                >
+                  {group.name}
+                </div>
+                <div
+                  className="mono fg3"
+                  style={{
+                    fontSize: 11,
+                    letterSpacing: ".1em",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  {group.rows.length} {group.rows.length > 1 ? "produits" : "produit"}
+                </div>
+              </div>
+
+              {/* Column header */}
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "60px 80px 1.2fr 1fr 90px 110px",
+                  padding: "10px 28px",
+                  borderTop: "1px solid var(--line)",
+                  borderBottom: "1px solid var(--line)",
+                  fontFamily: "var(--mono)",
+                  fontSize: 10,
+                  letterSpacing: ".12em",
+                  textTransform: "uppercase",
+                  color: "var(--fg-3)",
+                }}
+              >
+                <span>Rang</span>
+                <span>Code</span>
+                <span>Variété</span>
+                <span>Producteur</span>
+                <span style={{ textAlign: "right" }}>Score</span>
+                <span style={{ textAlign: "right" }}>Label</span>
+              </div>
+
+              {/* Rows */}
+              {group.rows.map((row, i) => (
+                <RankingRow
+                  key={row.code + row.categoryId}
+                  row={row}
+                  isLast={i === group.rows.length - 1}
+                />
+              ))}
+            </div>
+          ))
         )}
       </section>
 
       {/* ── METHODOLOGY ─────────────────────────────────────────────── */}
       <section className="grid g-2" style={{ marginTop: 32 }}>
-        {/* Label scale card */}
         <div className="card">
-          <Eyebrow>Méthodologie · Échelle de labels</Eyebrow>
+          <Eyebrow>
+            Méthodologie · Échelle {selectedCup.ratingScale ?? "0-20"}
+          </Eyebrow>
           <div style={{ marginTop: 20 }}>
-            {methodologyRows.map(([label, range, color]) => (
-              <div key={label} className="kv">
-                <span
-                  className="kv-k"
-                  style={{ color, letterSpacing: ".15em" }}
-                >
-                  {label}
-                </span>
-                <span className="kv-v tabular">{range}</span>
-              </div>
-            ))}
+            {labelLegend.length === 0 ? (
+              <p
+                className="lede"
+                style={{ marginTop: 4, color: "var(--fg-3)" }}
+              >
+                Aucun palier de label défini pour cette édition.
+              </p>
+            ) : (
+              labelLegend.map((l) => (
+                <div key={l.name} className="kv">
+                  <span
+                    className="kv-k"
+                    style={{
+                      color: "var(--accent)",
+                      letterSpacing: ".15em",
+                    }}
+                  >
+                    {l.name}
+                  </span>
+                  <span className="kv-v tabular">{l.range}</span>
+                </div>
+              ))
+            )}
           </div>
         </div>
 
-        {/* Public ledger card */}
         <div className="card">
           <Eyebrow>Ledger public</Eyebrow>
           <p
@@ -482,14 +581,31 @@ export default async function PalmaresPage({
             PDF.
           </p>
           <div style={{ display: "flex", gap: 12, marginTop: 20 }}>
-            {/* TODO: wire to /api/export/[cupId]/csv, /json, /pdf when built */}
-            <button className="btn ghost" style={{ padding: "10px 16px" }}>
+            <button
+              className="btn ghost"
+              style={{ padding: "10px 16px" }}
+              disabled
+              aria-disabled="true"
+              title="À venir"
+            >
               CSV ↓
             </button>
-            <button className="btn ghost" style={{ padding: "10px 16px" }}>
+            <button
+              className="btn ghost"
+              style={{ padding: "10px 16px" }}
+              disabled
+              aria-disabled="true"
+              title="À venir"
+            >
               JSON ↓
             </button>
-            <button className="btn ghost" style={{ padding: "10px 16px" }}>
+            <button
+              className="btn ghost"
+              style={{ padding: "10px 16px" }}
+              disabled
+              aria-disabled="true"
+              title="À venir"
+            >
               Rapport PDF ↓
             </button>
           </div>
@@ -497,4 +613,14 @@ export default async function PalmaresPage({
       </section>
     </div>
   );
+}
+
+// Wrapper that fetches labels first then products (labels needed to compute
+// label name per row in fetchProducts). Kept inline so the page reads top-down.
+async function fetchPublishedCupProducts(cup: {
+  id: string;
+  ratingScale: string | null;
+}): Promise<ProductRow[]> {
+  const labels = await fetchCupLabels(cup.id);
+  return fetchProducts(cup.id, cup, labels);
 }

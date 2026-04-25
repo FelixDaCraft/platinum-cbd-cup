@@ -1,15 +1,15 @@
 "use client";
 
-import { LabelBadge } from "~/components/portal/platinum";
-
-type LabelTier = "PLATINUM" | "GOLD" | "SILVER" | "BRONZE";
-
 interface ProductRow {
   rank: number;
   code: string;
-  catCode: string;
+  productName: string;
+  producerName: string;
+  categoryName: string;
+  categoryId: string;
   score: number;
-  labelTier: LabelTier;
+  scoreFormatted: string;
+  labelName: string | null;
 }
 
 interface RankingRowProps {
@@ -19,20 +19,20 @@ interface RankingRowProps {
 
 /**
  * Single row in the public palmarès rankings table.
- * Client component so that mouse-enter/leave hover handlers work
- * while the parent page.tsx remains a Server Component.
+ * Client component for the hover interaction. Columns:
+ * Rang · Code · Variété · Producteur · Score · Label
  */
 export function RankingRow({ row, isLast }: RankingRowProps) {
   return (
     <div
       style={{
         display: "grid",
-        gridTemplateColumns: "70px 90px 1fr 110px 110px 120px",
-        padding: "20px 28px",
+        gridTemplateColumns: "60px 80px 1.2fr 1fr 90px 110px",
+        padding: "16px 28px",
         alignItems: "center",
         borderBottom: isLast ? 0 : "1px solid var(--line)",
         fontFamily: "var(--mono)",
-        fontSize: 14,
+        fontSize: 13,
         transition: "background .15s ease",
       }}
       onMouseEnter={(e) => {
@@ -43,49 +43,86 @@ export function RankingRow({ row, isLast }: RankingRowProps) {
         (e.currentTarget as HTMLDivElement).style.background = "transparent";
       }}
     >
-      {/* Rank */}
+      {/* Rank within category */}
       <span
         className="tabular"
         style={{
-          fontSize: 22,
+          fontSize: 18,
           fontWeight: 300,
           color: row.rank === 1 ? "var(--accent)" : "var(--fg)",
         }}
       >
-        {String(row.rank).padStart(2, "0")}
+        {row.rank > 0 ? String(row.rank).padStart(2, "0") : "—"}
       </span>
 
       {/* Anonymous code */}
-      <span style={{ color: "var(--fg)", fontSize: 16 }}>{row.code}</span>
+      <span
+        style={{
+          color: "var(--fg)",
+          fontSize: 13,
+          letterSpacing: ".02em",
+        }}
+      >
+        {row.code}
+      </span>
 
-      {/* Producer — always redacted on public ledger */}
+      {/* Variety / product name */}
+      <span
+        style={{
+          color: "var(--fg)",
+          fontFamily: "var(--sans)",
+          fontSize: 14,
+        }}
+      >
+        {row.productName || "—"}
+      </span>
+
+      {/* Producer */}
       <span
         style={{
           color: "var(--fg-2)",
-          fontStyle: "italic",
           fontFamily: "var(--sans)",
           fontSize: 13,
         }}
       >
-        · disclosure pending ·
-      </span>
-
-      {/* Category code */}
-      <span className="fg3" style={{ fontSize: 12, letterSpacing: ".08em" }}>
-        {row.catCode}
+        {row.producerName}
       </span>
 
       {/* Score */}
       <span
         className="tabular"
-        style={{ textAlign: "right", fontSize: 16, color: "var(--accent)" }}
+        style={{
+          textAlign: "right",
+          fontSize: 16,
+          color: "var(--accent)",
+        }}
       >
-        {row.score.toFixed(1)}
+        {row.scoreFormatted}
       </span>
 
-      {/* Label badge */}
+      {/* Label */}
       <span style={{ textAlign: "right" }}>
-        <LabelBadge label={row.labelTier} />
+        {row.labelName ? (
+          <span
+            className="mono"
+            style={{
+              display: "inline-block",
+              padding: "4px 10px",
+              borderRadius: 999,
+              fontSize: 10,
+              letterSpacing: ".12em",
+              border: "1px solid var(--accent)",
+              color: "var(--accent)",
+              background: "var(--accent-dim)",
+            }}
+          >
+            {row.labelName}
+          </span>
+        ) : (
+          <span className="fg3" style={{ fontSize: 10 }}>
+            —
+          </span>
+        )}
       </span>
     </div>
   );
