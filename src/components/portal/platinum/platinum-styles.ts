@@ -121,6 +121,21 @@ body{
 .topbar-right{ display:flex; align-items:center; gap: 14px; font-family: var(--mono); font-size: 11px; color: var(--fg-2); }
 .live-dot{ width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 10px var(--accent); animation: pulse 1.6s ease-in-out infinite; }
 @keyframes pulse{ 50%{ opacity: .35; transform: scale(.85); } }
+/* Crosshair for the idle "WAITING FOR SIGNAL" state — outline circle with
+   a thin cross overshooting both axes, glowing the same accent as the
+   live dot but static (no animation, system is dormant). */
+.live-crosshair{
+  position: relative; width: 12px; height: 12px;
+  border: 1px solid var(--accent); border-radius: 50%;
+  filter: drop-shadow(0 0 6px var(--accent-glow));
+  flex-shrink: 0;
+}
+.live-crosshair::before,
+.live-crosshair::after{
+  content: ""; position: absolute; background: var(--accent);
+}
+.live-crosshair::before{ top: 50%; left: -3px; right: -3px; height: 1px; transform: translateY(-50%); }
+.live-crosshair::after{ left: 50%; top: -3px; bottom: -3px; width: 1px; transform: translateX(-50%); }
 .live{ display:flex; align-items:center; gap:8px; letter-spacing: .1em; text-transform: uppercase; }
 
 /* ── Page container ─────────────────────────────────────── */

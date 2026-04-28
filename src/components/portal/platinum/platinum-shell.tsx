@@ -14,31 +14,19 @@ type NavEntry = {
   href: string;
   /** pathname prefix that marks this entry active */
   match: string;
-  /** live indicator label shown on the right when this route is active */
-  liveLabel: string;
 };
 
 const NAV: NavEntry[] = [
-  { idx: "01", label: "Index", href: "/", match: "/", liveLabel: "LIVE" },
-  { idx: "02", label: "Cup", href: "/cups", match: "/cups", liveLabel: "ED·03" },
-  { idx: "03", label: "Enter", href: "/cups", match: "/cups/", liveLabel: "SUBMIT" },
-  { idx: "04", label: "Results", href: "/palmares", match: "/palmares", liveLabel: "LEDGER" },
-  { idx: "05", label: "Manifesto", href: "/about", match: "/about", liveLabel: "STANCE" },
+  { idx: "01", label: "Index", href: "/", match: "/" },
+  { idx: "02", label: "Cup", href: "/cups", match: "/cups" },
+  { idx: "03", label: "Enter", href: "/cups", match: "/cups/" },
+  { idx: "04", label: "Results", href: "/palmares", match: "/palmares" },
+  { idx: "05", label: "Manifesto", href: "/about", match: "/about" },
 ];
 
 function isActive(entry: NavEntry, pathname: string): boolean {
   if (entry.match === "/") return pathname === "/";
   return pathname.startsWith(entry.match);
-}
-
-function getLiveLabel(pathname: string): string {
-  // More specific matches first
-  if (/\/cups\/[^/]+\/register/.test(pathname)) return "SUBMIT";
-  if (pathname.startsWith("/palmares")) return "LEDGER";
-  if (pathname.startsWith("/about")) return "STANCE";
-  if (pathname.startsWith("/cups")) return "ED·03";
-  if (pathname === "/") return "LIVE";
-  return "ED·03";
 }
 
 // ---------------------------------------------------------------------------
@@ -47,23 +35,30 @@ function getLiveLabel(pathname: string): string {
 
 interface PlatinumShellProps {
   children: ReactNode;
+  /**
+   * System-wide activity status driving the topbar indicator:
+   * - "live" → registrations open or rating phase active, glowing pulse + LIVE
+   * - "idle" → nothing happening, glowing crosshair + WAITING FOR SIGNAL
+   */
+  liveStatus?: "live" | "idle";
 }
 
 /**
  * Public-facing layout shell for the Platinum CBD Cup portal.
  *
- * Renders the sticky topbar (brand + 4-item segmented nav + live indicator),
+ * Renders the sticky topbar (brand + 5-item segmented nav + live indicator),
  * a <main class="page"> wrapper, and a footer with legal links.
  *
- * Uses .topbar / .nav / .brand / .page / .footer / .live / .live-dot CSS
- * classes defined in platinum-styles.ts — all on :root, no scoping.
+ * Uses .topbar / .nav / .brand / .page / .footer / .live / .live-dot
+ * / .live-crosshair CSS classes defined in platinum-styles.ts.
  *
  * Must be used inside a parent that has `data-theme="dark"` on <body>
  * and a `.matrix` div sibling (both set in root layout).
  */
-export function PlatinumShell({ children }: PlatinumShellProps) {
+export function PlatinumShell({ children, liveStatus = "idle" }: PlatinumShellProps) {
   const pathname = usePathname();
-  const liveLabel = getLiveLabel(pathname);
+  const isLive = liveStatus === "live";
+  const liveLabel = isLive ? "LIVE" : "WAITING FOR SIGNAL";
   const year = new Date().getFullYear();
 
   return (
@@ -103,10 +98,14 @@ export function PlatinumShell({ children }: PlatinumShellProps) {
           })}
         </nav>
 
-        {/* Live indicator */}
+        {/* Live indicator — global system activity */}
         <div className="topbar-right" aria-hidden="true">
           <div className="live">
-            <span className="live-dot" />
+            {isLive ? (
+              <span className="live-dot" />
+            ) : (
+              <span className="live-crosshair" />
+            )}
             <span>{liveLabel}</span>
           </div>
         </div>
