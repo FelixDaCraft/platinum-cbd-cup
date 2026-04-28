@@ -152,19 +152,14 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   const styleString = generateStyleString(PORTAL_THEME.cssVariables);
 
-  // CSS variables + portal-root font scoping (kept for parity with previous portal layout).
+  // CSS variables only. Heading + body fonts are owned by the Platinum
+  // design system (Louize Display / Geist Mono / Inter via platinumCSS).
+  // The legacy `#portal-root h1-h6 !important` font override was a remnant
+  // of the multi-tenant CupMetrics theming and was overriding `.display`
+  // and `.section-title` with Inter — preventing Louize from ever rendering.
   const portalRootCss = `
 #portal-root, #portal-root * {
   ${styleString}
-}
-#portal-root h1, #portal-root h2, #portal-root h3, #portal-root h4, #portal-root h5, #portal-root h6 {
-  font-family: var(--portal-heading-font) !important;
-}
-#portal-root {
-  font-family: var(--portal-body-font) !important;
-}
-#portal-root p, #portal-root span, #portal-root div, #portal-root a, #portal-root li, #portal-root td, #portal-root th {
-  font-family: inherit;
 }
 ${PORTAL_THEME.customCss ? sanitizeCustomCss(PORTAL_THEME.customCss) : ""}
 `.trim();
