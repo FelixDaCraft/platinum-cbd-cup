@@ -22,6 +22,7 @@ import { scoringRouter } from "~/server/api/routers/scoring";
 import { activityRouter } from "~/server/api/routers/activity";
 import { juryCodesRouter } from "~/server/api/routers/jury-codes";
 import { pressRouter } from "~/server/api/routers/press";
+import { organizationAboutRouter } from "~/server/api/routers/organization-about";
 import { historicalImportRouter } from "~/server/api/routers/historical-import";
 import { createCallerFactory, createTRPCRouter } from "~/server/api/trpc";
 
@@ -55,6 +56,7 @@ export const appRouter = createTRPCRouter({
   activity: activityRouter,
   juryCodes: juryCodesRouter,
   press: pressRouter,
+  organizationAbout: organizationAboutRouter,
   historicalImport: historicalImportRouter,
 });
 
