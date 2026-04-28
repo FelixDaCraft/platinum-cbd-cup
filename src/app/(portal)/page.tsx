@@ -319,9 +319,7 @@ export default async function PortalHomePage() {
             >
               Platinum
               <br />
-              <em>CBD Cup</em>
-              <br />
-              2026.
+              <em>CBD Cup</em> 2026.
             </h1>
             <div
               className="mono"
