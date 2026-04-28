@@ -350,7 +350,7 @@ export default async function PortalHomePage() {
               }}
             >
               <Link href="/cups" className="btn accent">
-                Inscrire un spécimen <span className="btn-arrow">→</span>
+                Postulez à la prochaine Edition <span className="btn-arrow">→</span>
               </Link>
               <Link href="/cups" className="btn ghost">
                 Voir l'édition en cours
