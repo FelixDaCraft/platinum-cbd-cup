@@ -1,7 +1,14 @@
 import type { Metadata } from "next";
 import { db } from "~/server/db";
-import { Eyebrow, Pill } from "~/components/portal/platinum";
+import { Eyebrow } from "~/components/portal/platinum";
 import type { TeamMember } from "~/server/db/schema/organization-about";
+
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  const a = parts[0]?.[0] ?? "";
+  const b = parts[1]?.[0] ?? parts[0]?.[1] ?? "";
+  return (a + b).toUpperCase() || "??";
+}
 
 export const metadata: Metadata = {
   title: "Manifesto",
@@ -160,48 +167,38 @@ export default async function AboutPage() {
             </p>
           </div>
         ) : (
-          <div className="grid g-3">
-            {teamMembers.map((member, i) => (
-              <div key={i} className="card card-hover">
-                <div
-                  style={{
-                    fontFamily: "var(--mono)",
-                    fontSize: 10,
-                    color: "var(--accent)",
-                    letterSpacing: ".15em",
-                    marginBottom: 14,
-                  }}
+          <div className="team-roster">
+            {teamMembers.map((member, i) => {
+              const m = member as TeamMember;
+              // Even staggering across a 6s cycle: each member peaks at
+              // a unique offset so they flash sequentially left → right.
+              const animationDelay = `${(i * 6) / teamMembers.length}s`;
+              return (
+                <figure
+                  key={m.id ?? i}
+                  className="team-member"
+                  style={{ animationDelay }}
                 >
-                  · {String(i + 1).padStart(2, "0")}
-                </div>
-                <div
-                  style={{
-                    fontFamily: "var(--mono)",
-                    fontSize: 17,
-                    letterSpacing: "-.01em",
-                  }}
-                >
-                  {(member as { name?: string }).name ?? "—"}
-                </div>
-                {(member as { role?: string }).role && (
-                  <div style={{ marginTop: 6 }}>
-                    <Pill>{(member as { role: string }).role}</Pill>
+                  <div className="team-photo-frame">
+                    {m.photo ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={m.photo} alt={m.name} loading="lazy" />
+                    ) : (
+                      <span className="team-photo-placeholder">
+                        {getInitials(m.name)}
+                      </span>
+                    )}
                   </div>
-                )}
-                {(member as { bio?: string }).bio && (
-                  <p
-                    style={{
-                      color: "var(--fg-2)",
-                      fontSize: 13,
-                      lineHeight: 1.55,
-                      marginTop: 12,
-                    }}
-                  >
-                    {(member as { bio: string }).bio}
-                  </p>
-                )}
-              </div>
-            ))}
+                  <figcaption>
+                    <span className="team-idx">
+                      · {String(i + 1).padStart(2, "0")}
+                    </span>
+                    <span className="team-nm">{m.name}</span>
+                    {m.role && <span className="team-rl">{m.role}</span>}
+                  </figcaption>
+                </figure>
+              );
+            })}
           </div>
         )}
       </section>

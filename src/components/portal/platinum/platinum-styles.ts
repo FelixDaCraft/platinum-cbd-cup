@@ -276,6 +276,49 @@ h2.section-title{
 ::-webkit-scrollbar-track{ background: transparent; }
 ::-webkit-scrollbar-thumb{ background: var(--line-strong); border-radius: 999px; border: 2px solid var(--bg); }
 
+/* ── Team roster (Manifesto page · radar-style flash without sweep line)
+   Each <figure> stays muted/desaturated by default and briefly resolves
+   to color + slight scale. Stagger the animation-delay on each child so
+   they pulse left-to-right one after another, giving the radar rhythm
+   without rendering a literal sweep bar. */
+.team-roster{
+  display: flex; flex-wrap: wrap; gap: 24px; align-items: stretch;
+}
+.team-member{
+  flex: 1 1 140px; min-width: 140px; max-width: 220px;
+  margin: 0; display: flex; flex-direction: column; gap: 12px;
+  filter: grayscale(1) brightness(.55);
+  animation-name: team-radar-flash;
+  animation-duration: 6s;
+  animation-iteration-count: infinite;
+  animation-timing-function: linear;
+  transform-origin: center;
+}
+.team-photo-frame{
+  position: relative; width: 100%; aspect-ratio: 4/5;
+  border-radius: 6px; overflow: hidden;
+  background: var(--bg-2); border: 1px solid var(--line);
+  display: grid; place-items: center;
+}
+.team-photo-frame img{
+  width: 100%; height: 100%; object-fit: cover; display: block;
+}
+.team-photo-placeholder{
+  font-family: var(--mono); font-size: 28px; letter-spacing: .06em;
+  color: var(--fg-3);
+}
+.team-member figcaption{ font-family: var(--mono); display: flex; flex-direction: column; gap: 2px; }
+.team-member .team-idx{ color: var(--accent); font-size: 10px; letter-spacing: .12em; }
+.team-member .team-nm{ font-size: 12px; letter-spacing: .04em; text-transform: uppercase; color: var(--fg); }
+.team-member .team-rl{ font-size: 10px; letter-spacing: .1em; color: var(--fg-3); text-transform: uppercase; }
+@keyframes team-radar-flash{
+  0%, 8%, 100% { filter: grayscale(1) brightness(.55); transform: scale(1); }
+  3% { filter: grayscale(0) brightness(1.05) saturate(1.1); transform: scale(1.015); }
+}
+@media (prefers-reduced-motion: reduce){
+  .team-member{ animation: none; filter: none; }
+}
+
 /* ── Ticker ───────────────────────────────────────────── */
 .ticker{
   overflow: hidden; white-space: nowrap;
