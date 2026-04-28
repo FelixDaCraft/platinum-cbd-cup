@@ -152,10 +152,24 @@ body{
   -webkit-background-clip: text; background-clip: text;
   -webkit-text-fill-color: transparent; color: transparent;
 }
+
+/* All headings inside the public portal shell render in Louize Display
+   (bold-italic). The single .ttf face declared above only matches
+   weight: 700 + style: italic, so we pin both explicitly. Pages that
+   previously relied on .section-title (mono) now inherit the display face. */
+.shell h1, .shell h2, .shell h3, .shell h4, .shell h5, .shell h6 {
+  font-family: var(--display);
+  font-weight: 700;
+  font-style: italic;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
 h2.section-title{
-  font-family: var(--mono); font-weight: 400;
-  font-size: clamp(24px, 3.2vw, 40px);
-  letter-spacing: -0.02em; text-transform: uppercase;
+  font-family: var(--display); font-weight: 700; font-style: italic;
+  font-size: clamp(28px, 3.4vw, 44px);
+  letter-spacing: -0.02em; text-transform: none;
+  line-height: 1.05;
   margin: 0;
 }
 .lede{ font-size: 16px; line-height: 1.55; color: var(--fg-2); max-width: 52ch; }

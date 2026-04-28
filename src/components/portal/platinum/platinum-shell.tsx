@@ -23,6 +23,7 @@ const NAV: NavEntry[] = [
   { idx: "02", label: "Cup", href: "/cups", match: "/cups", liveLabel: "ED·03" },
   { idx: "03", label: "Enter", href: "/cups", match: "/cups/", liveLabel: "SUBMIT" },
   { idx: "04", label: "Results", href: "/palmares", match: "/palmares", liveLabel: "LEDGER" },
+  { idx: "05", label: "Manifesto", href: "/about", match: "/about", liveLabel: "STANCE" },
 ];
 
 function isActive(entry: NavEntry, pathname: string): boolean {
@@ -34,6 +35,7 @@ function getLiveLabel(pathname: string): string {
   // More specific matches first
   if (/\/cups\/[^/]+\/register/.test(pathname)) return "SUBMIT";
   if (pathname.startsWith("/palmares")) return "LEDGER";
+  if (pathname.startsWith("/about")) return "STANCE";
   if (pathname.startsWith("/cups")) return "ED·03";
   if (pathname === "/") return "LIVE";
   return "ED·03";
@@ -125,7 +127,7 @@ export function PlatinumShell({ children }: PlatinumShellProps) {
             href="/about"
             style={{ color: "inherit", textDecoration: "none" }}
           >
-            À propos
+            Manifesto
           </Link>
           <Link
             href="/press"
@@ -142,7 +144,7 @@ export function PlatinumShell({ children }: PlatinumShellProps) {
         </nav>
 
         <span style={{ color: "var(--fg-3)", letterSpacing: ".08em" }}>
-          EU · ISO 17025 · BLIND PANEL
+          EU · INDEPENDENT · BLIND PANEL
         </span>
       </footer>
     </div>

@@ -4,7 +4,7 @@ import { Eyebrow, Pill } from "~/components/portal/platinum";
 import type { TeamMember } from "~/server/db/schema/organization-about";
 
 export const metadata: Metadata = {
-  title: "À Propos",
+  title: "Manifesto",
   description: "Notre mission, notre histoire et notre équipe derrière la seule compétition CBD évaluée à l'aveugle en Europe.",
 };
 
@@ -43,14 +43,14 @@ export default async function AboutPage() {
     <div className="page-enter">
       {/* Hero */}
       <section style={{ paddingTop: 40, paddingBottom: 56 }}>
-        <Eyebrow idx={5}>À propos</Eyebrow>
+        <Eyebrow idx={5}>Manifesto</Eyebrow>
         <h1 className="display" style={{ marginTop: 20, marginBottom: 20 }}>
-          About<em>.</em>
+          Manifesto<em>.</em>
         </h1>
         <p className="lede" style={{ maxWidth: 560 }}>
           La Platinum CBD Cup est la seule compétition européenne de CBD
           évaluée à l'aveugle par un panel indépendant d'analystes, sommeliers
-          et laboratoires certifiés ISO 17025.
+          et laboratoires partenaires.
         </p>
       </section>
 
