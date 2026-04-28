@@ -170,15 +170,8 @@ export default async function AboutPage() {
           <div className="team-roster">
             {teamMembers.map((member, i) => {
               const m = member as TeamMember;
-              // Even staggering across a 6s cycle: each member peaks at
-              // a unique offset so they flash sequentially left → right.
-              const animationDelay = `${(i * 6) / teamMembers.length}s`;
               return (
-                <figure
-                  key={m.id ?? i}
-                  className="team-member"
-                  style={{ animationDelay }}
-                >
+                <figure key={m.id ?? i} className="team-member">
                   <div className="team-photo-frame">
                     {m.photo ? (
                       // eslint-disable-next-line @next/next/no-img-element
