@@ -13,6 +13,13 @@ interface GeometricEmblemProps {
   glow?: boolean;
   /** Rotation speed in radians per second (default = 0.18 ~ slow elegant). */
   rotationSpeed?: number;
+  /**
+   * Static Z-axis tilt in radians. Negative leans the top toward the
+   * right (top-right / bottom-left) — viewer's perspective.
+   */
+  tiltZ?: number;
+  /** Static X-axis tilt in radians. Positive tips the top toward the camera. */
+  tiltX?: number;
 }
 
 /**
@@ -28,6 +35,8 @@ export function GeometricEmblem({
   size = 420,
   glow = true,
   rotationSpeed = 0.18,
+  tiltZ = 0,
+  tiltX = 0,
 }: GeometricEmblemProps) {
   return (
     <div
@@ -82,7 +91,11 @@ export function GeometricEmblem({
 
         <Suspense fallback={null}>
           <Center>
-            <RotatingEmblem rotationSpeed={rotationSpeed} />
+            <RotatingEmblem
+              rotationSpeed={rotationSpeed}
+              tiltZ={tiltZ}
+              tiltX={tiltX}
+            />
           </Center>
           <Environment preset="city" />
         </Suspense>
@@ -91,19 +104,31 @@ export function GeometricEmblem({
   );
 }
 
-function RotatingEmblem({ rotationSpeed }: { rotationSpeed: number }) {
-  const ref = useRef<Group>(null);
+function RotatingEmblem({
+  rotationSpeed,
+  tiltZ,
+  tiltX,
+}: {
+  rotationSpeed: number;
+  tiltZ: number;
+  tiltX: number;
+}) {
+  const spinRef = useRef<Group>(null);
   const { scene } = useGLTF(MODEL_URL);
 
   useFrame((_, delta) => {
-    if (ref.current) {
-      ref.current.rotation.y += delta * rotationSpeed;
+    if (spinRef.current) {
+      spinRef.current.rotation.y += delta * rotationSpeed;
     }
   });
 
+  // Outer group holds the static tilt in world space; inner group spins
+  // around its (now-tilted) local Y axis — gives the off-axis wobble look.
   return (
-    <group ref={ref}>
-      <primitive object={scene} />
+    <group rotation={[tiltX, 0, tiltZ]}>
+      <group ref={spinRef}>
+        <primitive object={scene} />
+      </group>
     </group>
   );
 }

@@ -359,7 +359,7 @@ export default async function PortalHomePage() {
           </div>
 
           <div style={{ display: "grid", placeItems: "center" }}>
-            <GeometricEmblem size={420} />
+            <GeometricEmblem size={735} tiltZ={-0.18} />
           </div>
         </div>
       </section>
