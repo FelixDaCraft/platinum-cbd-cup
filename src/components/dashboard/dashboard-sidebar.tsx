@@ -7,19 +7,15 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Trophy,
   Newspaper,
-  ShieldAlert,
   Menu,
   ChevronDown,
-  Palette,
   Info,
   Handshake,
   Mail,
   MessageSquare,
   Search,
-  Sparkles,
   LayoutDashboard,
   FileText,
-  Globe,
   Settings,
   CreditCard,
   Megaphone,
@@ -28,7 +24,6 @@ import {
 } from "lucide-react";
 
 import { cn } from "~/lib/utils";
-import { useSession } from "~/lib/auth-client";
 import { Button } from "~/components/ui/button";
 import {
   Sheet,
@@ -95,11 +90,6 @@ export function DashboardSidebar({ className, baseUrl = "" }: DashboardSidebarPr
 
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>(getInitialExpandedSections);
 
-  // Check if user is admin - must be called before any early returns
-  const { data: session } = useSession();
-  const isAdmin =
-    (session?.user as { isAdmin?: boolean } | undefined)?.isAdmin === true;
-
   // Hide sidebar when inside a cup detail (cup has its own sidebar)
   const inCupDetail = isInsideCupDetail(pathname, baseUrl);
   if (inCupDetail) {
@@ -120,7 +110,6 @@ export function DashboardSidebar({ className, baseUrl = "" }: DashboardSidebarPr
 
   // Portal section items (direct links)
   const portalNavItems: NavItem[] = [
-    { href: buildPath("/settings/portal/appearance"), label: "Apparence", icon: Palette },
     // "Contenu" will be a mini-collapsible inserted here
     { href: buildPath("/settings/portal/messages"), label: "Messages", icon: MessageSquare },
     { href: buildPath("/settings/newsletter"), label: "Newsletter", icon: Mail },
@@ -139,15 +128,11 @@ export function DashboardSidebar({ className, baseUrl = "" }: DashboardSidebarPr
     ],
   };
 
-  // Mini-collapsible: Domaine & SEO
-  const domainSeoSection: CollapsibleSection = {
-    id: "domainSeo",
-    label: "Domaine & SEO",
-    icon: Globe,
-    items: [
-      { href: buildPath("/settings/portal"), label: "Configuration", icon: Globe },
-      { href: buildPath("/settings/portal/seo"), label: "SEO", icon: Search },
-    ],
+  // SEO direct link
+  const seoNavItem: NavItem = {
+    href: buildPath("/settings/portal/seo"),
+    label: "SEO",
+    icon: Search,
   };
 
   // Payments item (direct link)
@@ -354,14 +339,11 @@ export function DashboardSidebar({ className, baseUrl = "" }: DashboardSidebarPr
             Portail Public
           </p>
 
-          {/* Apparence (direct) */}
-          {renderNavItem(portalNavItems[0]!, onNavigate)}
-
           {/* Contenu (mini-collapsible) */}
           {renderMiniSection(contenuSection, onNavigate)}
 
           {/* Messages, Newsletter, Sponsors (direct) */}
-          {portalNavItems.slice(1).map((item) => renderNavItem(item, onNavigate))}
+          {portalNavItems.map((item) => renderNavItem(item, onNavigate))}
 
           {/* ═══ SEPARATOR: CONFIGURATION ═══ */}
           <div className="divider-gradient my-3" />
@@ -369,8 +351,8 @@ export function DashboardSidebar({ className, baseUrl = "" }: DashboardSidebarPr
             Configuration
           </p>
 
-          {/* Domaine & SEO (mini-collapsible) */}
-          {renderMiniSection(domainSeoSection, onNavigate)}
+          {/* SEO (direct) */}
+          {renderNavItem(seoNavItem, onNavigate)}
 
           {/* Paiements (direct) */}
           {renderNavItem(paymentsNavItem, onNavigate)}
@@ -378,39 +360,6 @@ export function DashboardSidebar({ className, baseUrl = "" }: DashboardSidebarPr
           {/* Paramètres (direct) */}
           {renderNavItem(settingsNavItem, onNavigate)}
         </nav>
-
-        {/* Admin section */}
-        {isAdmin && (
-          <>
-            <div className="divider-gradient my-4" />
-            <div className="space-y-1">
-              <p className="px-3 text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-widest mb-2 flex items-center gap-2">
-                <Sparkles className="h-3 w-3" />
-                Administration
-              </p>
-              <Link
-                href="/admin"
-                onClick={onNavigate}
-                className={cn(
-                  "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all border",
-                  pathname.startsWith("/admin")
-                    ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20 border-primary/50"
-                    : "text-muted-foreground hover:bg-white/5 hover:text-foreground border-transparent hover:border-white/10"
-                )}
-              >
-                <div className={cn(
-                  "p-1.5 rounded-lg",
-                  pathname.startsWith("/admin")
-                    ? "bg-primary-foreground/20"
-                    : "bg-white/5"
-                )}>
-                  <ShieldAlert className="h-4 w-4" />
-                </div>
-                <span>Admin</span>
-              </Link>
-            </div>
-          </>
-        )}
       </div>
 
       {/* User Menu at bottom */}

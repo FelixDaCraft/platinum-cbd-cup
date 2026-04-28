@@ -7,10 +7,8 @@ import Link from "next/link";
 import {
   Trophy,
   Newspaper,
-  ShieldAlert,
   Menu,
   ChevronDown,
-  Palette,
   Info,
   Handshake,
   Mail,
@@ -18,7 +16,6 @@ import {
   Search,
   LayoutDashboard,
   FileText,
-  Globe,
   Settings,
   CreditCard,
   Megaphone,
@@ -216,8 +213,6 @@ function NothingOrgSidebar({ baseUrl = "" }: { baseUrl?: string }) {
   const router = useRouter();
   const organization = useOrganization();
   const { data: session } = useSession();
-  const isAdmin =
-    (session?.user as { isAdmin?: boolean } | undefined)?.isAdmin === true;
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>(() => {
     const aboutPath = `${baseUrl}/settings/portal/about`;
@@ -248,7 +243,6 @@ function NothingOrgSidebar({ baseUrl = "" }: { baseUrl?: string }) {
   ];
 
   const portalNavItems: NavItem[] = [
-    { href: buildPath("/settings/portal/appearance"), label: "APPARENCE", icon: Palette },
     { href: buildPath("/settings/portal/messages"), label: "MESSAGES", icon: MessageSquare },
     { href: buildPath("/settings/newsletter"), label: "NEWSLETTER", icon: Mail },
     { href: buildPath("/settings/sponsors"), label: "SPONSORS", icon: Handshake },
@@ -260,14 +254,6 @@ function NothingOrgSidebar({ baseUrl = "" }: { baseUrl?: string }) {
       { href: buildPath("/settings/portal/about"), label: "A PROPOS", icon: Info },
       { href: buildPath("/articles"), label: "ACTUALITES", icon: Newspaper },
       { href: buildPath("/settings/portal/press"), label: "PRESSE", icon: Megaphone },
-    ],
-  };
-
-  const domainSeoSection: CollapsibleSection = {
-    id: "domainSeo", label: "DOMAINE & SEO", icon: Globe,
-    items: [
-      { href: buildPath("/settings/portal"), label: "CONFIGURATION", icon: Globe },
-      { href: buildPath("/settings/portal/seo"), label: "SEO", icon: Search },
     ],
   };
 
@@ -388,27 +374,16 @@ function NothingOrgSidebar({ baseUrl = "" }: { baseUrl?: string }) {
         <p className="px-3 pb-1" style={{ fontFamily: "'Space Mono', monospace", fontSize: "9px", letterSpacing: "0.1em", color: "var(--n-text-disabled)" }}>
           PORTAIL PUBLIC
         </p>
-        {renderItem(portalNavItems[0]!, onNav)}
         {renderSection(contenuSection, onNav)}
-        {portalNavItems.slice(1).map(i => renderItem(i, onNav))}
+        {portalNavItems.map(i => renderItem(i, onNav))}
 
         <div className="my-3 mx-3" style={{ borderTop: "1px solid var(--n-border)" }} />
         <p className="px-3 pb-1" style={{ fontFamily: "'Space Mono', monospace", fontSize: "9px", letterSpacing: "0.1em", color: "var(--n-text-disabled)" }}>
           CONFIGURATION
         </p>
-        {renderSection(domainSeoSection, onNav)}
+        {renderItem({ href: buildPath("/settings/portal/seo"), label: "SEO", icon: Search }, onNav)}
         {renderItem({ href: buildPath("/settings/payments"), label: "PAIEMENTS", icon: CreditCard }, onNav)}
         {renderItem({ href: buildPath("/settings"), label: "PARAMETRES", icon: Settings }, onNav)}
-
-        {isAdmin && (
-          <>
-            <div className="my-3 mx-3" style={{ borderTop: "1px solid var(--n-border)" }} />
-            <p className="px-3 pb-1" style={{ fontFamily: "'Space Mono', monospace", fontSize: "9px", letterSpacing: "0.1em", color: "var(--n-text-disabled)" }}>
-              ADMIN
-            </p>
-            {renderItem({ href: "/admin", label: "ADMINISTRATION", icon: ShieldAlert }, onNav)}
-          </>
-        )}
       </div>
 
       {/* User */}
