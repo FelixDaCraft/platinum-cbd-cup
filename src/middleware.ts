@@ -63,10 +63,12 @@ export const config = {
      * - /_next/static   (Next.js static assets)
      * - /_next/image    (Next.js image optimizer)
      * - /fonts/         (Louize Display & other local fonts — must not be rewritten)
+     * - /models/        (Three.js GLB / GLTF assets)
      * - favicon.ico
      * - sw.js           (service worker)
      * - static image files at any depth
+     * - .glb / .gltf    (3D models served from anywhere under public/)
      */
-    "/((?!api/|_next/static|_next/image|fonts/|favicon.ico|sw\\.js|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    "/((?!api/|_next/static|_next/image|fonts/|models/|favicon.ico|sw\\.js|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|glb|gltf)$).*)",
   ],
 };

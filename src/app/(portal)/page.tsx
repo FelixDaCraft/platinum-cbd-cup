@@ -6,7 +6,7 @@ import {
   Eyebrow,
   Countdown,
   Ticker,
-  PlatinumTrophy,
+  GeometricEmblem,
 } from "~/components/portal/platinum";
 
 export const dynamic = "force-dynamic";
@@ -359,7 +359,7 @@ export default async function PortalHomePage() {
           </div>
 
           <div style={{ display: "grid", placeItems: "center" }}>
-            <PlatinumTrophy size={420} />
+            <GeometricEmblem size={420} />
           </div>
         </div>
       </section>

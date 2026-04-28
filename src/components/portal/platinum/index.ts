@@ -30,3 +30,6 @@ export {
 
 // ── Trophy ────────────────────────────────────────────────────────────────────
 export { PlatinumTrophy } from "./platinum-trophy";
+
+// ── Geometric emblem (R3F + GLB) ──────────────────────────────────────────────
+export { GeometricEmblem } from "./geometric-emblem";
