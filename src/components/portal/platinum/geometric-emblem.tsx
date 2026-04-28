@@ -2,7 +2,7 @@
 
 import { Suspense, useRef } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { useGLTF, Environment, Center } from "@react-three/drei";
+import { useGLTF, Environment, Center, OrbitControls } from "@react-three/drei";
 import type { Group } from "three";
 
 const MODEL_URL = "/models/geometric-emblem.glb";
@@ -83,7 +83,21 @@ export function GeometricEmblem({
       <Canvas
         camera={{ position: [0, 0.6, 4.2], fov: 35 }}
         gl={{ antialias: true, alpha: true }}
-        style={{ position: "relative", zIndex: 1 }}
+        style={{
+          position: "relative",
+          zIndex: 1,
+          cursor: "grab",
+          touchAction: "none",
+        }}
+        onPointerDown={(e) => {
+          (e.currentTarget as HTMLDivElement).style.cursor = "grabbing";
+        }}
+        onPointerUp={(e) => {
+          (e.currentTarget as HTMLDivElement).style.cursor = "grab";
+        }}
+        onPointerLeave={(e) => {
+          (e.currentTarget as HTMLDivElement).style.cursor = "grab";
+        }}
       >
         <ambientLight intensity={0.5} />
         <directionalLight position={[3, 4, 5]} intensity={1.1} />
@@ -99,6 +113,18 @@ export function GeometricEmblem({
           </Center>
           <Environment preset="city" />
         </Suspense>
+
+        {/* Drag-to-orbit. Auto-rotation comes from useFrame on the model
+            itself, so the camera stays put when no one's interacting and
+            the off-axis spin keeps going. Pan and zoom are off — pure
+            orientation play. */}
+        <OrbitControls
+          enablePan={false}
+          enableZoom={false}
+          enableDamping
+          dampingFactor={0.08}
+          rotateSpeed={0.7}
+        />
       </Canvas>
     </div>
   );
