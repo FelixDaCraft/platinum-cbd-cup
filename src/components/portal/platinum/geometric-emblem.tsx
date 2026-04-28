@@ -34,6 +34,13 @@ interface GeometricEmblemProps {
   tiltZ?: number;
   /** Static X-axis tilt in radians. Positive tips the top toward the camera. */
   tiltX?: number;
+  /**
+   * Drag-to-orbit + reticle cursor. Default true.
+   * Set false when using the emblem as a passive background decoration
+   * — disables OrbitControls, lets pointer events fall through to the
+   * content sitting behind, and removes the reticle cursor.
+   */
+  interactive?: boolean;
 }
 
 /**
@@ -51,6 +58,7 @@ export function GeometricEmblem({
   rotationSpeed = 0.18,
   tiltZ = 0,
   tiltX = 0,
+  interactive = true,
 }: GeometricEmblemProps) {
   return (
     <div
@@ -100,18 +108,23 @@ export function GeometricEmblem({
         style={{
           position: "relative",
           zIndex: 1,
-          cursor: CURSOR_IDLE,
+          cursor: interactive ? CURSOR_IDLE : "default",
           touchAction: "none",
+          pointerEvents: interactive ? "auto" : "none",
         }}
-        onPointerDown={(e) => {
-          (e.currentTarget as HTMLDivElement).style.cursor = CURSOR_ACTIVE;
-        }}
-        onPointerUp={(e) => {
-          (e.currentTarget as HTMLDivElement).style.cursor = CURSOR_IDLE;
-        }}
-        onPointerLeave={(e) => {
-          (e.currentTarget as HTMLDivElement).style.cursor = CURSOR_IDLE;
-        }}
+        {...(interactive
+          ? {
+              onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => {
+                (e.currentTarget as HTMLDivElement).style.cursor = CURSOR_ACTIVE;
+              },
+              onPointerUp: (e: React.PointerEvent<HTMLDivElement>) => {
+                (e.currentTarget as HTMLDivElement).style.cursor = CURSOR_IDLE;
+              },
+              onPointerLeave: (e: React.PointerEvent<HTMLDivElement>) => {
+                (e.currentTarget as HTMLDivElement).style.cursor = CURSOR_IDLE;
+              },
+            }
+          : {})}
       >
         <ambientLight intensity={0.5} />
         <directionalLight position={[3, 4, 5]} intensity={1.1} />
@@ -128,17 +141,19 @@ export function GeometricEmblem({
           <Environment preset="city" />
         </Suspense>
 
-        {/* Drag-to-orbit. Auto-rotation comes from useFrame on the model
-            itself, so the camera stays put when no one's interacting and
-            the off-axis spin keeps going. Pan and zoom are off — pure
-            orientation play. */}
-        <OrbitControls
-          enablePan={false}
-          enableZoom={false}
-          enableDamping
-          dampingFactor={0.08}
-          rotateSpeed={0.7}
-        />
+        {/* Drag-to-orbit (interactive mode only). Auto-rotation comes from
+            useFrame on the model itself, so the camera stays put when no
+            one's interacting and the off-axis spin keeps going. Pan and
+            zoom are off — pure orientation play. */}
+        {interactive && (
+          <OrbitControls
+            enablePan={false}
+            enableZoom={false}
+            enableDamping
+            dampingFactor={0.08}
+            rotateSpeed={0.7}
+          />
+        )}
       </Canvas>
     </div>
   );

@@ -5,7 +5,7 @@ import * as schema from "~/server/db/schema";
 import {
   Eyebrow,
   Pill,
-  PlatinumTrophy,
+  GeometricEmblem,
 } from "~/components/portal/platinum";
 import { RankingRow } from "./_components/ranking-row";
 
@@ -364,7 +364,7 @@ export default async function PalmaresPage({
           aria-hidden="true"
           style={{ position: "absolute", right: -80, top: -80, opacity: 0.08 }}
         >
-          <PlatinumTrophy size={340} glow={false} />
+          <GeometricEmblem size={340} glow={false} interactive={false} />
         </div>
 
         <div style={{ position: "relative", zIndex: 1 }}>
