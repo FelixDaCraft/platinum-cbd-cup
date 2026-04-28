@@ -651,50 +651,6 @@ export default async function PalmaresPage({
           </div>
         )}
 
-        <div className="card">
-          <Eyebrow>Ledger public</Eyebrow>
-          <p
-            style={{
-              fontSize: 14,
-              color: "var(--fg-2)",
-              lineHeight: 1.55,
-              marginTop: 14,
-            }}
-          >
-            Toutes les notations individuelles, coefficients par critère et
-            rapports laboratoires sont disponibles en libre accès — CSV, JSON,
-            PDF.
-          </p>
-          <div style={{ display: "flex", gap: 12, marginTop: 20 }}>
-            <button
-              className="btn ghost"
-              style={{ padding: "10px 16px" }}
-              disabled
-              aria-disabled="true"
-              title="À venir"
-            >
-              CSV ↓
-            </button>
-            <button
-              className="btn ghost"
-              style={{ padding: "10px 16px" }}
-              disabled
-              aria-disabled="true"
-              title="À venir"
-            >
-              JSON ↓
-            </button>
-            <button
-              className="btn ghost"
-              style={{ padding: "10px 16px" }}
-              disabled
-              aria-disabled="true"
-              title="À venir"
-            >
-              Rapport PDF ↓
-            </button>
-          </div>
-        </div>
       </section>
     </div>
   );
