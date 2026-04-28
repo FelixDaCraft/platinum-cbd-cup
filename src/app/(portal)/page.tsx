@@ -185,6 +185,65 @@ const mockCategories: CategoryRow[] = [
   { code: "TO", name: "Topical", specimenCount: 21 },
 ];
 
+interface LatestCupBadge {
+  /** "EDITION 04" — uppercase, padded edition number derived from cup year. */
+  edition: string;
+  /** Human-readable state in FR: "Inscriptions ouvertes" / "Notation en cours" / etc. */
+  state: string;
+}
+
+async function getLatestCupBadge(): Promise<LatestCupBadge> {
+  // Default fallback — picked so the eyebrow stays sensible when the DB
+  // is unreachable or there's literally no non-draft cup yet.
+  const fallback: LatestCupBadge = {
+    edition: "EDITION 04",
+    state: "À venir",
+  };
+
+  try {
+    const cup = await db.query.cups.findFirst({
+      where: (c, { ne }) => ne(c.status, "draft"),
+      orderBy: (c, { desc }) => [desc(c.createdAt)],
+      columns: { name: true, status: true, registrationCloseAt: true },
+    });
+
+    if (!cup) return fallback;
+
+    // Edition number = (year - 2022). 2023 = ed 1, 2026 = ed 4. Year is
+    // extracted from the cup name (format: "PlatinumCBD CUP YYYY ...").
+    const yearMatch = /\b(20\d{2})\b/.exec(cup.name);
+    const year = yearMatch ? parseInt(yearMatch[1]!, 10) : new Date().getFullYear();
+    const editionNum = Math.max(1, year - 2022);
+    const edition = `EDITION ${String(editionNum).padStart(2, "0")}`;
+
+    // Translate cup status → human-readable state.
+    let state: string;
+    switch (cup.status) {
+      case "published": {
+        const stillOpen =
+          cup.registrationCloseAt && cup.registrationCloseAt.getTime() > Date.now();
+        state = stillOpen ? "Inscriptions ouvertes" : "Inscriptions clôturées";
+        break;
+      }
+      case "registration_closed":
+        state = "Inscriptions clôturées";
+        break;
+      case "rating":
+        state = "Notation en cours";
+        break;
+      case "completed":
+        state = "Édition terminée";
+        break;
+      default:
+        state = "À venir";
+    }
+
+    return { edition, state };
+  } catch {
+    return fallback;
+  }
+}
+
 async function getCategories(): Promise<CategoryRow[]> {
   try {
     const cup = await db.query.cups.findFirst({
@@ -230,10 +289,11 @@ async function getCategories(): Promise<CategoryRow[]> {
 // ---------------------------------------------------------------------------
 
 export default async function PortalHomePage() {
-  const [countdown, tickerItems, categories] = await Promise.all([
+  const [countdown, tickerItems, categories, latestBadge] = await Promise.all([
     getCountdownState(),
     getTickerItems(),
     getCategories(),
+    getLatestCupBadge(),
   ]);
 
   return (
@@ -250,7 +310,9 @@ export default async function PortalHomePage() {
           className="hero-grid"
         >
           <div>
-            <Eyebrow idx={1}>Edition 03 · Inscriptions ouvertes</Eyebrow>
+            <Eyebrow>
+              <b>{latestBadge.edition}</b> · {latestBadge.state}
+            </Eyebrow>
             <h1
               className="display"
               style={{ marginTop: 20, marginBottom: 24 }}
