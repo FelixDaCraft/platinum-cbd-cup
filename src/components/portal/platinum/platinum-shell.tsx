@@ -77,7 +77,7 @@ export function PlatinumShell({ children, liveStatus = "idle" }: PlatinumShellPr
           </span>
           <span className="brand-text">
             <b>Platinum CBD Cup</b>
-            <span>Independent · ed. 03 · 2026</span>
+            <span>Independent · ed. 04 · 2026</span>
           </span>
         </Link>
 
