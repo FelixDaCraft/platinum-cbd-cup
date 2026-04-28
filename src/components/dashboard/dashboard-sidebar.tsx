@@ -13,11 +13,9 @@ import {
   Handshake,
   Mail,
   MessageSquare,
-  Search,
   LayoutDashboard,
   FileText,
   Settings,
-  CreditCard,
   Megaphone,
   Building2,
   Gavel,
@@ -126,20 +124,6 @@ export function DashboardSidebar({ className, baseUrl = "" }: DashboardSidebarPr
       { href: buildPath("/articles"), label: "Actualités", icon: Newspaper },
       { href: buildPath("/settings/portal/press"), label: "Presse & Médias", icon: Megaphone },
     ],
-  };
-
-  // SEO direct link
-  const seoNavItem: NavItem = {
-    href: buildPath("/settings/portal/seo"),
-    label: "SEO",
-    icon: Search,
-  };
-
-  // Payments item (direct link)
-  const paymentsNavItem: NavItem = {
-    href: buildPath("/settings/payments"),
-    label: "Paiements",
-    icon: CreditCard
   };
 
   // Settings item (direct link)
@@ -350,12 +334,6 @@ export function DashboardSidebar({ className, baseUrl = "" }: DashboardSidebarPr
           <p className="px-3 text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-widest mb-2">
             Configuration
           </p>
-
-          {/* SEO (direct) */}
-          {renderNavItem(seoNavItem, onNavigate)}
-
-          {/* Paiements (direct) */}
-          {renderNavItem(paymentsNavItem, onNavigate)}
 
           {/* Paramètres (direct) */}
           {renderNavItem(settingsNavItem, onNavigate)}

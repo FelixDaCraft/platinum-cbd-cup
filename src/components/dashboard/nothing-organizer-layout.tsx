@@ -13,11 +13,9 @@ import {
   Handshake,
   Mail,
   MessageSquare,
-  Search,
   LayoutDashboard,
   FileText,
   Settings,
-  CreditCard,
   Megaphone,
   Building2,
   Gavel,
@@ -381,8 +379,6 @@ function NothingOrgSidebar({ baseUrl = "" }: { baseUrl?: string }) {
         <p className="px-3 pb-1" style={{ fontFamily: "'Space Mono', monospace", fontSize: "9px", letterSpacing: "0.1em", color: "var(--n-text-disabled)" }}>
           CONFIGURATION
         </p>
-        {renderItem({ href: buildPath("/settings/portal/seo"), label: "SEO", icon: Search }, onNav)}
-        {renderItem({ href: buildPath("/settings/payments"), label: "PAIEMENTS", icon: CreditCard }, onNav)}
         {renderItem({ href: buildPath("/settings"), label: "PARAMETRES", icon: Settings }, onNav)}
       </div>
 
