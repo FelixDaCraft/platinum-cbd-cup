@@ -253,10 +253,11 @@ h2.section-title{
   padding: 12px 0; color: var(--fg-2); letter-spacing: .1em;
   text-transform: uppercase;
 }
-.ticker-track{ display:inline-flex; gap: 40px; animation: tick 42s linear infinite; padding-left: 100%; }
-.ticker-track span{ display:inline-flex; align-items:center; gap: 10px; }
-.ticker-track .dot{ width:5px; height:5px; border-radius:50%; background: var(--accent); }
-@keyframes tick{ from{ transform: translateX(0); } to{ transform: translateX(-100%); } }
+.ticker-track{ display:inline-flex; animation: tick 60s linear infinite; will-change: transform; }
+.ticker-group{ display:inline-flex; gap: 40px; padding-right: 40px; flex-shrink: 0; }
+.ticker-group span{ display:inline-flex; align-items:center; gap: 10px; flex-shrink: 0; }
+.ticker-group .dot{ width:5px; height:5px; border-radius:50%; background: var(--accent); }
+@keyframes tick{ from{ transform: translateX(0); } to{ transform: translateX(-50%); } }
 
 /* ── Trophy keyframes ─────────────────────────────────── */
 @keyframes spin3d {

@@ -28,29 +28,107 @@ function categoryCode(name: string): string {
 // Data fetchers
 // ---------------------------------------------------------------------------
 
-async function getCountdownTarget(): Promise<number> {
-  const fallback = Date.now() + 47 * 86400000 + 6 * 3600000;
+type CountdownState =
+  | {
+      kind: "registration";
+      target: number;
+      cupName: string;
+      specimenCount: number;
+      categoryCount: number;
+    }
+  | {
+      kind: "results";
+      target: number;
+      cupName: string;
+      specimenCount: number;
+      categoryCount: number;
+    }
+  | { kind: "next-year" };
 
+async function getCupStats(
+  cupId: string
+): Promise<{ specimenCount: number; categoryCount: number }> {
+  try {
+    const [specimens, cats] = await Promise.all([
+      db
+        .select({ total: count() })
+        .from(schema.products)
+        .innerJoin(
+          schema.registrations,
+          eq(schema.products.registrationId, schema.registrations.id)
+        )
+        .where(eq(schema.registrations.cupId, cupId)),
+      db
+        .select({ total: count() })
+        .from(schema.categories)
+        .where(eq(schema.categories.cupId, cupId)),
+    ]);
+    return {
+      specimenCount: specimens[0]?.total ?? 0,
+      categoryCount: cats[0]?.total ?? 0,
+    };
+  } catch {
+    return { specimenCount: 0, categoryCount: 0 };
+  }
+}
+
+async function getCountdownState(): Promise<CountdownState> {
+  const now = new Date();
+
+  // 1. Latest published cup with registrations still open
   try {
     const cup = await db.query.cups.findFirst({
-      where: (c, { and, ne: neOp, isNotNull: nn, gt }) =>
+      where: (c, { and, eq: eqOp, isNotNull: nn, gt }) =>
         and(
-          neOp(c.status, "draft"),
+          eqOp(c.status, "published"),
           nn(c.registrationCloseAt),
-          gt(c.registrationCloseAt, new Date())
+          gt(c.registrationCloseAt, now)
         ),
-      orderBy: (c, { asc }) => [asc(c.registrationCloseAt)],
-      columns: { registrationCloseAt: true },
+      orderBy: (c, { desc: dsc }) => [dsc(c.createdAt)],
+      columns: { id: true, name: true, registrationCloseAt: true },
     });
 
     if (cup?.registrationCloseAt) {
-      return cup.registrationCloseAt.getTime();
+      const stats = await getCupStats(cup.id);
+      return {
+        kind: "registration",
+        target: cup.registrationCloseAt.getTime(),
+        cupName: cup.name,
+        ...stats,
+      };
     }
   } catch {
-    // DB unavailable — use fallback
+    // DB unavailable — fall through
   }
 
-  return fallback;
+  // 2. Cup awaiting results (registrations closed / rating phase, results not yet published)
+  try {
+    const cup = await db.query.cups.findFirst({
+      where: (c, { and, inArray, isNotNull: nn, gt, isNull }) =>
+        and(
+          inArray(c.status, ["registration_closed", "rating"]),
+          nn(c.ratingEndAt),
+          gt(c.ratingEndAt, now),
+          isNull(c.resultsPublishedAt)
+        ),
+      orderBy: (c, { asc }) => [asc(c.ratingEndAt)],
+      columns: { id: true, name: true, ratingEndAt: true },
+    });
+
+    if (cup?.ratingEndAt) {
+      const stats = await getCupStats(cup.id);
+      return {
+        kind: "results",
+        target: cup.ratingEndAt.getTime(),
+        cupName: cup.name,
+        ...stats,
+      };
+    }
+  } catch {
+    // DB unavailable — fall through
+  }
+
+  return { kind: "next-year" };
 }
 
 async function getTickerItems(): Promise<string[]> {
@@ -152,8 +230,8 @@ async function getCategories(): Promise<CategoryRow[]> {
 // ---------------------------------------------------------------------------
 
 export default async function PortalHomePage() {
-  const [target, tickerItems, categories] = await Promise.all([
-    getCountdownTarget(),
+  const [countdown, tickerItems, categories] = await Promise.all([
+    getCountdownState(),
     getTickerItems(),
     getCategories(),
   ]);
@@ -199,7 +277,7 @@ export default async function PortalHomePage() {
             <p className="lede">
               La seule compétition européenne de CBD évaluée à l'aveugle par un
               panel indépendant d'analystes, de sommeliers et de laboratoires
-              certifiés. Six catégories. Quarante-deux jurés. Zéro marketing.
+              certifiés.
             </p>
             <div
               style={{
@@ -226,37 +304,66 @@ export default async function PortalHomePage() {
 
       {/* ── COUNTDOWN ────────────────────────────────────────────────────── */}
       <section className="card" style={{ marginBottom: 24 }}>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "flex-end",
-            flexWrap: "wrap",
-            gap: 20,
-          }}
-        >
+        {countdown.kind === "next-year" ? (
           <div>
-            <Eyebrow>Clôture des inscriptions</Eyebrow>
-            <div style={{ marginTop: 14 }}>
-              <Countdown target={target} />
+            <Eyebrow>Prochaine édition</Eyebrow>
+            <div
+              style={{
+                fontFamily: "var(--mono)",
+                fontSize: "clamp(28px, 4vw, 44px)",
+                fontWeight: 300,
+                letterSpacing: "-0.02em",
+                marginTop: 14,
+                lineHeight: 1.1,
+              }}
+            >
+              Rendez-vous l'année prochaine.
             </div>
           </div>
+        ) : (
           <div
             style={{
-              textAlign: "right",
-              fontFamily: "var(--mono)",
-              fontSize: 11,
-              color: "var(--fg-3)",
-              letterSpacing: ".1em",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "flex-end",
+              flexWrap: "wrap",
+              gap: 20,
             }}
           >
             <div>
-              STATUS · <span style={{ color: "var(--accent)" }}>OPEN</span>
+              <Eyebrow>
+                {countdown.kind === "registration"
+                  ? "Clôture des inscriptions"
+                  : "Annonce des résultats"}
+              </Eyebrow>
+              <div style={{ marginTop: 14 }}>
+                <Countdown target={countdown.target} />
+              </div>
             </div>
-            <div style={{ marginTop: 6 }}>SPECIMENS · 184 / 240</div>
-            <div style={{ marginTop: 6 }}>CAT · 06</div>
+            <div
+              style={{
+                textAlign: "right",
+                fontFamily: "var(--mono)",
+                fontSize: 11,
+                color: "var(--fg-3)",
+                letterSpacing: ".1em",
+              }}
+            >
+              <div>
+                STATUS ·{" "}
+                <span style={{ color: "var(--accent)" }}>
+                  {countdown.kind === "registration" ? "OPEN" : "RATING"}
+                </span>
+              </div>
+              <div style={{ marginTop: 6 }}>
+                SPECIMENS · {String(countdown.specimenCount).padStart(2, "0")}
+              </div>
+              <div style={{ marginTop: 6 }}>
+                CAT · {String(countdown.categoryCount).padStart(2, "0")}
+              </div>
+            </div>
           </div>
-        </div>
+        )}
       </section>
 
       {/* ── TICKER ───────────────────────────────────────────────────────── */}
@@ -276,7 +383,7 @@ export default async function PortalHomePage() {
               {
                 i: "02",
                 t: "Lab-backed",
-                d: "Cannabinoïdes, terpènes et contaminants sont vérifiés par trois laboratoires indépendants accrédités ISO 17025.",
+                d: "Cannabinoïdes et terpènes sont mesurés par des laboratoires indépendants. Aucune analyse de contaminants.",
               },
               {
                 i: "03",
@@ -384,7 +491,7 @@ export default async function PortalHomePage() {
         </div>
       </section>
 
-      {/* ── PRESS / LABS ─────────────────────────────────────────────────── */}
+      {/* ── PALMARÈS CTA ─────────────────────────────────────────────────── */}
       <section style={{ marginTop: 64, marginBottom: 64 }}>
         <div
           className="card"
@@ -396,7 +503,7 @@ export default async function PortalHomePage() {
           }}
         >
           <div>
-            <Eyebrow>Press · Labs · Partners</Eyebrow>
+            <Eyebrow>Palmarès</Eyebrow>
             <div
               style={{
                 fontFamily: "var(--mono)",
@@ -405,13 +512,11 @@ export default async function PortalHomePage() {
                 lineHeight: 1.3,
               }}
             >
-              Vérifié par 3 laboratoires ISO 17025.
-              <br />
-              Couvert par 14 titres de presse indépendants.
+              Découvrez les lauréats des éditions précédentes.
             </div>
           </div>
           <Link href="/palmares" className="btn ghost">
-            Palmarès 2025 →
+            Voir le palmarès →
           </Link>
         </div>
       </section>

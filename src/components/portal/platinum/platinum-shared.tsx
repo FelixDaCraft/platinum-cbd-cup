@@ -216,18 +216,24 @@ interface TickerProps {
 
 /**
  * Infinite horizontally-scrolling ticker bar.
- * Items are duplicated for seamless loop. Uses .ticker + .ticker-track CSS classes.
+ * Two identical groups + 50% translate produce a seamless gap-free loop.
  */
 export function Ticker({ items }: TickerProps) {
   if (items.length === 0) return null;
+  const renderGroup = (key: string, ariaHidden = false) => (
+    <div className="ticker-group" key={key} aria-hidden={ariaHidden}>
+      {items.map((t, i) => (
+        <span key={`${key}-${i}`}>
+          <span className="dot" /> {t}
+        </span>
+      ))}
+    </div>
+  );
   return (
     <div className="ticker">
       <div className="ticker-track">
-        {[...items, ...items].map((t, i) => (
-          <span key={i}>
-            <span className="dot" /> {t}
-          </span>
-        ))}
+        {renderGroup("a")}
+        {renderGroup("b", true)}
       </div>
     </div>
   );
