@@ -7,6 +7,20 @@ import type { Group } from "three";
 
 const MODEL_URL = "/models/geometric-emblem.glb";
 
+// ─── Custom reticle cursor (matches the topbar live indicator vocabulary)
+// Both states are 32×32 SVGs encoded as base64 data URLs. Hot-spot is
+// centered at (16, 16). Idle = muted off-white outline, no glow. Active =
+// accent-gold stroke + soft Gaussian glow halo. Native `grab/grabbing`
+// kept as fallback for browsers that refuse data-URL SVG cursors.
+const CURSOR_HOTSPOT_X = 16;
+const CURSOR_HOTSPOT_Y = 16;
+const CURSOR_IDLE_B64 =
+  "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMiIgaGVpZ2h0PSIzMiIgdmlld0JveD0iMCAwIDMyIDMyIj48ZyBmaWxsPSJub25lIiBzdHJva2U9InJnYmEoMjQyLDI0MiwyNDIsMC42KSIgc3Ryb2tlLXdpZHRoPSIxIj48Y2lyY2xlIGN4PSIxNiIgY3k9IjE2IiByPSI1Ii8+PGxpbmUgeDE9IjgiIHkxPSIxNiIgeDI9IjI0IiB5Mj0iMTYiLz48bGluZSB4MT0iMTYiIHkxPSI4IiB4Mj0iMTYiIHkyPSIyNCIvPjwvZz48L3N2Zz4=";
+const CURSOR_ACTIVE_B64 =
+  "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMiIgaGVpZ2h0PSIzMiIgdmlld0JveD0iMCAwIDMyIDMyIj48ZGVmcz48ZmlsdGVyIGlkPSJnIiB4PSItNTAlIiB5PSItNTAlIiB3aWR0aD0iMjAwJSIgaGVpZ2h0PSIyMDAlIj48ZmVHYXVzc2lhbkJsdXIgc3RkRGV2aWF0aW9uPSIxLjQiIHJlc3VsdD0iYiIvPjxmZU1lcmdlPjxmZU1lcmdlTm9kZSBpbj0iYiIvPjxmZU1lcmdlTm9kZSBpbj0iU291cmNlR3JhcGhpYyIvPjwvZmVNZXJnZT48L2ZpbHRlcj48L2RlZnM+PGcgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZDRhZjM3IiBzdHJva2Utd2lkdGg9IjEuNCIgZmlsdGVyPSJ1cmwoI2cpIj48Y2lyY2xlIGN4PSIxNiIgY3k9IjE2IiByPSI1Ii8+PGxpbmUgeDE9IjgiIHkxPSIxNiIgeDI9IjI0IiB5Mj0iMTYiLz48bGluZSB4MT0iMTYiIHkxPSI4IiB4Mj0iMTYiIHkyPSIyNCIvPjwvZz48L3N2Zz4=";
+const CURSOR_IDLE = `url("data:image/svg+xml;base64,${CURSOR_IDLE_B64}") ${CURSOR_HOTSPOT_X} ${CURSOR_HOTSPOT_Y}, grab`;
+const CURSOR_ACTIVE = `url("data:image/svg+xml;base64,${CURSOR_ACTIVE_B64}") ${CURSOR_HOTSPOT_X} ${CURSOR_HOTSPOT_Y}, grabbing`;
+
 interface GeometricEmblemProps {
   size?: number;
   /** Background halo glow behind the model. */
@@ -86,17 +100,17 @@ export function GeometricEmblem({
         style={{
           position: "relative",
           zIndex: 1,
-          cursor: "grab",
+          cursor: CURSOR_IDLE,
           touchAction: "none",
         }}
         onPointerDown={(e) => {
-          (e.currentTarget as HTMLDivElement).style.cursor = "grabbing";
+          (e.currentTarget as HTMLDivElement).style.cursor = CURSOR_ACTIVE;
         }}
         onPointerUp={(e) => {
-          (e.currentTarget as HTMLDivElement).style.cursor = "grab";
+          (e.currentTarget as HTMLDivElement).style.cursor = CURSOR_IDLE;
         }}
         onPointerLeave={(e) => {
-          (e.currentTarget as HTMLDivElement).style.cursor = "grab";
+          (e.currentTarget as HTMLDivElement).style.cursor = CURSOR_IDLE;
         }}
       >
         <ambientLight intensity={0.5} />
