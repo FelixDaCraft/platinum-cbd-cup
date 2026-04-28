@@ -278,13 +278,16 @@ h2.section-title{
 
 /* ── Team roster (Manifesto page · hover-only flash, no auto-animation)
    Each <figure> stays muted/desaturated by default and resolves to full
-   color + slight scale only when hovered. */
+   color + slight scale only when hovered. The flex row centers itself
+   when partially filled. */
 .team-roster{
-  display: flex; flex-wrap: wrap; gap: 24px; align-items: stretch;
+  display: flex; flex-wrap: wrap; gap: 32px;
+  align-items: stretch; justify-content: center;
 }
 .team-member{
-  flex: 1 1 140px; min-width: 140px; max-width: 220px;
-  margin: 0; display: flex; flex-direction: column; gap: 12px;
+  flex: 0 1 240px; min-width: 200px; max-width: 280px;
+  margin: 0; display: flex; flex-direction: column; gap: 14px;
+  text-align: center; align-items: center;
   filter: grayscale(1) brightness(.55);
   transform-origin: center;
   transition: filter .35s ease, transform .35s ease;
@@ -303,13 +306,16 @@ h2.section-title{
   width: 100%; height: 100%; object-fit: cover; display: block;
 }
 .team-photo-placeholder{
-  font-family: var(--mono); font-size: 28px; letter-spacing: .06em;
+  font-family: var(--mono); font-size: 36px; letter-spacing: .06em;
   color: var(--fg-3);
 }
-.team-member figcaption{ font-family: var(--mono); display: flex; flex-direction: column; gap: 2px; }
-.team-member .team-idx{ color: var(--accent); font-size: 10px; letter-spacing: .12em; }
-.team-member .team-nm{ font-size: 12px; letter-spacing: .04em; text-transform: uppercase; color: var(--fg); }
-.team-member .team-rl{ font-size: 10px; letter-spacing: .1em; color: var(--fg-3); text-transform: uppercase; }
+.team-member figcaption{
+  font-family: var(--mono); display: flex; flex-direction: column;
+  gap: 4px; align-items: center;
+}
+.team-member .team-idx{ color: var(--accent); font-size: 11px; letter-spacing: .15em; }
+.team-member .team-nm{ font-size: 15px; letter-spacing: .03em; text-transform: uppercase; color: var(--fg); }
+.team-member .team-rl{ font-size: 11px; letter-spacing: .12em; color: var(--fg-3); text-transform: uppercase; }
 @media (prefers-reduced-motion: reduce){
   .team-member, .team-member:hover{ transform: none; transition: filter .15s ease; }
 }
