@@ -37,6 +37,8 @@ export interface ProductImport {
   producer: ProducerMatch;
 }
 
+export type ResultsVisibility = "podium" | "labels" | "labels_and_podium" | "all";
+
 export interface CupImport {
   year: number;
   /** Edition number (PRO + Public count as one edition). */
@@ -52,7 +54,10 @@ export interface CupImport {
   resultsPublishedAt: string;
   eventDate: string;
   eventLocation: string;
-  categories: { key: string; name: string }[];
+  /** Drives the public /palmares display. "podium" hides label pills. */
+  resultsVisibility: ResultsVisibility;
+  /** `code` is a 3-letter short used in anonymous codes (e.g. "OUT-001"). */
+  categories: { key: string; code: string; name: string }[];
   labels: {
     key: string;
     name: string;
@@ -113,13 +118,14 @@ const cup2023Pro: CupImport = {
   resultsPublishedAt: "2023-05-20T17:00:00Z",
   eventDate: "2023-05-20T10:00:00Z",
   eventLocation: "Nantes, France",
+  resultsVisibility: "podium",
   categories: [
-    { key: "indoor", name: "Fleurs CBD Indoor" },
-    { key: "outdoor", name: "Fleurs CBD Outdoor" },
-    { key: "greenhouse", name: "Fleurs CBD Greenhouse" },
-    { key: "cbg-outdoor", name: "Fleurs CBG Outdoor" },
-    { key: "hash", name: "Hash / Résine" },
-    { key: "edibles", name: "Edibles" },
+    { key: "indoor", code: "IND", name: "Fleurs CBD Indoor" },
+    { key: "outdoor", code: "OUT", name: "Fleurs CBD Outdoor" },
+    { key: "greenhouse", code: "GRN", name: "Fleurs CBD Greenhouse" },
+    { key: "cbg-outdoor", code: "CBG", name: "Fleurs CBG Outdoor" },
+    { key: "hash", code: "HSH", name: "Hash / Résine" },
+    { key: "edibles", code: "EDI", name: "Edibles" },
   ],
   labels: STANDARD_LABELS,
   products: [
@@ -166,11 +172,12 @@ const cup2024Pro: CupImport = {
   resultsPublishedAt: "2024-05-07T17:00:00Z",
   eventDate: "2024-05-07T10:00:00Z",
   eventLocation: "Cann'Agri Expo · Nantes, France",
+  resultsVisibility: "podium",
   categories: [
-    { key: "outdoor", name: "Fleurs CBD Outdoor" },
-    { key: "greenhouse", name: "Fleurs CBD Greenhouse" },
-    { key: "hash", name: "Hash" },
-    { key: "edibles", name: "Edibles" },
+    { key: "outdoor", code: "OUT", name: "Fleurs CBD Outdoor" },
+    { key: "greenhouse", code: "GRN", name: "Fleurs CBD Greenhouse" },
+    { key: "hash", code: "HSH", name: "Hash" },
+    { key: "edibles", code: "EDI", name: "Edibles" },
   ],
   labels: STANDARD_LABELS,
   products: [
@@ -209,10 +216,11 @@ const cup2024Public: CupImport = {
   resultsPublishedAt: "2024-05-07T18:00:00Z",
   eventDate: "2024-05-07T10:00:00Z",
   eventLocation: "Cann'Agri Expo · Nantes, France",
+  resultsVisibility: "podium",
   categories: [
-    { key: "outdoor", name: "Fleurs CBD Outdoor" },
-    { key: "greenhouse", name: "Fleurs CBD Greenhouse" },
-    { key: "edibles", name: "Edibles" },
+    { key: "outdoor", code: "OUT", name: "Fleurs CBD Outdoor" },
+    { key: "greenhouse", code: "GRN", name: "Fleurs CBD Greenhouse" },
+    { key: "edibles", code: "EDI", name: "Edibles" },
   ],
   labels: STANDARD_LABELS,
   products: [
@@ -238,14 +246,15 @@ const cup2025Pro: CupImport = {
   resultsPublishedAt: "2025-04-20T17:00:00Z",
   eventDate: "2025-04-20T10:00:00Z",
   eventLocation: "Cann'Agri Expo · Nantes, France",
+  resultsVisibility: "podium",
   categories: [
-    { key: "indoor-fr", name: "Fleurs CBD Indoor (France)" },
-    { key: "indoor-eu", name: "Fleurs CBD Indoor (Europe)" },
-    { key: "outdoor-eu", name: "Fleurs CBD Outdoor (Europe)" },
-    { key: "greenhouse-eu", name: "Fleurs CBD Greenhouse (Europe)" },
-    { key: "hash-dry", name: "Hash Dry (Europe)" },
-    { key: "hash-iol", name: "Hash Ice-O-Lator" },
-    { key: "edibles", name: "Edibles" },
+    { key: "indoor-fr", code: "IFR", name: "Fleurs CBD Indoor (France)" },
+    { key: "indoor-eu", code: "IEU", name: "Fleurs CBD Indoor (Europe)" },
+    { key: "outdoor-eu", code: "OUT", name: "Fleurs CBD Outdoor (Europe)" },
+    { key: "greenhouse-eu", code: "GRN", name: "Fleurs CBD Greenhouse (Europe)" },
+    { key: "hash-dry", code: "HDR", name: "Hash Dry (Europe)" },
+    { key: "hash-iol", code: "HIO", name: "Hash Ice-O-Lator" },
+    { key: "edibles", code: "EDI", name: "Edibles" },
   ],
   labels: STANDARD_LABELS,
   products: [
@@ -296,13 +305,14 @@ const cup2025Public: CupImport = {
   resultsPublishedAt: "2025-04-20T17:00:00Z",
   eventDate: "2025-04-20T10:00:00Z",
   eventLocation: "Cann'Agri Expo · Nantes, France",
+  resultsVisibility: "podium",
   categories: [
-    { key: "indoor-eu", name: "Fleurs CBD Indoor (Europe)" },
-    { key: "outdoor-eu", name: "Fleurs CBD Outdoor (Europe)" },
-    { key: "greenhouse-eu", name: "Fleurs CBD Greenhouse (Europe)" },
-    { key: "hash-dry", name: "Hash Dry (Europe)" },
-    { key: "hash-iol", name: "Hash Ice-O-Lator" },
-    { key: "edibles", name: "Edibles" },
+    { key: "indoor-eu", code: "IEU", name: "Fleurs CBD Indoor (Europe)" },
+    { key: "outdoor-eu", code: "OUT", name: "Fleurs CBD Outdoor (Europe)" },
+    { key: "greenhouse-eu", code: "GRN", name: "Fleurs CBD Greenhouse (Europe)" },
+    { key: "hash-dry", code: "HDR", name: "Hash Dry (Europe)" },
+    { key: "hash-iol", code: "HIO", name: "Hash Ice-O-Lator" },
+    { key: "edibles", code: "EDI", name: "Edibles" },
   ],
   labels: STANDARD_LABELS,
   products: [

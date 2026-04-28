@@ -182,13 +182,15 @@ async function importCup(
          registration_open_at, registration_close_at,
          rating_start_at, rating_end_at,
          results_published_at, event_date, event_location,
+         results_visibility,
          anonymization_prefix, default_price_per_product,
          created_at, updated_at
        ) VALUES (
          $1, $2, $3, $4, 'completed', 'EUR', '0-20',
          $5, $6, $7, $8, $9, $10, $11,
+         $12,
          'A', 0,
-         $12, now()
+         $13, now()
        )`,
       [
         cupId,
@@ -202,17 +204,20 @@ async function importCup(
         new Date(cup.resultsPublishedAt),
         new Date(cup.eventDate),
         cup.eventLocation,
+        cup.resultsVisibility,
         new Date(cup.eventDate), // created_at = event date for clean ordering
       ]
     );
   }
 
-  // Categories
+  // Categories (id + code lookups, both keyed by category.key)
   const categoryIdByKey = new Map<string, string>();
+  const categoryCodeByKey = new Map<string, string>();
   for (let i = 0; i < cup.categories.length; i++) {
     const cat = cup.categories[i]!;
     const id = nanoid();
     categoryIdByKey.set(cat.key, id);
+    categoryCodeByKey.set(cat.key, cat.code);
     if (apply) {
       await client.query(
         `INSERT INTO categories (id, cup_id, name, sort_order, rating_scale_min, rating_scale_max, created_at, updated_at)
@@ -253,6 +258,7 @@ async function importCup(
       cup,
       cupId,
       categoryIdByKey,
+      categoryCodeByKey,
       labels,
       registrationByProducerId,
       codeCounter,
@@ -268,6 +274,7 @@ async function importProduct(
   cup: CupImport,
   cupId: string,
   categoryIdByKey: Map<string, string>,
+  categoryCodeByKey: Map<string, string>,
   labels: { id: string; minScore: number; maxScore: number | null }[],
   registrationByProducerId: Map<string, string>,
   codeCounter: Map<string, number>,
@@ -282,7 +289,8 @@ async function importProduct(
   }
 
   const categoryId = categoryIdByKey.get(product.categoryKey);
-  if (!categoryId) {
+  const categoryCode = categoryCodeByKey.get(product.categoryKey);
+  if (!categoryId || !categoryCode) {
     throw new Error(
       `unknown categoryKey "${product.categoryKey}" for product "${product.productName}" in "${cup.name}"`
     );
@@ -305,13 +313,11 @@ async function importProduct(
   const score = SYNTHETIC_SCORE_BY_RANK[product.rank]!;
   const labelId = pickLabelId(score, labels);
 
-  // Anonymous code: <CATKEY_UPPER>-<NN> per (cup, category)
+  // Anonymous code: <CODE>-<NNN> per (cup, category) — e.g. "OUT-001"
   const counterKey = `${cupId}|${product.categoryKey}`;
   const next = (codeCounter.get(counterKey) ?? 0) + 1;
   codeCounter.set(counterKey, next);
-  const anonymousCode = `${product.categoryKey.toUpperCase().replace(/[^A-Z0-9]/g, "")}-${String(
-    next
-  ).padStart(2, "0")}`;
+  const anonymousCode = `${categoryCode}-${String(next).padStart(3, "0")}`;
 
   const productId = nanoid();
   if (apply) {
