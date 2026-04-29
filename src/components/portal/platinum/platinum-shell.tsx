@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
+import { MobileBottomNav } from "~/components/portal/mobile/mobile-bottom-nav";
 
 // ---------------------------------------------------------------------------
 // Nav definition — 4 segmented buttons per design
@@ -113,6 +114,9 @@ export function PlatinumShell({ children, liveStatus = "idle" }: PlatinumShellPr
 
       {/* ── Page content ───────────────────────────────────── */}
       <main className="page page-enter">{children}</main>
+
+      {/* ── Mobile-only bottom navigation (≤880px) ─────────── */}
+      <MobileBottomNav />
 
       {/* ── Footer ─────────────────────────────────────────── */}
       <footer className="footer">

@@ -7,6 +7,7 @@ import {
   Pill,
   GeometricEmblem,
 } from "~/components/portal/platinum";
+import { MobilePalmaresBackdrop } from "~/components/portal/mobile/mobile-palmares-backdrop";
 import { RankingRow } from "./_components/ranking-row";
 
 // ---------------------------------------------------------------------------
@@ -363,6 +364,7 @@ export default async function PalmaresPage({
           it scroll with the content. Non-interactive so clicks fall through. */}
       <div
         aria-hidden="true"
+        className="palmares-desktop-emblem"
         style={{
           position: "fixed",
           top: 0,
@@ -374,12 +376,18 @@ export default async function PalmaresPage({
         <GeometricEmblem size={735} tiltZ={-0.18} interactive={false} />
       </div>
 
+      {/* Mobile-only fixed full-viewport 3D backdrop. Returns null above
+          880px (the useMediaQuery gate inside the component handles that),
+          so desktop renders the existing top-right emblem only. */}
+      <MobilePalmaresBackdrop />
+
       <div className="page-enter" style={{ position: "relative", zIndex: 1 }}>
         {headerSection}
 
         {/* ── BEST IN SHOW ─────────────────────────────────────────────── */}
         <section
           className="card"
+          data-best-in-show
           style={{
             marginBottom: 32,
             background: "color-mix(in srgb, var(--bg-2) 55%, transparent)",
@@ -601,8 +609,11 @@ export default async function PalmaresPage({
                 </div>
               </div>
 
-              {/* Column header */}
+              {/* Column header — desktop only. The mobile card layout is
+                  self-explanatory so the column header is hidden via CSS
+                  below 880px. */}
               <div
+                className="ranking-header"
                 style={{
                   display: "grid",
                   gridTemplateColumns: showLabels

@@ -8,6 +8,7 @@ import {
   Ticker,
   GeometricEmblem,
 } from "~/components/portal/platinum";
+import { MobileHomeHero } from "~/components/portal/mobile/mobile-home-hero";
 
 export const dynamic = "force-dynamic";
 
@@ -298,8 +299,11 @@ export default async function PortalHomePage() {
 
   return (
     <div className="page-enter">
-      {/* ── HERO ─────────────────────────────────────────────────────────── */}
-      <section style={{ paddingTop: 40, paddingBottom: 60, position: "relative" }}>
+      {/* ── HERO · DESKTOP (>880px) ──────────────────────────────────────── */}
+      <section
+        className="hero-desktop"
+        style={{ paddingTop: 40, paddingBottom: 60, position: "relative" }}
+      >
         <div
           style={{
             display: "grid",
@@ -361,6 +365,22 @@ export default async function PortalHomePage() {
           </div>
         </div>
       </section>
+
+      {/* ── HERO · MOBILE (≤880px) ───────────────────────────────────────── */}
+      <div className="hero-mobile">
+        <MobileHomeHero
+          edition={latestBadge.edition}
+          state={latestBadge.state}
+          primaryCta={{
+            label: "Postulez à la prochaine Edition",
+            href: "/cups",
+          }}
+          secondaryCta={{
+            label: "Voir l'édition en cours",
+            href: "/cups",
+          }}
+        />
+      </div>
 
       {/* ── COUNTDOWN ────────────────────────────────────────────────────── */}
       <section className="card" style={{ marginBottom: 24 }}>
@@ -581,15 +601,17 @@ export default async function PortalHomePage() {
         </div>
       </section>
 
-      {/* ── RESPONSIVE GRID FIX ──────────────────────────────────────────── */}
+      {/* ── DESKTOP / MOBILE HERO SWITCH ─────────────────────────────────
+          The desktop hero (with the 735px GeometricEmblem on the right) is
+          rendered as-is above 880px. Below 880px we render a different hero
+          (MobileHomeHero) that takes over the viewport with a scroll-driven
+          3D backdrop. CSS-only show/hide keeps SSR markup stable and avoids
+          hydration flashes. */}
       <style>{`
+        .hero-mobile { display: none; }
         @media (max-width: 880px) {
-          .hero-grid {
-            grid-template-columns: 1fr !important;
-          }
-          .hero-grid > div:last-child {
-            display: none;
-          }
+          .hero-desktop { display: none; }
+          .hero-mobile { display: block; }
         }
       `}</style>
     </div>

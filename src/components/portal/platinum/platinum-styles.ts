@@ -280,6 +280,281 @@ h2.section-title{
 ::-webkit-scrollbar-track{ background: transparent; }
 ::-webkit-scrollbar-thumb{ background: var(--line-strong); border-radius: 999px; border: 2px solid var(--bg); }
 
+/* ──────────────────────────────────────────────────────────
+   MOBILE BOTTOM NAV (≤880px only)
+   Hidden by default — only renders on phones.
+   Desktop topbar nav + 735px hero emblem are unchanged.
+   ────────────────────────────────────────────────────────── */
+.mobile-bottom-nav{ display: none; }
+
+@media (max-width: 880px){
+  /* Hide desktop nav + brand secondary line + topbar live indicator's verbose
+     state — keep just the brand mark, name, and live dot. */
+  .topbar > .nav{ display: none !important; }
+  .topbar{ padding: 10px var(--pad-x); }
+  .topbar .brand-text span{ display: none; }
+  .topbar .brand-text b{ font-size: 11px; letter-spacing: .14em; }
+  .topbar .live span{ display: none; }
+  .topbar .live{ gap: 0; }
+
+  /* Bottom nav: 5 equal segments, fixed bottom, safe-area inset, gold-on-black
+     identity. Active item gets a 2px gold accent line on top + gold label. */
+  .mobile-bottom-nav{
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 60;
+    background: color-mix(in srgb, var(--bg) 88%, transparent);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border-top: 1px solid var(--line);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .mobile-bottom-nav__item{
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 3px;
+    height: 56px;
+    text-decoration: none; color: var(--fg-3);
+    font-family: var(--mono);
+    border-top: 2px solid transparent;
+    transition: color .15s ease, border-color .15s ease;
+  }
+  .mobile-bottom-nav__idx{
+    font-size: 8.5px; letter-spacing: .14em; color: inherit;
+  }
+  .mobile-bottom-nav__label{
+    font-size: 10px; letter-spacing: .08em; text-transform: uppercase;
+    color: inherit;
+  }
+  .mobile-bottom-nav__item.is-active{
+    color: var(--accent);
+    border-top-color: var(--accent);
+  }
+  .mobile-bottom-nav__item:active{
+    background: var(--accent-dim);
+  }
+
+  /* Reserve room at the bottom of every page so content isn't hidden by the
+     fixed bottom nav. The 56px nav + safe-area + 12px breathing space. */
+  .page{
+    padding-bottom: calc(56px + env(safe-area-inset-bottom) + 12px);
+  }
+  .footer{
+    padding-bottom: calc(40px + 56px + env(safe-area-inset-bottom));
+  }
+
+  /* ── Mobile home hero (3D fullscreen, scroll-driven) ─────────── */
+  .mobile-home-hero{
+    position: relative;
+    min-height: 100svh;
+    margin: 0 calc(-1 * var(--pad-x));
+    padding: 0 var(--pad-x);
+    overflow: hidden;
+  }
+  .mobile-home-hero__canvas{
+    position: fixed;
+    top: 56px;
+    left: 0; right: 0;
+    bottom: 56px;
+    display: grid;
+    place-items: center;
+    pointer-events: none;
+    z-index: 0;
+    transform-origin: 50% 50%;
+    transition: transform .12s linear, opacity .12s linear;
+    will-change: transform, opacity;
+  }
+  /* Re-enable pointer events on the canvas itself so drag-to-orbit still works. */
+  .mobile-home-hero__canvas > div{
+    pointer-events: auto;
+  }
+  .mobile-home-hero__content{
+    position: relative;
+    z-index: 2;
+    display: flex; flex-direction: column;
+    justify-content: space-between;
+    min-height: calc(100svh - 56px - 56px);
+    padding: 24px 0 32px;
+  }
+  .mobile-home-hero__eyebrow{
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: var(--mono); font-size: 10.5px;
+    letter-spacing: .14em; text-transform: uppercase;
+    color: var(--fg-3);
+  }
+  .mobile-home-hero__eyebrow-tag{ color: var(--accent); font-weight: 500; }
+  .mobile-home-hero__hint{
+    align-self: center;
+    font-family: var(--mono); font-size: 9.5px;
+    letter-spacing: .14em; text-transform: uppercase;
+    color: var(--fg-3); opacity: .55;
+    pointer-events: none;
+    margin-top: 12px;
+  }
+  .mobile-home-hero__below{
+    display: flex; flex-direction: column; gap: 18px;
+    /* A subtle backdrop wash so the title stays readable when the 3D
+       is at full opacity behind it. Fades organically from transparent
+       at the top to a near-opaque base at the CTAs. */
+    background: linear-gradient(180deg,
+      transparent 0%,
+      color-mix(in srgb, var(--bg) 30%, transparent) 35%,
+      color-mix(in srgb, var(--bg) 78%, transparent) 100%);
+    margin: 0 calc(-1 * var(--pad-x));
+    padding: 56px var(--pad-x) 0;
+  }
+  .mobile-home-hero__title{
+    font-size: clamp(48px, 12vw, 72px);
+    line-height: .95;
+    margin: 0;
+  }
+  .mobile-home-hero__sub{
+    font-size: 10.5px;
+    letter-spacing: .18em;
+    color: var(--fg-3);
+    text-transform: uppercase;
+  }
+  .mobile-home-hero__cta{
+    display: flex; flex-direction: column; gap: 10px;
+    margin-top: 8px;
+  }
+  .mobile-home-hero__cta .btn{
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* Hide the desktop fixed top-right palmarès emblem on mobile —
+     the MobilePalmaresBackdrop replaces it with a centered viewport-fill
+     ghost canvas. */
+  .palmares-desktop-emblem{ display: none !important; }
+
+  /* ── Mobile palmarès 3D backdrop ─────────────────────────────── */
+  .mobile-palmares-backdrop{
+    position: fixed;
+    top: 56px;
+    left: 50%;
+    bottom: 56px;
+    transform: translateX(-50%);
+    display: grid;
+    place-items: center;
+    pointer-events: none;
+    z-index: 0;
+    opacity: .15;
+    transition: opacity .8s ease, transform .8s ease;
+    will-change: opacity, transform;
+  }
+  .mobile-palmares-backdrop > div{
+    pointer-events: none;
+  }
+  .mobile-palmares-backdrop.is-pulsing{
+    opacity: .26;
+    animation: mobilePalmaresPulse 4s ease-in-out infinite;
+  }
+  @keyframes mobilePalmaresPulse{
+    0%, 100%{ transform: translateX(-50%) scale(1); }
+    50%{ transform: translateX(-50%) scale(1.05); }
+  }
+
+  /* ── Typographic ladder shrink for phones ─────────────────────── */
+  .display{
+    font-size: clamp(48px, 13vw, 72px);
+    line-height: .95;
+  }
+  h2.section-title{
+    font-size: clamp(24px, 6.5vw, 32px);
+    line-height: 1.1;
+  }
+  .lede{
+    font-size: 15px;
+  }
+  .page{
+    padding-top: 0;
+  }
+
+  /* ── Card padding density ────────────────────────────────────── */
+  .card{
+    padding: 22px 18px;
+  }
+
+  /* ── Ranking table → stacked cards ────────────────────────────
+     The desktop table grid is repurposed into a 3-row card layout where
+     the rank is a tall left anchor, name/code/producer stack in the
+     middle, and score/label sit on the right. Inline styles set on the
+     RankingRow children win specificity, so we override with !important
+     where needed. */
+  .ranking-header{ display: none !important; }
+
+  .ranking-row{
+    grid-template-columns: 44px 1fr auto !important;
+    grid-template-rows: auto auto auto !important;
+    grid-template-areas:
+      "rank name     score"
+      "rank code     label"
+      "rank producer producer" !important;
+    column-gap: 14px;
+    row-gap: 2px;
+    padding: 14px 18px !important;
+    align-items: center !important;
+  }
+  .ranking-row > :nth-child(1){
+    grid-area: rank;
+    align-self: center;
+    font-size: 22px !important;
+  }
+  .ranking-row > :nth-child(2){
+    grid-area: code;
+    font-size: 10.5px !important;
+    color: var(--fg-3) !important;
+    letter-spacing: .12em !important;
+    text-transform: uppercase;
+  }
+  .ranking-row > :nth-child(3){
+    grid-area: name;
+    font-size: 14px !important;
+    line-height: 1.25;
+    color: var(--fg);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .ranking-row > :nth-child(4){
+    grid-area: producer;
+    font-size: 11.5px !important;
+    color: var(--fg-3) !important;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .ranking-row > :nth-child(5){
+    grid-area: score;
+    align-self: center;
+    font-size: 22px !important;
+    text-align: right;
+  }
+  .ranking-row > :nth-child(6){
+    grid-area: label;
+    align-self: center;
+    text-align: right;
+  }
+
+  /* ── Page sections that used multi-column grids ─────────────── */
+  .grid.g-3{
+    grid-template-columns: 1fr;
+  }
+  .grid.g-4{
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* ── Footer compaction ───────────────────────────────────────── */
+  .footer{
+    padding: 28px var(--pad-x) calc(40px + 56px + env(safe-area-inset-bottom));
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    font-size: 9.5px;
+  }
+}
+
+
 /* ── Team roster (Manifesto page · hover-only flash, no auto-animation)
    Each <figure> stays muted/desaturated by default and resolves to full
    color + slight scale only when hovered. The flex row centers itself

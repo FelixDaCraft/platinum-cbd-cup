@@ -28,6 +28,7 @@ interface RankingRowProps {
 export function RankingRow({ row, isLast, showLabel = true }: RankingRowProps) {
   return (
     <div
+      className="ranking-row"
       style={{
         display: "grid",
         gridTemplateColumns: showLabel
