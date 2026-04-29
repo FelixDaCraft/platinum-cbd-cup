@@ -169,7 +169,7 @@ function RotatingEmblem({
   tiltX: number;
 }) {
   const spinRef = useRef<Group>(null);
-  const { scene } = useGLTF(MODEL_URL);
+  const { scene } = useGLTF(MODEL_URL, true, true);
 
   useFrame((_, delta) => {
     if (spinRef.current) {
@@ -189,4 +189,7 @@ function RotatingEmblem({
 }
 
 // Pre-load so the model warms before the home page mounts the canvas.
-useGLTF.preload(MODEL_URL);
+// Args: (path, useDraco, useMeshOpt). The GLB is compressed with EXT_meshopt
+// + KHR_mesh_quantization + EXT_texture_webp via gltf-transform — Meshopt
+// decoder must be enabled or the geometry won't decode.
+useGLTF.preload(MODEL_URL, true, true);
