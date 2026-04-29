@@ -353,11 +353,14 @@ export default async function PalmaresPage({
   );
 
   return (
-    <div className="page-enter" style={{ position: "relative" }}>
+    <>
       {/* Page-level 3D emblem — same size + tilt as the home hero, fixed
           to the viewport top-right so it stays visible while scrolling.
-          Non-interactive so clicks fall through. The .topbar (z-index 50)
-          renders above and frost-blurs over it via its backdrop-filter. */}
+          Rendered OUTSIDE the .page-enter wrapper because that wrapper
+          animates a transform on mount, and any ancestor with a transform
+          becomes the containing block for `position: fixed` — which would
+          collapse the emblem back to absolute-style behaviour and make
+          it scroll with the content. Non-interactive so clicks fall through. */}
       <div
         aria-hidden="true"
         style={{
@@ -371,7 +374,7 @@ export default async function PalmaresPage({
         <GeometricEmblem size={735} tiltZ={-0.18} interactive={false} />
       </div>
 
-      <div style={{ position: "relative", zIndex: 1 }}>
+      <div className="page-enter" style={{ position: "relative", zIndex: 1 }}>
         {headerSection}
 
         {/* ── BEST IN SHOW ─────────────────────────────────────────────── */}
@@ -671,7 +674,7 @@ export default async function PalmaresPage({
 
       </section>
       </div>
-    </div>
+    </>
   );
 }
 
