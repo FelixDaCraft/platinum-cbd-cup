@@ -353,12 +353,14 @@ export default async function PalmaresPage({
 
   return (
     <div className="page-enter" style={{ position: "relative" }}>
-      {/* Page-level 3D emblem — same size + tilt as the home hero, positioned
-          top-right behind the content. Non-interactive so clicks fall through. */}
+      {/* Page-level 3D emblem — same size + tilt as the home hero, fixed
+          to the viewport top-right so it stays visible while scrolling.
+          Non-interactive so clicks fall through. The .topbar (z-index 50)
+          renders above and frost-blurs over it via its backdrop-filter. */}
       <div
         aria-hidden="true"
         style={{
-          position: "absolute",
+          position: "fixed",
           top: 0,
           right: 0,
           zIndex: 0,
