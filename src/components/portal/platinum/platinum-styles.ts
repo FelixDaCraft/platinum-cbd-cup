@@ -267,9 +267,13 @@ h2.section-title{
   font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--fg-3);
 }
 
-/* fade in when page switches */
-.page-enter{ animation: fadeUp .4s cubic-bezier(.2,.7,.2,1) both; }
-@keyframes fadeUp{ from{ opacity:0; transform: translateY(8px); } to{ opacity:1; transform:none; } }
+/* fade in when page switches — opacity only (no transform) so .page-enter
+   never creates a containing block for descendant `position: fixed`
+   elements. Browsers keep a composited transform layer even when the
+   final state is `transform: none`, which silently breaks fixed
+   positioning anywhere inside a .page-enter ancestor. */
+.page-enter{ animation: fadeIn .4s cubic-bezier(.2,.7,.2,1) both; }
+@keyframes fadeIn{ from{ opacity:0; } to{ opacity:1; } }
 
 /* Scroll bar */
 ::-webkit-scrollbar{ width: 10px; height: 10px; }
