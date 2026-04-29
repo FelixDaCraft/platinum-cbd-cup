@@ -15,36 +15,47 @@ export const metadata: Metadata = {
   description: "Notre mission, notre histoire et notre équipe derrière la seule compétition CBD évaluée à l'aveugle en Europe.",
 };
 
-async function getAboutContent() {
+async function getTeamMembers(): Promise<TeamMember[]> {
   const aboutContent = await db.query.organizationAbout.findFirst({});
-  return {
-    history: aboutContent?.history ?? null,
-    mission: aboutContent?.mission ?? null,
-    values: aboutContent?.values ?? null,
-    teamMembers: (aboutContent?.teamMembers ?? []) as TeamMember[],
-  };
+  return (aboutContent?.teamMembers ?? []) as TeamMember[];
 }
 
-export default async function AboutPage() {
-  const { history, mission, values, teamMembers } = await getAboutContent();
+interface ManifestoArticle {
+  numeral: string;
+  lead: string;
+  body: string;
+}
 
-  const principles = [
-    {
-      code: "01",
-      title: "Indépendance",
-      body: "Aucun sponsor ne siège au jury. Aucune marque n'est informée de son score avant publication. Le panel est recruté et rémunéré indépendamment.",
-    },
-    {
-      code: "02",
-      title: "Blind panel",
-      body: "Chaque spécimen reçoit un code anonyme à 5 caractères. Les jurés ne voient jamais les marques, origines ou prix pendant toute la durée de la notation.",
-    },
-    {
-      code: "03",
-      title: "Public ledger",
-      body: "Scores bruts, coefficients, méthodologie et protocole de prélèvement sont publiés intégralement après chaque édition. Rien n'est caché.",
-    },
-  ];
+const MANIFESTO: ManifestoArticle[] = [
+  {
+    numeral: "I",
+    lead: "Le code précède le nom.",
+    body: "Cinq caractères, anonymes. Le panel ne voit ni la marque, ni le terroir, ni le prix. La cécité est notre point de départ — pas notre limite.",
+  },
+  {
+    numeral: "II",
+    lead: "Une seule mesure, pour toutes les mains.",
+    body: "Du géant industriel au paysan des Cévennes, le même protocole, le même verre, le même silence. L'égalité n'est pas une promesse : c'est une procédure.",
+  },
+  {
+    numeral: "III",
+    lead: "Aucun jugement n'est dû.",
+    body: "Aucun favori. Aucune redevance. Aucun raccourci. Si le score déçoit, le score reste. Le marché s'adaptera, pas nous.",
+  },
+  {
+    numeral: "IV",
+    lead: "L'excellence se prouve, ne se déclame pas.",
+    body: "Un laboratoire indépendant. Un panel professionnel, un panel public. Un protocole publié dans son intégralité. Tout ce que nous écrivons peut être vérifié. Tout ce qui ne peut l'être n'est pas écrit.",
+  },
+  {
+    numeral: "V",
+    lead: "L'archive est plus longue que l'édition.",
+    body: "Une cup dure quelques semaines. Un palmarès dure des décennies. Nous écrivons pour ceux qui n'étaient pas là — et pour ceux qui n'existent pas encore.",
+  },
+];
+
+export default async function AboutPage() {
+  const teamMembers = await getTeamMembers();
 
   return (
     <div className="page-enter">
@@ -61,96 +72,86 @@ export default async function AboutPage() {
         </p>
       </section>
 
-      {/* Mission */}
-      <section style={{ marginBottom: 48 }}>
-        <div className="card">
-          <Eyebrow>Mission</Eyebrow>
-          <div
+      {/* ── MANIFESTO · Aphorism Posters ─────────────────────────────────
+          Five numbered articles. Roman numeral eyebrow in accent gold,
+          lead sentence in Louize Display (clamp 40 → 88px), body in
+          Geist Mono. Hairline separator between articles. */}
+      <section style={{ marginTop: 24, marginBottom: 96 }}>
+        {MANIFESTO.map((article, i) => (
+          <article
+            key={article.numeral}
             style={{
-              fontFamily: "var(--mono)",
-              fontSize: 22,
-              lineHeight: 1.35,
-              marginTop: 18,
-              letterSpacing: "-.01em",
+              paddingTop: i === 0 ? 0 : 64,
+              paddingBottom: 64,
+              borderTop: i === 0 ? 0 : "1px solid var(--line)",
             }}
           >
-            {mission ??
-              "Offrir au marché CBD européen une référence analytique indépendante, vérifiable et reproductible — sans conflit d'intérêt, sans biais commercial."}
-          </div>
-        </div>
-      </section>
-
-      {/* History */}
-      {history && (
-        <section style={{ marginBottom: 48 }}>
-          <h2 className="section-title" style={{ marginBottom: 24 }}>
-            Histoire
-          </h2>
-          <div className="card">
-            <p style={{ color: "var(--fg-2)", lineHeight: 1.65, fontSize: 15 }}>
-              {history}
-            </p>
-          </div>
-        </section>
-      )}
-
-      {/* Values / principles */}
-      <section style={{ marginBottom: 64 }}>
-        <h2 className="section-title" style={{ marginBottom: 28 }}>
-          Principes
-        </h2>
-        <div className="grid g-3">
-          {principles.map((p) => (
-            <div key={p.code} className="card card-hover">
-              <div
-                style={{
-                  fontFamily: "var(--mono)",
-                  fontSize: 10,
-                  color: "var(--accent)",
-                  letterSpacing: ".15em",
-                }}
-              >
-                · {p.code}
-              </div>
-              <div
-                style={{
-                  fontFamily: "var(--mono)",
-                  fontSize: 20,
-                  marginTop: 18,
-                }}
-              >
-                {p.title}
-              </div>
-              <p
-                style={{
-                  color: "var(--fg-2)",
-                  fontSize: 14,
-                  lineHeight: 1.55,
-                  marginTop: 12,
-                }}
-              >
-                {p.body}
-              </p>
-            </div>
-          ))}
-        </div>
-
-        {/* DB-provided values override / append */}
-        {values && (
-          <div className="card" style={{ marginTop: 24 }}>
-            <Eyebrow>Nos valeurs</Eyebrow>
-            <p
+            <div
               style={{
-                color: "var(--fg-2)",
-                lineHeight: 1.65,
-                fontSize: 15,
-                marginTop: 12,
+                fontFamily: "var(--mono)",
+                fontSize: 12,
+                letterSpacing: ".18em",
+                color: "var(--accent)",
+                textTransform: "uppercase",
+                marginBottom: 28,
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
               }}
             >
-              {values}
+              <span>{article.numeral}</span>
+              <span
+                aria-hidden="true"
+                style={{
+                  flex: "0 0 48px",
+                  height: 1,
+                  background: "var(--accent)",
+                  display: "inline-block",
+                }}
+              />
+            </div>
+
+            <h2
+              style={{
+                fontSize: "clamp(40px, 6.5vw, 88px)",
+                lineHeight: 1.05,
+                margin: 0,
+                maxWidth: "20ch",
+              }}
+            >
+              {article.lead}
+            </h2>
+
+            <p
+              style={{
+                fontFamily: "var(--mono)",
+                fontSize: 14,
+                lineHeight: 1.7,
+                color: "var(--fg-2)",
+                marginTop: 32,
+                maxWidth: "62ch",
+                letterSpacing: ".01em",
+              }}
+            >
+              {article.body}
             </p>
-          </div>
-        )}
+          </article>
+        ))}
+
+        {/* Signature */}
+        <div
+          style={{
+            paddingTop: 48,
+            borderTop: "1px solid var(--line)",
+            fontFamily: "var(--mono)",
+            fontSize: 11,
+            letterSpacing: ".15em",
+            color: "var(--fg-3)",
+            textTransform: "uppercase",
+          }}
+        >
+          — Platinum CBD Cup · depuis 2023
+        </div>
       </section>
 
       {/* Team */}
