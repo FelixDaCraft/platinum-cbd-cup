@@ -372,7 +372,15 @@ export default async function PalmaresPage({
         {headerSection}
 
         {/* ── BEST IN SHOW ─────────────────────────────────────────────── */}
-        <section className="card" style={{ marginBottom: 32 }}>
+        <section
+          className="card"
+          style={{
+            marginBottom: 32,
+            background: "color-mix(in srgb, var(--bg-2) 55%, transparent)",
+            backdropFilter: "blur(10px) saturate(140%)",
+            WebkitBackdropFilter: "blur(10px) saturate(140%)",
+          }}
+        >
           <div>
           <Pill variant="accent" dot>
             BEST IN SHOW · {selectedYear}
