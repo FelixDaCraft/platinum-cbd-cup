@@ -203,7 +203,10 @@ export default async function PalmaresPage({
         </div>
 
         {cups.length > 0 && (
-          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+          <div
+            className="palmares-edition-strip"
+            style={{ display: "flex", gap: 12, flexWrap: "wrap" }}
+          >
             {cups.map((c) => {
               const isActive =
                 sp.edition === c.id || (!sp.edition && c.id === cups[0]?.id);
@@ -508,6 +511,7 @@ export default async function PalmaresPage({
 
       {/* ── CATEGORY FILTER CHIPS ───────────────────────────────────── */}
       <div
+        className="palmares-category-strip"
         style={{
           display: "flex",
           gap: 8,
@@ -553,6 +557,7 @@ export default async function PalmaresPage({
       {/* ── RANKINGS GROUPED BY CATEGORY ────────────────────────────── */}
       <section
         className="card"
+        data-rankings-card
         style={{
           padding: 0,
           overflow: "hidden",
@@ -659,6 +664,7 @@ export default async function PalmaresPage({
         {showLabels && (
           <div
             className="card"
+            data-methodology-card
             style={{
               background: "color-mix(in srgb, var(--bg-2) 60%, transparent)",
               backdropFilter: "blur(14px) saturate(140%)",

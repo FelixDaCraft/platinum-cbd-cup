@@ -359,13 +359,8 @@ h2.section-title{
     place-items: center;
     pointer-events: none;
     z-index: 0;
-    transform-origin: 50% 50%;
-    transition: transform .12s linear, opacity .12s linear;
-    will-change: transform, opacity;
-  }
-  /* Re-enable pointer events on the canvas itself so drag-to-orbit still works. */
-  .mobile-home-hero__canvas > div{
-    pointer-events: auto;
+    transition: opacity .12s linear;
+    will-change: opacity;
   }
   .mobile-home-hero__content{
     position: relative;
@@ -438,7 +433,12 @@ h2.section-title{
     place-items: center;
     pointer-events: none;
     z-index: 0;
-    opacity: .15;
+    /* Bumped from .15 → .25 so the emblem stays visibly transparent
+       through the scrolled cards and rankings. The Best in Show /
+       rankings cards are also softened to ~45% bg-2 below for the same
+       reason — the user wants the logo to keep a slight, persistent
+       presence behind the data. */
+    opacity: .25;
     transition: opacity .8s ease, transform .8s ease;
     will-change: opacity, transform;
   }
@@ -446,7 +446,7 @@ h2.section-title{
     pointer-events: none;
   }
   .mobile-palmares-backdrop.is-pulsing{
-    opacity: .26;
+    opacity: .38;
     animation: mobilePalmaresPulse 4s ease-in-out infinite;
   }
   @keyframes mobilePalmaresPulse{
@@ -454,10 +454,82 @@ h2.section-title{
     50%{ transform: translateX(-50%) scale(1.05); }
   }
 
+  /* ── Palmarès cards · let the 3D backdrop bleed through ──────
+     The desktop cards use ~55-60% bg-2 — opaque enough to read but on
+     mobile we want the emblem to remain visibly transparent through the
+     content. Override inline backgrounds via data attributes (specific
+     enough to win without polluting the whole .card class). */
+  [data-best-in-show]{
+    background: color-mix(in srgb, var(--bg-2) 38%, transparent) !important;
+    backdrop-filter: blur(14px) saturate(160%) !important;
+    -webkit-backdrop-filter: blur(14px) saturate(160%) !important;
+  }
+  [data-rankings-card]{
+    background: color-mix(in srgb, var(--bg-2) 42%, transparent) !important;
+    backdrop-filter: blur(16px) saturate(160%) !important;
+    -webkit-backdrop-filter: blur(16px) saturate(160%) !important;
+  }
+  [data-methodology-card]{
+    background: color-mix(in srgb, var(--bg-2) 45%, transparent) !important;
+    backdrop-filter: blur(14px) saturate(160%) !important;
+    -webkit-backdrop-filter: blur(14px) saturate(160%) !important;
+  }
+
+  /* ── Palmarès filter strips · single-line horizontal scroll ───
+     The desktop wraps the edition pills + category chips when they
+     overflow. On mobile that wraps onto multiple lines and eats the
+     viewport. Here we override flex-wrap to keep them single-line and
+     turn the container into a snap scroller that bleeds to the viewport
+     edges with a soft mask-image fade on the right (so the user can see
+     there's more content past the edge). Inline styles set flex-wrap
+     so we use !important. */
+  .palmares-edition-strip,
+  .palmares-category-strip{
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    /* Bleed to viewport edges so the fade gradient sits at the screen
+       edge, not inside the page padding. */
+    margin-left: calc(-1 * var(--pad-x));
+    margin-right: calc(-1 * var(--pad-x));
+    padding: 4px var(--pad-x);
+    /* Right-edge fade gradient — last 36px of the strip fades to
+       transparent so partially-visible pills hint at "scroll for more". */
+    mask-image: linear-gradient(to right,
+      black 0%,
+      black calc(100% - 36px),
+      transparent 100%);
+    -webkit-mask-image: linear-gradient(to right,
+      black 0%,
+      black calc(100% - 36px),
+      transparent 100%);
+  }
+  .palmares-edition-strip::-webkit-scrollbar,
+  .palmares-category-strip::-webkit-scrollbar{ display: none; }
+  .palmares-edition-strip > *,
+  .palmares-category-strip > *{
+    flex-shrink: 0 !important;
+    scroll-snap-align: start;
+  }
+  /* The edition strip parent (header flex-row) needs a width hint so
+     the strip can grow to fill the line below the H1. With flex-wrap
+     on the parent and the strip on a fresh line, we want it to claim
+     the whole row. */
+  .palmares-edition-strip{
+    width: 100%;
+    margin-top: 8px;
+  }
+
   /* ── Typographic ladder shrink for phones ─────────────────────── */
   .display{
-    font-size: clamp(48px, 13vw, 72px);
-    line-height: .95;
+    /* Smaller default for any .display on mobile (palmares "Results.",
+       cup detail, etc.). The home hero overrides this with its own
+       .mobile-home-hero__title rule below to stay impactful. */
+    font-size: clamp(36px, 10vw, 56px);
+    line-height: 1.0;
   }
   h2.section-title{
     font-size: clamp(24px, 6.5vw, 32px);

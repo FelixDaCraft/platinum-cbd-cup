@@ -32,7 +32,7 @@ const MIN_HEADROOM = 120; // safe-area + breathing for the 3D canvas
  * not pay the WebGL cost. It re-mounts on scroll-back.
  *
  * Honours `prefers-reduced-motion: reduce` by freezing rotation and skipping
- * the scroll-driven transform.
+ * the scroll-driven opacity fade.
  */
 export function MobileHomeHero({
   edition,
@@ -63,7 +63,7 @@ export function MobileHomeHero({
     return () => window.removeEventListener("resize", compute);
   }, []);
 
-  // Honour prefers-reduced-motion: freeze rotation + skip scroll transform.
+  // Honour prefers-reduced-motion: freeze rotation + skip scroll opacity fade.
   useEffect(() => {
     if (typeof window === "undefined") return;
     const mql = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -73,7 +73,7 @@ export function MobileHomeHero({
     return () => mql.removeEventListener("change", handler);
   }, []);
 
-  // Track scroll for the parallax scale/opacity drive.
+  // Track scroll position to drive the opacity fade.
   useEffect(() => {
     if (reducedMotion) return;
     const handler = () => setScrollY(window.scrollY);
@@ -97,13 +97,13 @@ export function MobileHomeHero({
     return () => obs.disconnect();
   }, []);
 
-  // Map scroll [0, 480px] → scale [1, 0.55] and opacity [1, 0.12].
-  // The 480px window approximates one full viewport scroll on a 14 Pro,
-  // so by the time the user has scrolled past the hero the 3D is fully
-  // faded.
+  // Map scroll [0, 480px] → opacity [1, 0.22]. The 480px window
+  // approximates one full viewport scroll on a 14 Pro. The emblem keeps
+  // its size — only opacity fades — so it stays a constant presence
+  // behind the page content. The 0.22 floor guarantees the logo remains
+  // visibly transparent through subsequent sections rather than vanishing.
   const progress = reducedMotion ? 0 : Math.min(1, scrollY / 480);
-  const scale = 1 - progress * 0.45;
-  const opacity = 1 - progress * 0.88;
+  const opacity = Math.max(0.22, 1 - progress * 0.78);
 
   return (
     <section
@@ -119,14 +119,13 @@ export function MobileHomeHero({
         <div
           className="mobile-home-hero__canvas"
           style={{
-            transform: `scale(${scale.toFixed(3)})`,
             opacity: opacity.toFixed(3),
           }}
         >
           <GeometricEmblem
             size={emblemSize}
             tiltZ={-0.18}
-            interactive={!reducedMotion}
+            interactive={false}
             rotationSpeed={reducedMotion ? 0 : 0.18}
           />
         </div>
@@ -141,10 +140,6 @@ export function MobileHomeHero({
           <span className="mobile-home-hero__eyebrow-tag">{edition}</span>
           <span aria-hidden="true">·</span>
           <span>{state}</span>
-        </div>
-
-        <div className="mobile-home-hero__hint" aria-hidden="true">
-          {reducedMotion ? "" : "// drag to explore"}
         </div>
 
         <div className="mobile-home-hero__below">
