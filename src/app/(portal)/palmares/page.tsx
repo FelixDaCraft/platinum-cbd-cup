@@ -545,7 +545,14 @@ export default async function PalmaresPage({
       {/* ── RANKINGS GROUPED BY CATEGORY ────────────────────────────── */}
       <section
         className="card"
-        style={{ padding: 0, overflow: "hidden", marginBottom: 24 }}
+        style={{
+          padding: 0,
+          overflow: "hidden",
+          marginBottom: 24,
+          background: "color-mix(in srgb, var(--bg-2) 60%, transparent)",
+          backdropFilter: "blur(14px) saturate(140%)",
+          WebkitBackdropFilter: "blur(14px) saturate(140%)",
+        }}
       >
         {grouped.length === 0 ? (
           <div
@@ -569,7 +576,6 @@ export default async function PalmaresPage({
                   justifyContent: "space-between",
                   padding: "20px 28px 14px",
                   borderTop: gi === 0 ? 0 : "1px solid var(--line)",
-                  background: "var(--bg)",
                 }}
               >
                 <div
@@ -640,7 +646,14 @@ export default async function PalmaresPage({
         style={{ marginTop: 32 }}
       >
         {showLabels && (
-          <div className="card">
+          <div
+            className="card"
+            style={{
+              background: "color-mix(in srgb, var(--bg-2) 60%, transparent)",
+              backdropFilter: "blur(14px) saturate(140%)",
+              WebkitBackdropFilter: "blur(14px) saturate(140%)",
+            }}
+          >
             <Eyebrow>
               Méthodologie · Échelle {selectedCup.ratingScale ?? "0-20"}
             </Eyebrow>
