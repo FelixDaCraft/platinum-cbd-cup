@@ -352,22 +352,28 @@ export default async function PalmaresPage({
   );
 
   return (
-    <div className="page-enter">
-      {headerSection}
-
-      {/* ── BEST IN SHOW ─────────────────────────────────────────────── */}
-      <section
-        className="card"
-        style={{ marginBottom: 32, position: "relative", overflow: "hidden" }}
+    <div className="page-enter" style={{ position: "relative" }}>
+      {/* Page-level 3D emblem — same size + tilt as the home hero, positioned
+          top-right behind the content. Non-interactive so clicks fall through. */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          top: 0,
+          right: 0,
+          zIndex: 0,
+          pointerEvents: "none",
+        }}
       >
-        <div
-          aria-hidden="true"
-          style={{ position: "absolute", right: -80, top: -80, opacity: 0.08 }}
-        >
-          <GeometricEmblem size={340} glow={false} interactive={false} />
-        </div>
+        <GeometricEmblem size={735} tiltZ={-0.18} interactive={false} />
+      </div>
 
-        <div style={{ position: "relative", zIndex: 1 }}>
+      <div style={{ position: "relative", zIndex: 1 }}>
+        {headerSection}
+
+        {/* ── BEST IN SHOW ─────────────────────────────────────────────── */}
+        <section className="card" style={{ marginBottom: 32 }}>
+          <div>
           <Pill variant="accent" dot>
             BEST IN SHOW · {selectedYear}
           </Pill>
@@ -652,6 +658,7 @@ export default async function PalmaresPage({
         )}
 
       </section>
+      </div>
     </div>
   );
 }
