@@ -211,6 +211,7 @@ export default async function PalmaresPage({
                 <Link
                   key={c.id}
                   href={`?edition=${c.id}`}
+                  scroll={false}
                   className="btn ghost"
                   style={{
                     padding: "10px 16px",
@@ -516,6 +517,7 @@ export default async function PalmaresPage({
               <Link
                 key={c.id}
                 href={href}
+                scroll={false}
                 className="mono"
                 style={{
                   padding: "8px 14px",
