@@ -268,9 +268,9 @@ h2.section-title{
 }
 
 /* fade in when page switches — opacity only (no transform) so .page-enter
-   never creates a containing block for descendant `position: fixed`
+   never creates a containing block for descendant position:fixed
    elements. Browsers keep a composited transform layer even when the
-   final state is `transform: none`, which silently breaks fixed
+   final state is transform:none, which silently breaks fixed
    positioning anywhere inside a .page-enter ancestor. */
 .page-enter{ animation: fadeIn .4s cubic-bezier(.2,.7,.2,1) both; }
 @keyframes fadeIn{ from{ opacity:0; } to{ opacity:1; } }
