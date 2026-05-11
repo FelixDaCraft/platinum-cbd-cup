@@ -78,6 +78,31 @@ interface ArticleContentProps {
 function renderContent(content: Record<string, unknown>): string {
   if (!content || typeof content !== "object") return "";
 
+  /**
+   * Whitelist link protocols to prevent stored XSS via `javascript:` or
+   * `data:` URIs in TipTap link attrs. Organizers compose articles, so the
+   * attacker model is a compromised organizer account — strict whitelist.
+   */
+  const safeLinkHref = (raw: unknown): string => {
+    if (typeof raw !== "string" || raw.length === 0) return "#";
+    const trimmed = raw.trim();
+    // Allow relative paths
+    if (trimmed.startsWith("/") || trimmed.startsWith("#")) return trimmed;
+    try {
+      const url = new URL(trimmed);
+      if (
+        url.protocol === "http:" ||
+        url.protocol === "https:" ||
+        url.protocol === "mailto:"
+      ) {
+        return url.toString();
+      }
+    } catch {
+      // not a parseable URL
+    }
+    return "#";
+  };
+
   const renderNode = (node: Record<string, unknown>): string => {
     if (!node.type) return "";
 
@@ -116,9 +141,11 @@ function renderContent(content: Record<string, unknown>): string {
             case "strike":
               text = `<s>${text}</s>`;
               break;
-            case "link":
-              text = `<a href="${mark.attrs?.href || "#"}" target="_blank" rel="noopener noreferrer" class="text-amber-500 hover:underline">${text}</a>`;
+            case "link": {
+              const href = safeLinkHref(mark.attrs?.href);
+              text = `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" class="text-amber-500 hover:underline">${text}</a>`;
               break;
+            }
           }
         });
         return text;
