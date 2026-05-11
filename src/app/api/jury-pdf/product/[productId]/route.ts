@@ -54,8 +54,9 @@ export async function GET(
     });
   } catch (error) {
     console.error("[Jury Product PDF API] Error:", error);
-    const message =
-      error instanceof Error ? error.message : "Erreur lors de la generation du PDF";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json(
+      { error: "Erreur lors de la génération du PDF" },
+      { status: 500 },
+    );
   }
 }

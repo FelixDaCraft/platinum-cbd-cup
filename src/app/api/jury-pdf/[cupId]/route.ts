@@ -43,9 +43,12 @@ export async function GET(
       },
     });
   } catch (error) {
+    // Internal details (DB error messages, file paths, stack traces) stay
+    // server-side. Client only learns that generation failed.
     console.error("[Jury PDF API] Error:", error);
-    const message =
-      error instanceof Error ? error.message : "Erreur lors de la generation du PDF";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json(
+      { error: "Erreur lors de la génération du PDF" },
+      { status: 500 },
+    );
   }
 }
