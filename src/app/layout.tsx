@@ -5,10 +5,13 @@ import { Geist } from "next/font/google";
 
 import { Providers } from "~/components/providers";
 
-// Content is dynamic (cups, articles, results, palmares all read the DB on
-// every request). Opt out of static generation globally to avoid connecting
-// to the DB during `next build`.
-export const dynamic = "force-dynamic";
+// NOTE: do NOT set `export const dynamic = "force-dynamic"` here. The root
+// layout itself has no DB call, so forcing it dynamic propagates that
+// constraint to every child segment and blocks any future `revalidate` /
+// `unstable_cache` on public pages (palmares, articles…). Pages that read
+// the DB declare `force-dynamic` themselves — see (portal)/layout.tsx and
+// (portal)/page.tsx. Auth-gated subtrees (dashboard / jury / producer) are
+// implicitly dynamic because they read cookies via auth.
 import { PortalProvider } from "~/lib/portal/portal-provider";
 import type { PortalContextValue, PortalThemeConfig } from "~/lib/portal/context";
 import { generateCssVariables, sanitizeCustomCss } from "~/lib/portal/css-variables";
