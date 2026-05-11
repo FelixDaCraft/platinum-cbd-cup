@@ -178,7 +178,11 @@ describe("Producer Router", () => {
       }
     });
 
-    it("rejects empty companyName", () => {
+    // companyName and brandName are optional at register time — the
+    // register form only collects email/password/name, and producers
+    // fill these later via producerProfileUpdateSchema (strict). The
+    // register schema purposely accepts empty strings.
+    it("accepts empty companyName at register time", () => {
       const result = producerRegisterSchema.safeParse({
         email: "producer@example.com",
         password: "SecureP@ss123!",
@@ -188,7 +192,7 @@ describe("Producer Router", () => {
         brandName: "My Brand",
       });
 
-      expect(result.success).toBe(false);
+      expect(result.success).toBe(true);
     });
 
     it("rejects companyName exceeding 100 characters", () => {
@@ -204,7 +208,7 @@ describe("Producer Router", () => {
       expect(result.success).toBe(false);
     });
 
-    it("rejects empty brandName", () => {
+    it("accepts empty brandName at register time", () => {
       const result = producerRegisterSchema.safeParse({
         email: "producer@example.com",
         password: "SecureP@ss123!",
@@ -214,7 +218,7 @@ describe("Producer Router", () => {
         brandName: "",
       });
 
-      expect(result.success).toBe(false);
+      expect(result.success).toBe(true);
     });
   });
 
