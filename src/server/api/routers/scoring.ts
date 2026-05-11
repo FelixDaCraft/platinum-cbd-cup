@@ -1,7 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
-import { auth } from "~/lib/auth";
+import { createTRPCRouter, organizerProcedure } from "~/server/api/trpc";
 import * as schema from "~/server/db/schema";
 import { eq, and, count, sql, isNotNull, inArray, desc } from "drizzle-orm";
 import { convertScoreToScale } from "~/lib/validations/labels";
@@ -16,20 +15,9 @@ export const scoringRouter = createTRPCRouter({
    * Get global rating progress for a cup
    * Returns overall completion stats: total products to rate, rated count, percentage
    */
-  getGlobalProgress: publicProcedure
+  getGlobalProgress: organizerProcedure
     .input(z.object({ cupId: z.string().min(1, "Cup ID requis") }))
     .query(async ({ ctx, input }) => {
-      const session = await auth.api.getSession({
-        headers: ctx.headers,
-      });
-
-      if (!session?.user) {
-        throw new TRPCError({
-          code: "UNAUTHORIZED",
-          message: "Vous devez être connecté",
-        });
-      }
-
       // Verify cup exists (single-tenant)
       const cup = await ctx.db.query.cups.findFirst({
         where: (cups, { eq: eqFn }) => eqFn(cups.id, input.cupId),
@@ -122,20 +110,9 @@ export const scoringRouter = createTRPCRouter({
    * Get rating progress per category
    * Returns completion stats for each category
    */
-  getCategoryProgress: publicProcedure
+  getCategoryProgress: organizerProcedure
     .input(z.object({ cupId: z.string().min(1, "Cup ID requis") }))
     .query(async ({ ctx, input }) => {
-      const session = await auth.api.getSession({
-        headers: ctx.headers,
-      });
-
-      if (!session?.user) {
-        throw new TRPCError({
-          code: "UNAUTHORIZED",
-          message: "Vous devez être connecté",
-        });
-      }
-
       // Verify cup exists (single-tenant)
       const cup = await ctx.db.query.cups.findFirst({
         where: (cups, { eq: eqFn }) => eqFn(cups.id, input.cupId),
@@ -231,20 +208,9 @@ export const scoringRouter = createTRPCRouter({
    * Get detailed progress per jury
    * Returns completion stats for each jury member
    */
-  getJuryProgress: publicProcedure
+  getJuryProgress: organizerProcedure
     .input(z.object({ cupId: z.string().min(1, "Cup ID requis") }))
     .query(async ({ ctx, input }) => {
-      const session = await auth.api.getSession({
-        headers: ctx.headers,
-      });
-
-      if (!session?.user) {
-        throw new TRPCError({
-          code: "UNAUTHORIZED",
-          message: "Vous devez être connecté",
-        });
-      }
-
       // Verify cup exists (single-tenant)
       const cup = await ctx.db.query.cups.findFirst({
         where: (cups, { eq: eqFn }) => eqFn(cups.id, input.cupId),
@@ -373,7 +339,7 @@ export const scoringRouter = createTRPCRouter({
    * Shows current ranking based on submitted ratings
    * Only available during or after rating phase
    */
-  getLiveScores: publicProcedure
+  getLiveScores: organizerProcedure
     .input(
       z.object({
         cupId: z.string().min(1, "Cup ID requis"),
@@ -382,17 +348,6 @@ export const scoringRouter = createTRPCRouter({
       })
     )
     .query(async ({ ctx, input }) => {
-      const session = await auth.api.getSession({
-        headers: ctx.headers,
-      });
-
-      if (!session?.user) {
-        throw new TRPCError({
-          code: "UNAUTHORIZED",
-          message: "Vous devez être connecté",
-        });
-      }
-
       // Verify cup exists (single-tenant)
       const cup = await ctx.db.query.cups.findFirst({
         where: (cups, { eq: eqFn }) => eqFn(cups.id, input.cupId),
