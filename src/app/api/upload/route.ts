@@ -208,7 +208,11 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // Security: ensure the file is in the uploads directory
+    // Security: ensure the file is in the uploads directory.
+    // The startsWith check is not sufficient on its own — `/uploads/../.env`
+    // begins with `/uploads/` but path.join collapses the `..` segments and
+    // escapes the dir. Resolve to an absolute path and require it to live
+    // under the uploads root.
     if (!fileUrl.startsWith("/uploads/")) {
       return NextResponse.json(
         { error: "Chemin non autorisé" },
@@ -216,7 +220,17 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const filepath = path.join(process.cwd(), "public", fileUrl);
+    const uploadsRoot = path.resolve(process.cwd(), "public", "uploads");
+    const filepath = path.resolve(process.cwd(), "public", fileUrl.replace(/^\//, ""));
+    if (
+      filepath !== uploadsRoot &&
+      !filepath.startsWith(uploadsRoot + path.sep)
+    ) {
+      return NextResponse.json(
+        { error: "Chemin non autorisé" },
+        { status: 403 }
+      );
+    }
 
     if (existsSync(filepath)) {
       await unlink(filepath);
