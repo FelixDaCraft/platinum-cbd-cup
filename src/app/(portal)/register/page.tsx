@@ -241,6 +241,7 @@ function RegisterInner() {
                   placeholder="vous@exemple.com"
                   autoComplete="email"
                   aria-invalid={!!errors.email}
+                  aria-required="true"
                   aria-describedby={errors.email ? "email-error" : undefined}
                   className={cn(inputClass, errors.email && inputErrorClass)}
                   {...register("email")}
@@ -272,6 +273,7 @@ function RegisterInner() {
                   placeholder="Jean Dupont"
                   autoComplete="name"
                   aria-invalid={!!errors.name}
+                  aria-required="true"
                   aria-describedby={errors.name ? "name-error" : undefined}
                   className={cn(inputClass, errors.name && inputErrorClass)}
                   {...register("name")}
@@ -304,6 +306,7 @@ function RegisterInner() {
                     placeholder="••••••••"
                     autoComplete="new-password"
                     aria-invalid={!!errors.password}
+                    aria-required="true"
                     aria-describedby="password-criteria password-error"
                     className={cn(inputClass, "pr-12", errors.password && inputErrorClass)}
                     {...register("password")}
@@ -334,7 +337,12 @@ function RegisterInner() {
                 )}
 
                 {/* Password Criteria */}
-                <div id="password-criteria" className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5">
+                <div
+                  id="password-criteria"
+                  className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5"
+                  aria-live="polite"
+                  aria-atomic="true"
+                >
                   {PASSWORD_CRITERIA.map((criterion) => {
                     const isValid = checkCriteria(criterion.regex);
                     return (
@@ -383,6 +391,7 @@ function RegisterInner() {
                     placeholder="••••••••"
                     autoComplete="new-password"
                     aria-invalid={!!errors.confirmPassword}
+                    aria-required="true"
                     aria-describedby={
                       errors.confirmPassword ? "confirm-password-error" : undefined
                     }

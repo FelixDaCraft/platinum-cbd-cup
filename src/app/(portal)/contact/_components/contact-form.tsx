@@ -93,13 +93,20 @@ export function ContactForm({ defaultEmail }: ContactFormProps) {
       className="card"
       style={{ display: "flex", flexDirection: "column", gap: 18 }}
     >
-      <Field label="Nom *" placeholder="Yann Maillot" value={name} onChange={setName} />
+      <Field
+        label="Nom *"
+        placeholder="Yann Maillot"
+        value={name}
+        onChange={setName}
+        required
+      />
       <Field
         label="Email *"
         placeholder="you@studio.eu"
         value={email}
         onChange={setEmail}
         type="email"
+        required
       />
       <Field
         label="Sujet"
@@ -124,6 +131,7 @@ export function ContactForm({ defaultEmail }: ContactFormProps) {
           onChange={(e) => setMessage(e.target.value)}
           rows={6}
           required
+          aria-required="true"
           placeholder="Votre message…"
           style={{
             appearance: "none",

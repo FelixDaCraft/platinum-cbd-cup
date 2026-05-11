@@ -333,6 +333,7 @@ export function Field({
       <input
         type={type}
         required={required}
+        aria-required={required || undefined}
         value={value ?? ""}
         onChange={(e) => onChange?.(e.target.value)}
         placeholder={placeholder}

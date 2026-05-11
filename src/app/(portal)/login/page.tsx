@@ -405,6 +405,7 @@ function PortalLoginForm() {
                   placeholder="vous@exemple.com"
                   autoComplete="email"
                   aria-invalid={!!errors.email}
+                  aria-required="true"
                   aria-describedby={errors.email ? "email-error" : undefined}
                   className={cn(
                     "h-12 px-4 bg-background/50 border-border/50 rounded-xl transition-all duration-200",
@@ -449,6 +450,7 @@ function PortalLoginForm() {
                   placeholder="••••••••"
                   autoComplete="current-password"
                   aria-invalid={!!errors.password}
+                  aria-required="true"
                   aria-describedby={errors.password ? "password-error" : undefined}
                   className={cn(
                     "h-12 px-4 pr-12 bg-background/50 border-border/50 rounded-xl transition-all duration-200",
