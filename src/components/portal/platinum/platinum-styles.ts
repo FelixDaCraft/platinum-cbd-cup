@@ -149,7 +149,7 @@ body{
   font-family: var(--mono); font-size: 11px; letter-spacing: .15em;
   text-transform: uppercase; color: var(--fg-3);
 }
-.eyebrow b{ color: var(--accent); font-weight: 500; }
+.eyebrow b{ color: var(--accent-hi); font-weight: 500; }
 .display{
   font-family: var(--display); font-weight: 700; font-style: italic;
   font-size: clamp(56px, 10vw, 148px);
@@ -200,7 +200,7 @@ h2.section-title{
   font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em;
   text-transform: uppercase; color: var(--fg-2);
 }
-.pill.accent{ border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+.pill.accent{ border-color: var(--accent-hi); color: var(--accent-hi); background: var(--accent-dim); }
 .pill.solid{ background: var(--fg); color: var(--bg); border-color: var(--fg); }
 
 /* ── Buttons ───────────────────────────────────────────── */
@@ -215,6 +215,10 @@ h2.section-title{
   text-decoration: none;
 }
 .btn:hover{ transform: translateY(-1px); }
+.btn:focus-visible, .nav button:focus-visible, .nav a:focus-visible{
+  outline: 2px solid var(--accent-hi);
+  outline-offset: 2px;
+}
 .btn.ghost{ background: transparent; color: var(--fg); }
 .btn.ghost:hover{ background: var(--fg); color: var(--bg); }
 .btn.accent{
@@ -707,4 +711,18 @@ h2.section-title{
 }
 .field-input:focus{ border-color: var(--accent); }
 .field-input.mono{ font-family: var(--mono); }
+
+/* ── Reduced motion (WCAG 2.3.3) ──────────────────────────
+   Users with vestibular disorders or who set prefers-reduced-motion
+   should not see the trophy spin, ring orbit, ticker, pulse, etc. */
+@media (prefers-reduced-motion: reduce){
+  *, *::before, *::after{
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .ticker-track,
+  .live-dot{ animation: none !important; }
+}
 `;
