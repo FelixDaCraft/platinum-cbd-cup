@@ -32,4 +32,6 @@ export {
 export { PlatinumTrophy } from "./platinum-trophy";
 
 // ── Geometric emblem (R3F + GLB) ──────────────────────────────────────────────
-export { GeometricEmblem } from "./geometric-emblem";
+// Re-exported through the lazy wrapper so Three.js is not bundled with the
+// pages that statically import { GeometricEmblem }.
+export { GeometricEmblem } from "./geometric-emblem-lazy";

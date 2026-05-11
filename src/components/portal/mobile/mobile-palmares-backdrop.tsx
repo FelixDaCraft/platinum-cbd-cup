@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { GeometricEmblem } from "~/components/portal/platinum/geometric-emblem";
+import { GeometricEmblem } from "~/components/portal/platinum/geometric-emblem-lazy";
 import { useMediaQuery } from "~/lib/hooks/use-media-query";
 
 /**

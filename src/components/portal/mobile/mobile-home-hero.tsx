@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { GeometricEmblem } from "~/components/portal/platinum/geometric-emblem";
+import { GeometricEmblem } from "~/components/portal/platinum/geometric-emblem-lazy";
 
 interface MobileHomeHeroProps {
   /** "EDITION 04" — already formatted by the page-level loader. */
