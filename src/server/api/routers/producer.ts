@@ -3,7 +3,12 @@ import { z } from "zod";
 import { nanoid } from "nanoid";
 import { eq, and, count, isNotNull, ne, desc } from "drizzle-orm";
 
-import { createTRPCRouter, protectedProcedure, publicProcedure } from "~/server/api/trpc";
+import {
+  createTRPCRouter,
+  protectedProcedure,
+  publicProcedure,
+  organizerProcedure,
+} from "~/server/api/trpc";
 import { db } from "~/server/db";
 import { auth } from "~/lib/auth";
 import * as schema from "~/server/db/schema";
@@ -51,9 +56,10 @@ const requireProducerIdByUser = async (
 export const producerRouter = createTRPCRouter({
   /**
    * List all producers (single-tenant).
-   * Used in the dashboard global producers page
+   * Used in the dashboard global producers page. Returns names, emails,
+   * phone and brand — organizer-only.
    */
-  listByOrganization: protectedProcedure.query(async ({ ctx }) => {
+  listByOrganization: organizerProcedure.query(async ({ ctx }) => {
     const producers = await ctx.db.query.producers.findMany({
       with: {
         user: {
@@ -90,21 +96,9 @@ export const producerRouter = createTRPCRouter({
    * Delete a producer profile (organizer only).
    * Cascades to registrations via DB FK
    */
-  deleteByOrganization: protectedProcedure
+  deleteByOrganization: organizerProcedure
     .input(z.object({ producerId: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      const user = await ctx.db.query.users.findFirst({
-        where: eq(schema.users.id, ctx.userId),
-        columns: { isAdmin: true, role: true },
-      });
-
-      if (!user || (user.isAdmin !== true && user.role !== "organizer")) {
-        throw new TRPCError({
-          code: "FORBIDDEN",
-          message: "Acces refuse",
-        });
-      }
-
       const producer = await ctx.db.query.producers.findFirst({
         where: eq(schema.producers.id, input.producerId),
       });

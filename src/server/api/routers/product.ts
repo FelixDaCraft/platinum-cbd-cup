@@ -4,7 +4,11 @@ import { eq, and } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { unlink } from "fs/promises";
 import path from "path";
-import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
+import {
+  createTRPCRouter,
+  protectedProcedure,
+  organizerProcedure,
+} from "~/server/api/trpc";
 import { db } from "~/server/db";
 import {
   generateProductQRCode,
@@ -336,7 +340,7 @@ export const productRouter = createTRPCRouter({
    * Get product details for receipt page
    * Returns product info with category and producer names
    */
-  getProductForReceipt: protectedProcedure
+  getProductForReceipt: organizerProcedure
     .input(
       z.object({
         productId: z.string().min(1, "Product ID requis"),
@@ -402,9 +406,9 @@ export const productRouter = createTRPCRouter({
 
   /**
    * Update product status (for marking as received, etc.)
-   * Only accessible by organization members
+   * Organizer-only.
    */
-  updateStatus: protectedProcedure
+  updateStatus: organizerProcedure
     .input(
       z.object({
         productId: z.string().min(1, "Product ID requis"),
@@ -464,9 +468,9 @@ export const productRouter = createTRPCRouter({
 
   /**
    * Update a product's name
-   * Only accessible by organization members
+   * Organizer-only.
    */
-  updateName: protectedProcedure
+  updateName: organizerProcedure
     .input(
       z.object({
         productId: z.string().min(1, "Product ID requis"),
