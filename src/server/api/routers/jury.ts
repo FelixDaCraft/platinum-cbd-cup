@@ -1902,6 +1902,14 @@ export const juryRouter = createTRPCRouter({
         (a) => a.categoryId
       );
 
+      type ProductScore = {
+        criterionId: string;
+        criterionName: string;
+        score: number;
+        sortOrder: number;
+        coefficient: number;
+      };
+
       let productsToRate: Array<{
         id: string;
         anonymousCode: string | null;
@@ -1909,6 +1917,10 @@ export const juryRouter = createTRPCRouter({
         categoryName: string;
         isRated: boolean;
         hasDraft: boolean; // Story 7.19: Draft visibility
+        // Per-criterion scores when the jury has saved (draft or submitted) a rating.
+        // Used by the category page to show "at a glance" mini-bars without
+        // having to open each product.
+        scores: ProductScore[];
       }> = [];
 
       if (assignedCategoryIds.length > 0) {
@@ -1927,6 +1939,20 @@ export const juryRouter = createTRPCRouter({
                 category: true,
                 ratings: {
                   where: eq(schema.productRatings.juryId, juryMembership.id),
+                  with: {
+                    scores: {
+                      with: {
+                        criterion: {
+                          columns: {
+                            id: true,
+                            name: true,
+                            sortOrder: true,
+                            coefficient: true,
+                          },
+                        },
+                      },
+                    },
+                  },
                 },
               },
             },
@@ -1941,6 +1967,18 @@ export const juryRouter = createTRPCRouter({
             r.products.map((p) => {
               const submittedRating = p.ratings.find((rating) => rating.submittedAt !== null);
               const draftRating = p.ratings.find((rating) => rating.submittedAt === null);
+              const sourceRating = submittedRating ?? draftRating;
+              const scores: ProductScore[] = sourceRating
+                ? sourceRating.scores
+                    .map((s) => ({
+                      criterionId: s.criterionId,
+                      criterionName: s.criterion.name,
+                      score: s.score,
+                      sortOrder: s.criterion.sortOrder,
+                      coefficient: s.criterion.coefficient,
+                    }))
+                    .sort((a, b) => a.sortOrder - b.sortOrder)
+                : [];
               return {
                 id: p.id,
                 anonymousCode: p.anonymousCode,
@@ -1950,6 +1988,7 @@ export const juryRouter = createTRPCRouter({
                 isRated: !!submittedRating,
                 // Story 7.19: Mark as draft if there's an unsubmitted rating
                 hasDraft: !submittedRating && !!draftRating,
+                scores,
               };
             })
           );
@@ -1966,6 +2005,7 @@ export const juryRouter = createTRPCRouter({
           organizationName: ORGANIZATION_NAME,
           ratingEndDate: cup.ratingEndAt,
           status: cup.status,
+          ratingScale: cup.ratingScale,
         },
         jury: {
           id: juryMembership.id,

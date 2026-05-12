@@ -4,6 +4,8 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 
 import { api } from "~/trpc/react";
+import { getMaxScoreForScale } from "~/lib/validations/labels";
+import type { RatingScale } from "~/server/db/schema/cups";
 
 export default function PortalCategoryProductsPage() {
   const params = useParams();
@@ -61,6 +63,9 @@ export default function PortalCategoryProductsPage() {
   }
 
   const { cup, jury, productsToRate } = data!;
+  const maxScore = getMaxScoreForScale(
+    (cup.ratingScale ?? "0-10") as RatingScale,
+  );
 
   // Find the category assignment
   const categoryAssignment = jury.categoryAssignments.find(
@@ -243,8 +248,8 @@ export default function PortalCategoryProductsPage() {
                   <div
                     style={{
                       display: "flex",
-                      alignItems: "center",
-                      gap: "16px",
+                      flexDirection: "column",
+                      gap: "12px",
                       padding: "16px 0",
                       borderTop: idx === 0 ? "1px solid var(--n-border-visible)" : "1px solid var(--n-border)",
                       borderBottom: idx === categoryProducts.length - 1 ? "1px solid var(--n-border-visible)" : "none",
@@ -252,40 +257,108 @@ export default function PortalCategoryProductsPage() {
                       cursor: isDisabled ? "not-allowed" : "pointer",
                     }}
                   >
-                    {/* Anonymous code */}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <p
-                        className="n-font-data"
-                        style={{
-                          color: "var(--n-text-display)",
-                          fontSize: "20px",
-                          fontWeight: 700,
-                          letterSpacing: "0.06em",
-                          marginBottom: "3px",
-                        }}
-                      >
-                        {product.anonymousCode ?? `#${product.id.slice(0, 4).toUpperCase()}`}
-                      </p>
-                      <p
-                        className="n-font-data"
-                        style={{
-                          color: stateColor,
-                          fontSize: "11px",
-                          letterSpacing: "0.1em",
-                        }}
-                      >
-                        {stateLabel}
-                      </p>
+                    {/* Top row: code + state + chevron */}
+                    <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p
+                          className="n-font-data"
+                          style={{
+                            color: "var(--n-text-display)",
+                            fontSize: "20px",
+                            fontWeight: 700,
+                            letterSpacing: "0.06em",
+                            marginBottom: "3px",
+                          }}
+                        >
+                          {product.anonymousCode ?? `#${product.id.slice(0, 4).toUpperCase()}`}
+                        </p>
+                        <p
+                          className="n-font-data"
+                          style={{
+                            color: stateColor,
+                            fontSize: "11px",
+                            letterSpacing: "0.1em",
+                          }}
+                        >
+                          {stateLabel}
+                        </p>
+                      </div>
+
+                      {!isDisabled && (
+                        <span
+                          className="n-font-body"
+                          style={{ color: "var(--n-text-disabled)", fontSize: "16px", flexShrink: 0 }}
+                        >
+                          ›
+                        </span>
+                      )}
                     </div>
 
-                    {/* Chevron */}
-                    {!isDisabled && (
-                      <span
-                        className="n-font-body"
-                        style={{ color: "var(--n-text-disabled)", fontSize: "16px", flexShrink: 0 }}
+                    {/* Mini criterion bars — only when the jury already has scores */}
+                    {product.scores.length > 0 && (
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns:
+                            "repeat(auto-fit, minmax(110px, 1fr))",
+                          gap: "10px 16px",
+                        }}
                       >
-                        ›
-                      </span>
+                        {product.scores.map((s) => (
+                          <div
+                            key={s.criterionId}
+                            style={{ display: "flex", flexDirection: "column", gap: "4px" }}
+                          >
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "baseline",
+                                justifyContent: "space-between",
+                                gap: "6px",
+                              }}
+                            >
+                              <span
+                                className="n-label"
+                                style={{
+                                  fontSize: "9.5px",
+                                  letterSpacing: "0.08em",
+                                  whiteSpace: "nowrap",
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                }}
+                              >
+                                {s.criterionName}
+                              </span>
+                              <span
+                                className="n-font-data"
+                                style={{
+                                  color: "var(--n-text-display)",
+                                  fontSize: "12px",
+                                  fontWeight: 600,
+                                  flexShrink: 0,
+                                }}
+                              >
+                                {s.score}
+                                <span style={{ color: "var(--n-text-disabled)" }}>
+                                  /{maxScore}
+                                </span>
+                              </span>
+                            </div>
+                            <div
+                              className="n-progress-bar"
+                              style={{ display: "flex", gap: "1px" }}
+                            >
+                              {Array.from({ length: maxScore }, (_, i) => (
+                                <div
+                                  key={i}
+                                  className={`n-progress-segment${i < s.score ? " filled" : ""}`}
+                                  style={{ flex: 1, height: "4px" }}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </div>
                 </Link>
