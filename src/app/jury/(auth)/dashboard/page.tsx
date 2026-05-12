@@ -310,17 +310,6 @@ export default function PortalJuryDashboardPage() {
   const activeCups = orgCups.filter((c) => c.progress.percentage < 100);
   const completedCups = orgCups.filter((c) => c.progress.percentage === 100);
 
-  // Pending products list
-  const cupsWithPendingProducts = activeCups
-    .filter((cup) => cup.progress.total - cup.progress.rated > 0)
-    .map((cup) => ({
-      cupId: cup.cupId,
-      cupName: cup.cupName,
-      pendingCount: cup.progress.total - cup.progress.rated,
-      categories: cup.assignedCategories.map((cat) => cat.name),
-    }))
-    .slice(0, 5);
-
   const formatDate = (date: Date | null) => {
     if (!date) return "";
     return new Intl.DateTimeFormat("fr-FR", {
@@ -452,104 +441,6 @@ export default function PortalJuryDashboardPage() {
         {/* LEFT COLUMN                                                     */}
         {/* ============================================================== */}
         <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-
-          {/* Pending products list */}
-          {cupsWithPendingProducts.length > 0 && (
-            <div className="n-card">
-              <div
-                style={{
-                  padding: "16px 20px",
-                  borderBottom: "1px solid var(--n-border)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                }}
-              >
-                <div>
-                  <p className="n-label" style={{ color: "var(--n-text-secondary)", marginBottom: 2 }}>
-                    EVALUATIONS EN ATTENTE
-                  </p>
-                  <p
-                    className="n-font-body"
-                    style={{ color: "var(--n-text-primary)", fontWeight: 500, fontSize: 15 }}
-                  >
-                    Prochains produits a noter
-                  </p>
-                </div>
-                <span
-                  className="n-tag"
-                  style={{
-                    background: "transparent",
-                    border: "1px solid var(--n-accent)",
-                    color: "var(--n-accent)",
-                  }}
-                >
-                  {pendingProducts} EN ATTENTE
-                </span>
-              </div>
-              <div style={{ padding: "8px 0" }}>
-                {cupsWithPendingProducts.map((item, idx) => (
-                  <Link key={item.cupId} href={`/jury/cups/${item.cupId}`} style={{ display: "block", textDecoration: "none" }}>
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        padding: "12px 20px",
-                        borderBottom: idx < cupsWithPendingProducts.length - 1 ? "1px solid var(--n-border)" : "none",
-                        transition: "background 0.15s",
-                      }}
-                      className="nothing-row-hover"
-                    >
-                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                        <span
-                          className="n-font-data"
-                          style={{
-                            fontSize: 11,
-                            color: "var(--n-text-disabled)",
-                            width: 16,
-                            textAlign: "right",
-                            flexShrink: 0,
-                          }}
-                        >
-                          {String(idx + 1).padStart(2, "0")}
-                        </span>
-                        <div>
-                          <p
-                            className="n-font-body"
-                            style={{ color: "var(--n-text-primary)", fontWeight: 500, fontSize: 14, marginBottom: 2 }}
-                          >
-                            {item.cupName}
-                          </p>
-                          <p className="n-label" style={{ color: "var(--n-text-secondary)" }}>
-                            {item.categories.join(", ")}
-                          </p>
-                        </div>
-                      </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                        <span
-                          className="n-font-data"
-                          style={{
-                            fontSize: 13,
-                            color: "var(--n-text-secondary)",
-                            letterSpacing: "0.02em",
-                          }}
-                        >
-                          {item.pendingCount} PRODUIT{item.pendingCount > 1 ? "S" : ""}
-                        </span>
-                        <span
-                          className="n-font-body"
-                          style={{ color: "var(--n-text-secondary)", fontSize: 14 }}
-                        >
-                          &gt;
-                        </span>
-                      </div>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            </div>
-          )}
 
           {/* Active cups with countdowns */}
           {activeCups.length > 0 && (
