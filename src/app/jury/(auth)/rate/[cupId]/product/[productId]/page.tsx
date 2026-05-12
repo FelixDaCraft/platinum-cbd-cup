@@ -9,6 +9,12 @@ import { api } from "~/trpc/react";
 import { authClient } from "~/lib/auth-client";
 import { getMaxScoreForScale } from "~/lib/validations/labels";
 import type { RatingScale } from "~/server/db/schema/cups";
+import { PostRatingChoiceModal } from "~/components/jury/post-rating-choice-modal";
+import type { PostRatingChoiceModalProps } from "~/components/jury/post-rating-choice-modal";
+
+type ModalState =
+  | { open: false }
+  | { open: true; mode: PostRatingChoiceModalProps["mode"]; nextProductId: string | null; allCategoryComplete: boolean; allComplete: boolean };
 
 export default function RatingPage() {
   const params = useParams();
@@ -21,6 +27,7 @@ export default function RatingPage() {
   const [scores, setScores] = useState<Map<string, number>>(new Map());
   const [comment, setComment] = useState("");
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [modalState, setModalState] = useState<ModalState>({ open: false });
 
   const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -55,30 +62,21 @@ export default function RatingPage() {
         void utils.jury.getMyRating.invalidate({ cupId, productId });
         localStorage.removeItem(localStorageKey);
 
-        if (result.nextProductId) {
-          toast.success("Notation soumise!", {
-            description: "Passage au produit suivant...",
-          });
-          setTimeout(() => {
-            router.push(`/jury/rate/${cupId}/product/${result.nextProductId}`);
-          }, 1500);
-        } else if (result.categoryComplete && !result.allComplete) {
-          toast.success("Categorie terminee!", {
-            description: "Vous avez note tous les produits de cette categorie.",
-          });
-          setTimeout(() => {
-            router.push(`/jury/cups/${cupId}`);
-          }, 2000);
-        } else {
-          toast.success("Toutes les notations terminees!", {
-            description: "Vous avez note tous vos produits assignes.",
-          });
-          setTimeout(() => {
-            router.push("/jury");
-          }, 2000);
-        }
+        setModalState({
+          open: true,
+          mode: "submitted",
+          nextProductId: result.nextProductId,
+          allCategoryComplete: result.categoryComplete,
+          allComplete: result.allComplete,
+        });
       } else {
-        toast.success("Brouillon sauvegarde");
+        setModalState({
+          open: true,
+          mode: "draft",
+          nextProductId: null,
+          allCategoryComplete: false,
+          allComplete: false,
+        });
       }
     },
     onError: (error) => {
@@ -925,6 +923,20 @@ export default function RatingPage() {
           </div>
         )}
       </div>
+
+      {/* Post-rating choice modal */}
+      {modalState.open && (
+        <PostRatingChoiceModal
+          open={modalState.open}
+          mode={modalState.mode}
+          cupId={cupId}
+          categoryId={data.product.categoryId}
+          nextProductId={modalState.nextProductId}
+          allCategoryComplete={modalState.allCategoryComplete}
+          allComplete={modalState.allComplete}
+          onClose={() => setModalState({ open: false })}
+        />
+      )}
     </div>
   );
 }
