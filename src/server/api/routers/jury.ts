@@ -7,7 +7,7 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { eq, and, desc, inArray, sql, isNotNull } from "drizzle-orm";
 import { nanoid } from "nanoid";
-import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
+import { createTRPCRouter, publicProcedure, juryProcedure } from "~/server/api/trpc";
 import { auth } from "~/lib/auth";
 import * as schema from "~/server/db/schema";
 import { hashPassword } from "better-auth/crypto";
@@ -4510,6 +4510,117 @@ export const juryRouter = createTRPCRouter({
       return {
         base64: result.buffer.toString("base64"),
         filename: result.filename,
+      };
+    }),
+
+  /**
+   * Get the current jury user's own profile for the edit page
+   * Returns user fields (name, email, image) + juryProfile fields
+   */
+  getMyProfileForEdit: juryProcedure.query(async ({ ctx }) => {
+    const user = await ctx.db.query.users.findFirst({
+      where: eq(schema.users.id, ctx.userId),
+      columns: {
+        id: true,
+        name: true,
+        email: true,
+        image: true,
+      },
+    });
+
+    if (!user) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "Utilisateur non trouvé" });
+    }
+
+    return {
+      user,
+      juryProfile: ctx.juryProfile,
+    };
+  }),
+
+  /**
+   * Update the current jury user's own profile
+   * Handles user fields (name, image) and juryProfile fields separately
+   * Email changes are handled client-side via authClient.changeEmail()
+   */
+  updateMyProfile: juryProcedure
+    .input(
+      z.object({
+        name: z.string().min(1).max(100).optional(),
+        image: z
+          .string()
+          .refine(
+            (v) =>
+              v === "" ||
+              v.startsWith("/uploads/") ||
+              v.startsWith("http"),
+            "URL d'image invalide"
+          )
+          .optional()
+          .nullable(),
+        displayName: z.string().max(100).optional().nullable(),
+        expertise: z.string().max(150).optional().nullable(),
+        bio: z.string().max(300).optional().nullable(),
+        showOnPublicResults: z.boolean().optional(),
+        notifyOnInvitation: z.boolean().optional(),
+        notifyOnAssignment: z.boolean().optional(),
+        notifyOnReminder: z.boolean().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const now = new Date();
+
+      // Update users table if user fields provided
+      const hasUserUpdates = input.name !== undefined || input.image !== undefined;
+      if (hasUserUpdates) {
+        await ctx.db
+          .update(schema.users)
+          .set({
+            ...(input.name !== undefined ? { name: input.name } : {}),
+            ...(input.image !== undefined
+              ? { image: input.image === "" ? null : input.image }
+              : {}),
+            updatedAt: now,
+          })
+          .where(eq(schema.users.id, ctx.userId));
+      }
+
+      // Update juryProfiles table
+      await ctx.db
+        .update(schema.juryProfiles)
+        .set({
+          ...(input.displayName !== undefined ? { displayName: input.displayName } : {}),
+          ...(input.expertise !== undefined ? { expertise: input.expertise } : {}),
+          ...(input.bio !== undefined ? { bio: input.bio } : {}),
+          ...(input.showOnPublicResults !== undefined
+            ? { showOnPublicResults: input.showOnPublicResults }
+            : {}),
+          ...(input.notifyOnInvitation !== undefined
+            ? { notifyOnInvitation: input.notifyOnInvitation }
+            : {}),
+          ...(input.notifyOnAssignment !== undefined
+            ? { notifyOnAssignment: input.notifyOnAssignment }
+            : {}),
+          ...(input.notifyOnReminder !== undefined
+            ? { notifyOnReminder: input.notifyOnReminder }
+            : {}),
+          updatedAt: now,
+        })
+        .where(eq(schema.juryProfiles.id, ctx.juryProfile.id));
+
+      // Fetch and return updated data
+      const updatedUser = await ctx.db.query.users.findFirst({
+        where: eq(schema.users.id, ctx.userId),
+        columns: { id: true, name: true, email: true, image: true },
+      });
+
+      const updatedProfile = await ctx.db.query.juryProfiles.findFirst({
+        where: eq(schema.juryProfiles.id, ctx.juryProfile.id),
+      });
+
+      return {
+        user: updatedUser,
+        juryProfile: updatedProfile,
       };
     }),
 });
