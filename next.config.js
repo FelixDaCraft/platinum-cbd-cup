@@ -90,9 +90,7 @@ const config = {
               "font-src 'self' data: https://fonts.gstatic.com",
               "img-src 'self' data: blob: https:",
               "media-src 'self' blob:",
-              // raw.githack.com hosts the Drei HDR environment presets used
-              // by <Environment preset="city" /> on the 3D portal pages.
-              "connect-src 'self' https://api.stripe.com https://raw.githack.com",
+              "connect-src 'self' https://api.stripe.com",
               "frame-src 'self' https://js.stripe.com https://hooks.stripe.com",
               "worker-src 'self' blob:",
               "object-src 'none'",

@@ -138,7 +138,10 @@ export function GeometricEmblem({
               tiltX={tiltX}
             />
           </Center>
-          <Environment preset="city" />
+          {/* Self-hosted HDR — same file Drei's `preset="city"` would fetch
+              from raw.githack.com, but shipped from /public so the 3D scene
+              loads offline, is CSP-clean, and is immune to CDN outages. */}
+          <Environment files="/hdri/potsdamer_platz_1k.hdr" />
         </Suspense>
 
         {/* Drag-to-orbit (interactive mode only). Auto-rotation comes from
