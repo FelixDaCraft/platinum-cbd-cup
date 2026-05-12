@@ -86,6 +86,55 @@ async function fetchPublishedCups() {
   });
 }
 
+interface PublicJury {
+  id: string;
+  displayName: string;
+  expertise: string | null;
+  bio: string | null;
+  image: string | null;
+}
+
+/**
+ * Public-facing jury list for a cup. Only `pro` jurys who explicitly
+ * consented (showOnPublicResults=true) are exposed — `public` jurys
+ * stay anonymous by design.
+ */
+async function fetchPublicJuries(cupId: string): Promise<PublicJury[]> {
+  const rows = await db
+    .select({
+      profileId: schema.juryProfiles.id,
+      profileType: schema.juryProfiles.juryType,
+      profileDisplayName: schema.juryProfiles.displayName,
+      profileExpertise: schema.juryProfiles.expertise,
+      profileBio: schema.juryProfiles.bio,
+      profileShow: schema.juryProfiles.showOnPublicResults,
+      userName: schema.users.name,
+      userImage: schema.users.image,
+    })
+    .from(schema.cupJuries)
+    .innerJoin(
+      schema.juryProfiles,
+      eq(schema.cupJuries.juryProfileId, schema.juryProfiles.id),
+    )
+    .innerJoin(schema.users, eq(schema.cupJuries.userId, schema.users.id))
+    .where(
+      and(
+        eq(schema.cupJuries.cupId, cupId),
+        eq(schema.cupJuries.isActive, true),
+        eq(schema.juryProfiles.juryType, "pro"),
+        eq(schema.juryProfiles.showOnPublicResults, true),
+      ),
+    );
+
+  return rows.map((r) => ({
+    id: r.profileId,
+    displayName: r.profileDisplayName ?? r.userName,
+    expertise: r.profileExpertise,
+    bio: r.profileBio,
+    image: r.userImage,
+  }));
+}
+
 async function fetchCupLabels(cupId: string): Promise<CupLabel[]> {
   const rows = await db.query.cupLabels.findMany({
     where: (l, { eq: e }) => e(l.cupId, cupId),
@@ -254,10 +303,11 @@ export default async function PalmaresPage({
     .getFullYear()
     .toString();
 
-  const [labels, allCategories, allProducts] = await Promise.all([
+  const [labels, allCategories, allProducts, publicJuries] = await Promise.all([
     fetchCupLabels(selectedCup.id),
     fetchCategories(selectedCup.id),
     fetchPublishedCupProducts(selectedCup),
+    fetchPublicJuries(selectedCup.id),
   ]);
 
   // Apply the cup's resultsVisibility setting before rendering. Choices made
@@ -655,6 +705,124 @@ export default async function PalmaresPage({
           ))
         )}
       </section>
+
+      {/* ── JURY ────────────────────────────────────────────────────────
+          Pro jurys who opted in via their profile. Public jurys never
+          appear here — they remain anonymous by design. */}
+      {publicJuries.length > 0 && (
+        <section style={{ marginTop: 32 }}>
+          <Eyebrow>Jury · {publicJuries.length} membre{publicJuries.length > 1 ? "s" : ""}</Eyebrow>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
+              gap: 16,
+              marginTop: 20,
+            }}
+          >
+            {publicJuries.map((j) => (
+              <article
+                key={j.id}
+                className="card"
+                style={{
+                  padding: 20,
+                  background: "color-mix(in srgb, var(--bg-2) 60%, transparent)",
+                  backdropFilter: "blur(14px) saturate(140%)",
+                  WebkitBackdropFilter: "blur(14px) saturate(140%)",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 12,
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <div
+                    style={{
+                      width: 48,
+                      height: 48,
+                      borderRadius: "50%",
+                      background: "var(--bg)",
+                      border: "1px solid var(--line-strong)",
+                      flexShrink: 0,
+                      overflow: "hidden",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    {j.image ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={j.image}
+                        alt={j.displayName}
+                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                      />
+                    ) : (
+                      <span
+                        className="mono"
+                        style={{
+                          fontSize: 14,
+                          color: "var(--fg-2)",
+                          letterSpacing: "0.05em",
+                        }}
+                      >
+                        {j.displayName
+                          .split(" ")
+                          .map((s) => s[0])
+                          .filter(Boolean)
+                          .slice(0, 2)
+                          .join("")
+                          .toUpperCase()}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <p
+                      style={{
+                        fontSize: 14,
+                        fontWeight: 500,
+                        color: "var(--fg)",
+                        margin: 0,
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                      }}
+                    >
+                      {j.displayName}
+                    </p>
+                    {j.expertise && (
+                      <p
+                        className="mono"
+                        style={{
+                          fontSize: 10,
+                          color: "var(--fg-3)",
+                          letterSpacing: "0.1em",
+                          textTransform: "uppercase",
+                          margin: 0,
+                          marginTop: 2,
+                        }}
+                      >
+                        {j.expertise}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                {j.bio && (
+                  <p
+                    style={{
+                      fontSize: 13,
+                      lineHeight: 1.55,
+                      color: "var(--fg-2)",
+                      margin: 0,
+                    }}
+                  >
+                    {j.bio}
+                  </p>
+                )}
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* ── METHODOLOGY ─────────────────────────────────────────────── */}
       <section

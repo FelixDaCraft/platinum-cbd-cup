@@ -4625,14 +4625,25 @@ export const juryRouter = createTRPCRouter({
           .where(eq(schema.users.id, ctx.userId));
       }
 
+      // Public jurys stay anonymous on the palmares — strip any attempt
+      // to set the publicly-visible fields so a forged payload cannot
+      // expose them. Notification prefs remain editable.
+      const isPublicJury = ctx.juryProfile.juryType === "public";
+
       // Update juryProfiles table
       await ctx.db
         .update(schema.juryProfiles)
         .set({
-          ...(input.displayName !== undefined ? { displayName: input.displayName } : {}),
-          ...(input.expertise !== undefined ? { expertise: input.expertise } : {}),
-          ...(input.bio !== undefined ? { bio: input.bio } : {}),
-          ...(input.showOnPublicResults !== undefined
+          ...(!isPublicJury && input.displayName !== undefined
+            ? { displayName: input.displayName }
+            : {}),
+          ...(!isPublicJury && input.expertise !== undefined
+            ? { expertise: input.expertise }
+            : {}),
+          ...(!isPublicJury && input.bio !== undefined
+            ? { bio: input.bio }
+            : {}),
+          ...(!isPublicJury && input.showOnPublicResults !== undefined
             ? { showOnPublicResults: input.showOnPublicResults }
             : {}),
           ...(input.notifyOnInvitation !== undefined

@@ -604,7 +604,13 @@ export default function JuryProfileEditPage() {
             Un mail de confirmation sera envoye a la nouvelle adresse avant que le changement ne soit effectif.
           </p>
 
-          {/* ── PROFIL PUBLIC ── */}
+          {/* ── PROFIL PUBLIC ──
+              Only `pro` jurys can appear on the public palmares.
+              Public jurys stay anonymous so the whole section is hidden
+              from them — keeps the form short and avoids exposing a
+              toggle that does nothing for their account type. */}
+          {data?.juryProfile.juryType === "pro" && (
+          <>
           <SectionLabel>PROFIL PUBLIC</SectionLabel>
 
           {/* Expertise */}
@@ -763,6 +769,8 @@ export default function JuryProfileEditPage() {
               helperColor="var(--n-accent)"
             />
           </div>
+          </>
+          )}
 
           {/* ── SAVE BUTTON ── */}
           <div
