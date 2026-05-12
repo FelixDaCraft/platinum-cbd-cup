@@ -116,99 +116,105 @@ export function PostRatingChoiceModal({
   };
 
   return (
-    <DialogPrimitive.Root open={open}>
-      <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay
-          style={{
-            position: "fixed",
-            inset: 0,
-            zIndex: 100,
-            backgroundColor: "rgba(0,0,0,0.8)",
-            backdropFilter: "blur(8px)",
-            WebkitBackdropFilter: "blur(8px)",
-            animation: "nModalFadeIn 180ms ease-out both",
-          }}
-        />
-
-        <DialogPrimitive.Content
-          aria-labelledby="post-rating-title"
-          aria-describedby="post-rating-desc"
-          onPointerDownOutside={(e) => e.preventDefault()}
-          onEscapeKeyDown={(e) => e.preventDefault()}
-          style={{
-            position: "fixed",
-            top: "50%",
-            left: "50%",
-            transform: "translate(-50%, -50%)",
-            zIndex: 101,
-            width: "calc(100% - 32px)",
-            maxWidth: "480px",
-            backgroundColor: TOKENS.surface,
-            border: `1px solid ${TOKENS.borderVisible}`,
-            borderRadius: "16px",
-            padding: "32px",
-            outline: "none",
-            animation:
-              "nModalIn 180ms cubic-bezier(0.22, 1, 0.36, 1) both",
-          }}
-        >
-          {/* Local animation keyframes (scoped via unique animation names) */}
-          <style>{`
-            @keyframes nModalIn {
-              from { opacity: 0; transform: translate(-50%, -50%) scale(0.96); }
-              to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-            }
-            @keyframes nModalFadeIn {
-              from { opacity: 0; }
-              to   { opacity: 1; }
-            }
-            @media (prefers-reduced-motion: reduce) {
-              [data-radix-dialog-content],
-              [data-radix-dialog-overlay] {
-                animation: none !important;
-              }
-            }
-          `}</style>
-
-          {/* Status badge (dot + label) */}
-          <div
+    <>
+      {/* Keyframes registered globally — outside the portal so they remain
+          available even after the dialog unmounts. */}
+      <style>{`
+        @keyframes nModalIn {
+          from { opacity: 0; transform: translate(-50%, -50%) scale(0.96); }
+          to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+        }
+        @keyframes nModalFadeIn {
+          from { opacity: 0; }
+          to   { opacity: 1; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          [data-slot-post-rating-content],
+          [data-slot-post-rating-overlay] {
+            animation: none !important;
+          }
+        }
+      `}</style>
+      <DialogPrimitive.Root open={open}>
+        <DialogPrimitive.Portal>
+          <DialogPrimitive.Overlay
+            data-slot-post-rating-overlay=""
             style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "8px",
-              marginBottom: "24px",
+              position: "fixed",
+              inset: 0,
+              zIndex: 100,
+              backgroundColor: "rgba(0,0,0,0.8)",
+              backdropFilter: "blur(8px)",
+              WebkitBackdropFilter: "blur(8px)",
+              animation: "nModalFadeIn 180ms ease-out both",
+            }}
+          />
+
+          <DialogPrimitive.Content
+            data-slot-post-rating-content=""
+            aria-labelledby="post-rating-title"
+            aria-describedby="post-rating-desc"
+            onPointerDownOutside={(e) => e.preventDefault()}
+            onEscapeKeyDown={(e) => e.preventDefault()}
+            style={{
+              position: "fixed",
+              top: "50%",
+              left: "50%",
+              transform: "translate(-50%, -50%)",
+              zIndex: 101,
+              width: "calc(100% - 32px)",
+              maxWidth: "480px",
+              backgroundColor: TOKENS.surface,
+              border: `1px solid ${TOKENS.borderVisible}`,
+              borderRadius: "16px",
+              padding: "32px",
+              outline: "none",
+              animation:
+                "nModalIn 180ms cubic-bezier(0.22, 1, 0.36, 1) both",
             }}
           >
-            <span
+            {/* Title MUST be the first child so Radix's accessibility check
+                finds it on the first render walk. Status (success/warning)
+                is encoded by the small colored mono label directly underneath
+                the title — keeps type doing the hierarchy work. */}
+            <DialogPrimitive.Title
+              id="post-rating-title"
               style={{
-                width: "6px",
-                height: "6px",
-                borderRadius: "50%",
-                background: dotColor,
-                boxShadow: `0 0 8px ${dotColor}`,
-                flexShrink: 0,
+                fontFamily: MONO,
+                fontSize: "18px",
+                fontWeight: 700,
+                color: TOKENS.textDisplay,
+                letterSpacing: "0.06em",
+                textTransform: "uppercase",
+                margin: 0,
+                marginBottom: "8px",
+                lineHeight: 1.25,
               }}
-            />
-            <span style={labelStyle}>{labelText}</span>
-          </div>
+            >
+              {title}
+            </DialogPrimitive.Title>
 
-          {/* Title */}
-          <DialogPrimitive.Title
-            id="post-rating-title"
-            style={{
-              fontFamily: MONO,
-              fontSize: "18px",
-              fontWeight: 700,
-              color: TOKENS.textDisplay,
-              letterSpacing: "0.06em",
-              textTransform: "uppercase",
-              margin: 0,
-              marginBottom: "12px",
-              lineHeight: 1.25,
-            }}
-          >
-            {title}
-          </DialogPrimitive.Title>
+            {/* Status sub-label — colored mono caption */}
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+                marginBottom: "20px",
+              }}
+            >
+              <span
+                style={{
+                  width: "5px",
+                  height: "5px",
+                  borderRadius: "50%",
+                  background: dotColor,
+                  boxShadow: `0 0 6px ${dotColor}`,
+                  flexShrink: 0,
+                }}
+              />
+              <span style={labelStyle}>{labelText}</span>
+            </div>
 
           {/* Description */}
           <DialogPrimitive.Description
@@ -248,6 +254,7 @@ export function PostRatingChoiceModal({
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>
+    </>
   );
 }
 
