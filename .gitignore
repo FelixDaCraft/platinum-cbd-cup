@@ -60,3 +60,4 @@ public/uploads/*
 # Certificates
 certificates
 *.pem
+.local-sim/

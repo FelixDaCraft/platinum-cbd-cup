@@ -3,6 +3,42 @@
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { useRouter } from "next/navigation";
 
+/**
+ * Post-rating choice modal — Nothing design system.
+ *
+ * IMPORTANT: Radix Dialog portals to document.body, OUTSIDE the
+ * `.nothing-jury` wrapper. That means the `--n-*` CSS vars and the
+ * `.n-btn-*` utility classes defined under `.nothing-jury` are NOT
+ * inherited here. Every visual property therefore has to be inlined
+ * with hardcoded values pulled from the Nothing design tokens
+ * (see references/tokens.md + components.md):
+ *
+ *  - Backdrop:    rgba(0,0,0,0.8)
+ *  - Dialog bg:   #111111 (--surface)
+ *  - Border:      1px solid #333333 (--border-visible)
+ *  - Radius:      16px
+ *  - Max width:   480px
+ *  - Buttons:     Space Mono 13px UPPERCASE, letter-spacing 0.06em,
+ *                 padding 12px 24px, min-height 44px, radius 999px
+ *    Primary:     bg #FFFFFF, color #000000, no border
+ *    Secondary:   transparent, color #E8E8E8, 1px solid #333333
+ */
+
+const TOKENS = {
+  black: "#000000",
+  surface: "#111111",
+  borderVisible: "#333333",
+  textPrimary: "#E8E8E8",
+  textSecondary: "#999999",
+  textDisplay: "#FFFFFF",
+  success: "#4A9E5C",
+  warning: "#D4A843",
+} as const;
+
+const MONO = "'Space Mono', ui-monospace, 'SF Mono', Menlo, monospace";
+const SANS =
+  "'Space Grotesk', ui-sans-serif, system-ui, -apple-system, sans-serif";
+
 export interface PostRatingChoiceModalProps {
   open: boolean;
   mode: "submitted" | "draft";
@@ -26,66 +62,74 @@ export function PostRatingChoiceModal({
 }: PostRatingChoiceModalProps) {
   const router = useRouter();
 
-  // Determine title and description based on state
   let title: string;
   let description: string;
 
   if (mode === "submitted") {
     if (allComplete) {
-      title = "TOUTES LES NOTATIONS TERMINÉES";
+      title = "TOUTES LES NOTATIONS TERMINEES";
       description =
-        "Vous avez noté tous vos produits assignés. Excellente contribution !";
+        "Vous avez note tous vos produits assignes. Excellente contribution.";
     } else if (allCategoryComplete) {
-      title = "CATÉGORIE TERMINÉE";
+      title = "CATEGORIE TERMINEE";
       description =
-        "Toutes vos notations pour cette catégorie sont enregistrées.";
+        "Toutes vos notations pour cette categorie sont enregistrees.";
     } else {
       title = "NOTATION SOUMISE";
-      description = "Votre notation a bien été enregistrée et verrouillée.";
+      description = "Votre notation a bien ete enregistree et verrouillee.";
     }
   } else {
-    title = "BROUILLON ENREGISTRÉ";
+    title = "BROUILLON ENREGISTRE";
     description =
-      "Votre progression est sauvegardée. Vous pouvez reprendre plus tard.";
+      "Votre progression est sauvegardee. Vous pouvez reprendre plus tard.";
   }
 
-  // Determine primary CTA destination
   const showNextProduct =
     mode === "submitted" && !!nextProductId && !allComplete;
-  const showDashboard = mode === "submitted" && (allComplete || allCategoryComplete);
+  const showDashboard =
+    mode === "submitted" && (allComplete || allCategoryComplete);
 
-  const handleCategoryBack = () => {
+  const goCategory = () => {
     onClose();
     router.push(`/jury/cups/${cupId}/category/${categoryId}`);
   };
-
-  const handleNextProduct = () => {
+  const goNextProduct = () => {
     if (!nextProductId) return;
     onClose();
     router.push(`/jury/rate/${cupId}/product/${nextProductId}`);
   };
-
-  const handleDashboard = () => {
+  const goDashboard = () => {
     onClose();
     router.push("/jury/dashboard");
+  };
+
+  const dotColor = mode === "submitted" ? TOKENS.success : TOKENS.warning;
+  const labelText = mode === "submitted" ? "SOUMIS" : "BROUILLON";
+
+  const labelStyle: React.CSSProperties = {
+    fontFamily: MONO,
+    fontSize: "10.5px",
+    letterSpacing: "0.12em",
+    textTransform: "uppercase",
+    color: dotColor,
+    fontWeight: 500,
   };
 
   return (
     <DialogPrimitive.Root open={open}>
       <DialogPrimitive.Portal>
-        {/* Overlay — blur + semi-transparent */}
         <DialogPrimitive.Overlay
           style={{
             position: "fixed",
             inset: 0,
             zIndex: 100,
-            backgroundColor: "rgba(0,0,0,0.68)",
+            backgroundColor: "rgba(0,0,0,0.8)",
             backdropFilter: "blur(8px)",
             WebkitBackdropFilter: "blur(8px)",
+            animation: "nModalFadeIn 180ms ease-out both",
           }}
         />
 
-        {/* Modal content */}
         <DialogPrimitive.Content
           aria-labelledby="post-rating-title"
           aria-describedby="post-rating-desc"
@@ -98,88 +142,69 @@ export function PostRatingChoiceModal({
             transform: "translate(-50%, -50%)",
             zIndex: 101,
             width: "calc(100% - 32px)",
-            maxWidth: "460px",
-            backgroundColor: "var(--n-surface-raised)",
-            border: "1px solid var(--n-border-visible)",
-            borderRadius: "14px",
+            maxWidth: "480px",
+            backgroundColor: TOKENS.surface,
+            border: `1px solid ${TOKENS.borderVisible}`,
+            borderRadius: "16px",
             padding: "32px",
-            boxShadow:
-              "0 24px 60px rgba(0,0,0,0.6), 0 4px 16px rgba(0,0,0,0.4)",
             outline: "none",
+            animation:
+              "nModalIn 180ms cubic-bezier(0.22, 1, 0.36, 1) both",
           }}
-          // Radix animate-in/out via data-[state] attrs — handled by CSS below
         >
-          {/* Style block scoped to this modal via a wrapper div */}
+          {/* Local animation keyframes (scoped via unique animation names) */}
           <style>{`
-            [data-radix-dialog-content] {
-              animation: nModalIn 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
-            }
-            [data-radix-dialog-content][data-state="closed"] {
-              animation: nModalOut 120ms ease-in both;
-            }
             @keyframes nModalIn {
               from { opacity: 0; transform: translate(-50%, -50%) scale(0.96); }
               to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
             }
-            @keyframes nModalOut {
-              from { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-              to   { opacity: 0; transform: translate(-50%, -50%) scale(0.96); }
+            @keyframes nModalFadeIn {
+              from { opacity: 0; }
+              to   { opacity: 1; }
             }
             @media (prefers-reduced-motion: reduce) {
               [data-radix-dialog-content],
-              [data-radix-dialog-content][data-state="closed"] {
-                animation: none;
+              [data-radix-dialog-overlay] {
+                animation: none !important;
               }
             }
           `}</style>
 
-          {/* Status badge */}
+          {/* Status badge (dot + label) */}
           <div
             style={{
               display: "inline-flex",
               alignItems: "center",
-              gap: "6px",
-              marginBottom: "20px",
+              gap: "8px",
+              marginBottom: "24px",
             }}
           >
             <span
               style={{
-                display: "inline-block",
                 width: "6px",
                 height: "6px",
                 borderRadius: "50%",
-                background:
-                  mode === "submitted"
-                    ? "var(--n-success)"
-                    : "var(--n-warning)",
+                background: dotColor,
+                boxShadow: `0 0 8px ${dotColor}`,
                 flexShrink: 0,
               }}
             />
-            <span
-              className="n-label"
-              style={{
-                color:
-                  mode === "submitted"
-                    ? "var(--n-success)"
-                    : "var(--n-warning)",
-              }}
-            >
-              {mode === "submitted" ? "SOUMIS" : "BROUILLON"}
-            </span>
+            <span style={labelStyle}>{labelText}</span>
           </div>
 
           {/* Title */}
           <DialogPrimitive.Title
             id="post-rating-title"
-            className="n-font-data"
             style={{
-              fontSize: "16px",
+              fontFamily: MONO,
+              fontSize: "18px",
               fontWeight: 700,
-              color: "var(--n-text-display)",
+              color: TOKENS.textDisplay,
               letterSpacing: "0.06em",
               textTransform: "uppercase",
               margin: 0,
-              marginBottom: "10px",
+              marginBottom: "12px",
+              lineHeight: 1.25,
             }}
           >
             {title}
@@ -188,10 +213,10 @@ export function PostRatingChoiceModal({
           {/* Description */}
           <DialogPrimitive.Description
             id="post-rating-desc"
-            className="n-font-body"
             style={{
+              fontFamily: SANS,
               fontSize: "14px",
-              color: "var(--n-text-secondary)",
+              color: TOKENS.textSecondary,
               lineHeight: 1.55,
               margin: 0,
               marginBottom: "32px",
@@ -200,7 +225,7 @@ export function PostRatingChoiceModal({
             {description}
           </DialogPrimitive.Description>
 
-          {/* Actions */}
+          {/* Actions — stacked, primary on top */}
           <div
             style={{
               display: "flex",
@@ -208,37 +233,93 @@ export function PostRatingChoiceModal({
               gap: "10px",
             }}
           >
-            {/* Primary CTA */}
             {showNextProduct && nextProductId && (
-              <button
-                className="n-btn-primary"
-                onClick={handleNextProduct}
-                style={{ width: "100%" }}
-              >
-                PRODUIT SUIVANT
-              </button>
+              <PrimaryBtn onClick={goNextProduct}>PRODUIT SUIVANT</PrimaryBtn>
             )}
             {showDashboard && (
-              <button
-                className="n-btn-primary"
-                onClick={handleDashboard}
-                style={{ width: "100%" }}
-              >
+              <PrimaryBtn onClick={goDashboard}>
                 VOIR LE TABLEAU DE BORD
-              </button>
+              </PrimaryBtn>
             )}
-
-            {/* Secondary — always visible for submit mode; for draft it's the only CTA besides the implicit "stay" */}
-            <button
-              className="n-btn-secondary"
-              onClick={handleCategoryBack}
-              style={{ width: "100%" }}
-            >
-              RETOUR À LA CATÉGORIE
-            </button>
+            <SecondaryBtn onClick={goCategory}>
+              RETOUR A LA CATEGORIE
+            </SecondaryBtn>
           </div>
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>
+  );
+}
+
+const baseBtnStyle: React.CSSProperties = {
+  fontFamily: MONO,
+  fontSize: "13px",
+  fontWeight: 500,
+  letterSpacing: "0.06em",
+  textTransform: "uppercase",
+  padding: "12px 24px",
+  minHeight: "44px",
+  borderRadius: "999px",
+  cursor: "pointer",
+  width: "100%",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  transition: "background-color 120ms ease-out, border-color 120ms ease-out, color 120ms ease-out",
+};
+
+function PrimaryBtn({
+  children,
+  onClick,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        ...baseBtnStyle,
+        background: TOKENS.textDisplay,
+        color: TOKENS.black,
+        border: "none",
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = "#E8E8E8";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = TOKENS.textDisplay;
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function SecondaryBtn({
+  children,
+  onClick,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        ...baseBtnStyle,
+        background: "transparent",
+        color: TOKENS.textPrimary,
+        border: `1px solid ${TOKENS.borderVisible}`,
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.borderColor = TOKENS.textPrimary;
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.borderColor = TOKENS.borderVisible;
+      }}
+    >
+      {children}
+    </button>
   );
 }
