@@ -13,6 +13,8 @@ interface ProductRow {
   labelColor: string | null;
   /** True for the top-3 of a category — only these rows show their score. */
   isPodium: boolean;
+  /** Disqualified (cheating): "—" rank/code/score + a red DISQUALIFIÉ badge. */
+  disqualified: boolean;
 }
 
 interface RankingRowProps {
@@ -72,7 +74,7 @@ export function RankingRow({
           color: row.rank === 1 ? "var(--accent)" : "var(--fg)",
         }}
       >
-        {maskNonPodiumScore && !row.isPodium
+        {row.disqualified || (maskNonPodiumScore && !row.isPodium)
           ? "—"
           : row.rank > 0
             ? String(row.rank).padStart(2, "0")
@@ -87,7 +89,7 @@ export function RankingRow({
           letterSpacing: ".02em",
         }}
       >
-        {row.code}
+        {row.disqualified ? "—" : row.code}
       </span>
 
       {/* Variety / product name */}
@@ -112,10 +114,17 @@ export function RankingRow({
         {row.producerName}
       </span>
 
-      {/* Score — for public-jury cups it is revealed for the podium only and
-          medalists outside the top 3 get a "Médaillé" placeholder; pro cups
-          always show the number. */}
-      {maskNonPodiumScore && !row.isPodium ? (
+      {/* Score — disqualified rows never show a score; otherwise public-jury
+          cups reveal it for the podium only (medalists get "Médaillé") while
+          pro cups always show the number. */}
+      {row.disqualified ? (
+        <span
+          className="mono"
+          style={{ textAlign: "right", fontSize: 11, color: "var(--fg-3)" }}
+        >
+          —
+        </span>
+      ) : maskNonPodiumScore && !row.isPodium ? (
         <span
           className="mono score-medal"
           style={{
@@ -141,10 +150,27 @@ export function RankingRow({
         </span>
       )}
 
-      {/* Label — colored from cup_labels.color, omitted in podium-only mode */}
+      {/* Label — DISQUALIFIÉ badge for disqualified rows, else the cup_labels
+          colored badge. Omitted entirely in podium-only mode (no DQ present). */}
       {showLabel && (
         <span style={{ textAlign: "right" }}>
-          {row.labelName ? (
+          {row.disqualified ? (
+            <span
+              className="mono"
+              style={{
+                display: "inline-block",
+                padding: "4px 10px",
+                borderRadius: 999,
+                fontSize: 10,
+                letterSpacing: ".12em",
+                border: "1px solid var(--danger)",
+                color: "var(--danger)",
+                background: "color-mix(in srgb, var(--danger) 14%, transparent)",
+              }}
+            >
+              DISQUALIFIÉ
+            </span>
+          ) : row.labelName ? (
             <span
               className="mono"
               style={

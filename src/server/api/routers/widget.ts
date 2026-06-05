@@ -102,6 +102,8 @@ export const widgetRouter = createTRPCRouter({
             and(
               eq(products.registrationId, reg.registrationId),
               eq(products.excludedFromResults, false),
+              // Disqualified products never appear in the producer widget.
+              eq(products.disqualified, false),
               // Product has a label OR is on podium (rank 1, 2, or 3)
               or(
                 isNotNull(products.labelId),

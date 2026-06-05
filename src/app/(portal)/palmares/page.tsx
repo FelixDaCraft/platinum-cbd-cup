@@ -34,6 +34,9 @@ interface ProductRow {
   labelColor: string | null;
   /** True for the top-3 of a category — only these rows expose their score. */
   isPodium: boolean;
+  /** Disqualified (cheating): shown at the bottom with a "DISQUALIFIÉ" badge,
+   *  no score/rank/label, always visible regardless of the cup's display rule. */
+  disqualified: boolean;
 }
 
 /** Top-N ranks per category shown WITH their final score. Other label-winners
@@ -176,6 +179,7 @@ async function fetchProducts(
       categoryId: schema.categories.id,
       categoryName: schema.categories.name,
       categorySort: schema.categories.sortOrder,
+      disqualified: schema.products.disqualified,
       brandName: schema.producers.brandName,
       companyName: schema.producers.companyName,
     })
@@ -209,7 +213,8 @@ async function fetchProducts(
     .filter((r) => r.anonymousCode != null && r.finalScore != null)
     .map((r) => {
       const score = parseFloat(r.finalScore!);
-      const label = resolveLabel(score, labels);
+      const dq = r.disqualified;
+      const label = dq ? null : resolveLabel(score, labels);
       const rank = r.categoryRank ?? 0;
       return {
         rank,
@@ -222,9 +227,11 @@ async function fetchProducts(
         categoryId: r.categoryId ?? "",
         score,
         scoreFormatted: formatScore(score, cup.ratingScale),
-        labelName: cleanLabel(label?.name ?? null),
-        labelColor: label?.color ?? null,
-        isPodium: rank > 0 && rank <= PODIUM_DEPTH,
+        // Disqualified products never carry a label or a podium slot.
+        labelName: dq ? null : cleanLabel(label?.name ?? null),
+        labelColor: dq ? null : (label?.color ?? null),
+        isPodium: !dq && rank > 0 && rank <= PODIUM_DEPTH,
+        disqualified: dq,
       };
     });
 }
@@ -336,15 +343,23 @@ export default async function PalmaresPage({
     | "labels_and_podium"
     | "all";
 
-  const products = isPublicJuryCup
-    ? allProducts.filter((p) => p.isPodium || p.labelName != null)
-    : proVisibility === "all"
-      ? allProducts
-      : proVisibility === "podium"
-        ? allProducts.filter((p) => p.isPodium)
-        : proVisibility === "labels"
-          ? allProducts.filter((p) => p.labelName != null)
-          : allProducts.filter((p) => p.isPodium || p.labelName != null);
+  // A disqualified product is ALWAYS shown (as "DISQUALIFIÉ"), overriding the
+  // cup's normal display rule. Otherwise the standard public/pro logic applies.
+  const isVisible = (p: ProductRow): boolean => {
+    if (p.disqualified) return true;
+    if (isPublicJuryCup) return p.isPodium || p.labelName != null;
+    switch (proVisibility) {
+      case "all":
+        return true;
+      case "podium":
+        return p.isPodium;
+      case "labels":
+        return p.labelName != null;
+      default: // labels_and_podium
+        return p.isPodium || p.labelName != null;
+    }
+  };
+  const products = allProducts.filter(isVisible);
 
   // Public-jury cups mask the score everywhere except the podium; pro cups
   // always reveal it.
@@ -352,7 +367,11 @@ export default async function PalmaresPage({
 
   // Labels are always shown for public cups; for pro cups they follow the mode
   // (podium-only deliberately hides the label column + methodology table).
-  const showLabels = isPublicJuryCup || proVisibility !== "podium";
+  // A disqualified product forces the column on so its DISQUALIFIÉ badge has a
+  // home even in pro podium-only mode.
+  const hasDisqualified = products.some((p) => p.disqualified);
+  const showLabels =
+    isPublicJuryCup || proVisibility !== "podium" || hasDisqualified;
 
   if (products.length === 0) {
     return (
@@ -375,6 +394,9 @@ export default async function PalmaresPage({
   // committed (it then loses its score below, never contradicting the table).
   const top =
     [...products].filter((p) => p.isPodium).sort((a, b) => b.score - a.score)[0] ??
+    [...products]
+      .filter((p) => !p.disqualified)
+      .sort((a, b) => b.score - a.score)[0] ??
     [...products].sort((a, b) => b.score - a.score)[0]!;
 
   // Filter chips use real category metadata (sorted)
@@ -393,6 +415,11 @@ export default async function PalmaresPage({
       grouped.push(g);
     }
     g.rows.push(row);
+  }
+  // Disqualified products always sink to the bottom of their category (the sort
+  // is stable, so ranked rows keep their score-desc order above them).
+  for (const g of grouped) {
+    g.rows.sort((a, b) => Number(a.disqualified) - Number(b.disqualified));
   }
 
   // Dedupe labels by name (the prod data has duplicate rows like "Label OR" /

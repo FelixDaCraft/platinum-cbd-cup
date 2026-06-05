@@ -326,6 +326,7 @@ export const producerRouter = createTRPCRouter({
         categoryName: schema.categories.name,
         finalScore: schema.products.finalScore,
         categoryRank: schema.products.categoryRank,
+        disqualified: schema.products.disqualified,
         labelId: schema.cupLabels.id,
         labelName: schema.cupLabels.name,
         labelColor: schema.cupLabels.color,
@@ -356,6 +357,8 @@ export const producerRouter = createTRPCRouter({
         and(
           eq(schema.registrations.producerId, producerId),
           isNotNull(schema.products.labelId),
+          // A disqualified product is never counted as a label obtained.
+          eq(schema.products.disqualified, false),
           isNotNull(schema.cups.resultsPublishedAt)
         )
       )
@@ -405,6 +408,7 @@ export const producerRouter = createTRPCRouter({
         categoryName: schema.categories.name,
         finalScore: schema.products.finalScore,
         categoryRank: schema.products.categoryRank,
+        disqualified: schema.products.disqualified,
         labelId: schema.cupLabels.id,
         labelName: schema.cupLabels.name,
         labelColor: schema.cupLabels.color,
@@ -452,6 +456,7 @@ export const producerRouter = createTRPCRouter({
         categoryName: string;
         finalScore: number | null;
         categoryRank: number | null;
+        disqualified: boolean;
         label: { id: string; name: string; color: string } | null;
         registrationId: string;
       }>;
@@ -474,11 +479,12 @@ export const producerRouter = createTRPCRouter({
         categoryName: p.categoryName ?? "Sans catégorie",
         finalScore: p.finalScore ? parseFloat(p.finalScore) : null,
         categoryRank: p.categoryRank,
-        label: p.labelId ? {
-          id: p.labelId,
-          name: p.labelName!,
-          color: p.labelColor!,
-        } : null,
+        disqualified: p.disqualified,
+        // Disqualified products never carry a label.
+        label:
+          p.disqualified || !p.labelId
+            ? null
+            : { id: p.labelId, name: p.labelName!, color: p.labelColor! },
         registrationId: p.registrationId,
       });
     }

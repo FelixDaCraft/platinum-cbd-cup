@@ -49,8 +49,12 @@ export const products = pgTable(
     labelId: text("label_id").references(() => cupLabels.id, { onDelete: "set null" }),
     // Rank within category (1 = best score)
     categoryRank: integer("category_rank"),
-    // Excluded from public results (disqualified, rule violation, etc.)
+    // Excluded from public results (hidden entirely from the palmarès).
     excludedFromResults: boolean("excluded_from_results").notNull().default(false),
+    // Disqualified (cheating / rule violation): still listed publicly but shown
+    // as "DISQUALIFIÉ" at the bottom of its category — no score, no rank, no
+    // label — and excluded from every ranking (podium, best-in-show, widget…).
+    disqualified: boolean("disqualified").notNull().default(false),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },

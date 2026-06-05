@@ -495,7 +495,12 @@ export default function ProducerResultsPage() {
                             onClick={() => toggleProduct(product.id)}
                           >
                             <div className="flex items-center gap-3 flex-1 min-w-0">
-                              {product.label ? (
+                              {product.disqualified ? (
+                                <div
+                                  className="w-1 h-10 rounded-full flex-shrink-0"
+                                  style={{ backgroundColor: "var(--n-accent)" }}
+                                />
+                              ) : product.label ? (
                                 <div
                                   className="w-1 h-10 rounded-full flex-shrink-0"
                                   style={{
@@ -526,49 +531,63 @@ export default function ProducerResultsPage() {
                             </div>
 
                             <div className="flex items-center gap-4 shrink-0">
-                              {product.categoryRank && (
-                                <span
-                                  className="n-font-data text-xs"
-                                  style={{ color: "var(--n-warning)" }}
-                                >
-                                  {product.categoryRank === 1
-                                    ? "1ER"
-                                    : product.categoryRank === 2
-                                      ? "2EME"
-                                      : `${product.categoryRank}EME`}
-                                </span>
-                              )}
-
-                              {product.label && (
+                              {product.disqualified ? (
                                 <span
                                   className="n-tag"
                                   style={{
-                                    borderColor: product.label.color ?? "var(--n-warning)",
-                                    color: product.label.color ?? "var(--n-warning)",
+                                    borderColor: "var(--n-accent)",
+                                    color: "var(--n-accent)",
                                   }}
                                 >
-                                  {product.label.name}
+                                  DISQUALIFIÉ
                                 </span>
-                              )}
+                              ) : (
+                                <>
+                                  {product.categoryRank && (
+                                    <span
+                                      className="n-font-data text-xs"
+                                      style={{ color: "var(--n-warning)" }}
+                                    >
+                                      {product.categoryRank === 1
+                                        ? "1ER"
+                                        : product.categoryRank === 2
+                                          ? "2EME"
+                                          : `${product.categoryRank}EME`}
+                                    </span>
+                                  )}
 
-                              {product.finalScore !== null && (
-                                <div className="text-right min-w-[60px]">
-                                  <p
-                                    className="n-font-data font-bold text-xl leading-none"
-                                    style={{ color: "var(--n-text-display)" }}
-                                  >
-                                    {convertScoreToScale(
-                                      product.finalScore,
-                                      cup.ratingScale as RatingScale
-                                    )?.toFixed(1)}
-                                  </p>
-                                  <p
-                                    className="n-label mt-0.5"
-                                    style={{ color: "var(--n-text-disabled)" }}
-                                  >
-                                    /{getMaxScoreForScale(cup.ratingScale as RatingScale)}
-                                  </p>
-                                </div>
+                                  {product.label && (
+                                    <span
+                                      className="n-tag"
+                                      style={{
+                                        borderColor: product.label.color ?? "var(--n-warning)",
+                                        color: product.label.color ?? "var(--n-warning)",
+                                      }}
+                                    >
+                                      {product.label.name}
+                                    </span>
+                                  )}
+
+                                  {product.finalScore !== null && (
+                                    <div className="text-right min-w-[60px]">
+                                      <p
+                                        className="n-font-data font-bold text-xl leading-none"
+                                        style={{ color: "var(--n-text-display)" }}
+                                      >
+                                        {convertScoreToScale(
+                                          product.finalScore,
+                                          cup.ratingScale as RatingScale
+                                        )?.toFixed(1)}
+                                      </p>
+                                      <p
+                                        className="n-label mt-0.5"
+                                        style={{ color: "var(--n-text-disabled)" }}
+                                      >
+                                        /{getMaxScoreForScale(cup.ratingScale as RatingScale)}
+                                      </p>
+                                    </div>
+                                  )}
+                                </>
                               )}
 
                               <span
