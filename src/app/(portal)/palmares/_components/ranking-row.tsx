@@ -11,13 +11,21 @@ interface ProductRow {
   scoreFormatted: string;
   labelName: string | null;
   labelColor: string | null;
+  /** True for the top-3 of a category — only these rows show their score. */
+  isPodium: boolean;
 }
 
 interface RankingRowProps {
   row: ProductRow;
   isLast: boolean;
-  /** Hide the trailing label column when the cup is podium-only. */
+  /** Hide the trailing label column (pro cups in podium-only mode). */
   showLabel?: boolean;
+  /**
+   * Public-jury cups reveal the score for the podium only; medalists outside
+   * the top 3 get a "Médaillé" placeholder. Pro cups leave this false and show
+   * every visible score.
+   */
+  maskNonPodiumScore?: boolean;
 }
 
 /**
@@ -25,7 +33,12 @@ interface RankingRowProps {
  * Client component for the hover interaction. Columns:
  * Rang · Code · Variété · Producteur · Score · Label?
  */
-export function RankingRow({ row, isLast, showLabel = true }: RankingRowProps) {
+export function RankingRow({
+  row,
+  isLast,
+  showLabel = true,
+  maskNonPodiumScore = false,
+}: RankingRowProps) {
   return (
     <div
       className="ranking-row"
@@ -94,17 +107,34 @@ export function RankingRow({ row, isLast, showLabel = true }: RankingRowProps) {
         {row.producerName}
       </span>
 
-      {/* Score */}
-      <span
-        className="tabular"
-        style={{
-          textAlign: "right",
-          fontSize: 16,
-          color: "var(--accent)",
-        }}
-      >
-        {row.scoreFormatted}
-      </span>
+      {/* Score — for public-jury cups it is revealed for the podium only and
+          medalists outside the top 3 get a "Médaillé" placeholder; pro cups
+          always show the number. */}
+      {maskNonPodiumScore && !row.isPodium ? (
+        <span
+          className="mono score-medal"
+          style={{
+            textAlign: "right",
+            fontSize: 11,
+            letterSpacing: ".08em",
+            textTransform: "uppercase",
+            color: "var(--fg-3)",
+          }}
+        >
+          Médaillé
+        </span>
+      ) : (
+        <span
+          className="tabular"
+          style={{
+            textAlign: "right",
+            fontSize: 16,
+            color: "var(--accent)",
+          }}
+        >
+          {row.scoreFormatted}
+        </span>
+      )}
 
       {/* Label — colored from cup_labels.color, omitted in podium-only mode */}
       {showLabel && (

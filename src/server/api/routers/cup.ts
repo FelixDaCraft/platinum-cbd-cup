@@ -807,6 +807,9 @@ export const cupRouter = createTRPCRouter({
         cupId: cup.id,
         cupName: cup.name,
         status: cup.status,
+        // "public" (public-jury) cups use a fixed restricted public display;
+        // "pro" cups keep the organizer-configured visibility below.
+        type: cup.type,
         resultsPublishedAt: cup.resultsPublishedAt,
         resultsVisibility: cup.resultsVisibility ?? "labels",
         canPublishResults: cup.status === "completed",
