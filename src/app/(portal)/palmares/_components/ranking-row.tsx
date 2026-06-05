@@ -62,7 +62,8 @@ export function RankingRow({
         (e.currentTarget as HTMLDivElement).style.background = "transparent";
       }}
     >
-      {/* Rank within category */}
+      {/* Rank within category — hidden (—) whenever the score is hidden, so a
+          public-jury medalist outside the top 3 exposes neither rank nor note. */}
       <span
         className="tabular"
         style={{
@@ -71,7 +72,11 @@ export function RankingRow({
           color: row.rank === 1 ? "var(--accent)" : "var(--fg)",
         }}
       >
-        {row.rank > 0 ? String(row.rank).padStart(2, "0") : "—"}
+        {maskNonPodiumScore && !row.isPodium
+          ? "—"
+          : row.rank > 0
+            ? String(row.rank).padStart(2, "0")
+            : "—"}
       </span>
 
       {/* Anonymous code */}
