@@ -285,6 +285,7 @@ export interface ProductResultData {
   categoryRank: number | null;
   totalInCategory: number;
   percentile: number | null;
+  disqualified: boolean;
   label: {
     name: string;
     color: string;
@@ -428,9 +429,11 @@ function createProductPage(
         React.createElement(
           Text,
           { style: styles.resultValueAmber },
-          product.finalScore !== null
-            ? formatScoreForScale(product.finalScore, product.ratingScale)
-            : "N/A"
+          product.disqualified
+            ? "—"
+            : product.finalScore !== null
+              ? formatScoreForScale(product.finalScore, product.ratingScale)
+              : "N/A"
         )
       ),
       React.createElement(
@@ -440,9 +443,11 @@ function createProductPage(
         React.createElement(
           Text,
           { style: styles.resultValue },
-          product.categoryRank !== null
-            ? `${product.categoryRank}/${product.totalInCategory}`
-            : "N/A"
+          product.disqualified
+            ? "—"
+            : product.categoryRank !== null
+              ? `${product.categoryRank}/${product.totalInCategory}`
+              : "N/A"
         )
       ),
       React.createElement(
@@ -452,9 +457,13 @@ function createProductPage(
         React.createElement(
           Text,
           { style: styles.resultValue },
-          product.percentile !== null ? `Top ${100 - product.percentile}%` : "N/A"
+          product.disqualified
+            ? "—"
+            : product.percentile !== null
+              ? `Top ${100 - product.percentile}%`
+              : "N/A"
         ),
-        product.percentile !== null
+        !product.disqualified && product.percentile !== null
           ? React.createElement(
               Text,
               { style: { fontSize: 6.5, color: "#6b7280", marginTop: 1, textAlign: "center" } },
@@ -466,7 +475,13 @@ function createProductPage(
         View,
         { style: styles.resultBoxDivider },
         React.createElement(Text, { style: styles.resultLabel }, "Label"),
-        product.label
+        product.disqualified
+          ? React.createElement(
+              View,
+              { style: [styles.labelBadge, { backgroundColor: "#d71921" }] },
+              React.createElement(Text, { style: styles.labelText }, "DISQUALIFIÉ")
+            )
+          : product.label
           ? React.createElement(
               View,
               { style: [styles.labelBadge, { backgroundColor: product.label.color }] },
@@ -1654,7 +1669,10 @@ export async function getProductResultsForPdf(
     categoryRank,
     totalInCategory,
     percentile,
-    label: product.label
+    disqualified: product.disqualified,
+    label: product.disqualified
+      ? null
+      : product.label
       ? {
           name: product.label.name,
           color: product.label.color ?? "#888888",
