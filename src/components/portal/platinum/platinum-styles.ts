@@ -606,6 +606,14 @@ h2.section-title{
     font-size: 22px !important;
     text-align: right;
   }
+  /* Medalists outside the top 3 show the "Médaillé" placeholder instead of a
+     number — keep it small so it doesn't inherit the 22px score sizing. */
+  .ranking-row > :nth-child(5).score-medal{
+    font-size: 10px !important;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--fg-3) !important;
+  }
   .ranking-row > :nth-child(6){
     grid-area: label;
     align-self: center;

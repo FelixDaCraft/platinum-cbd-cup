@@ -32,7 +32,13 @@ interface ProductRow {
   scoreFormatted: string;
   labelName: string | null;
   labelColor: string | null;
+  /** True for the top-3 of a category — only these rows expose their score. */
+  isPodium: boolean;
 }
+
+/** Top-N ranks per category shown WITH their final score. Other label-winners
+ *  are listed without a score (see the public results policy in the page). */
+const PODIUM_DEPTH = 3;
 
 interface CategoryGroup {
   id: string;
@@ -204,8 +210,9 @@ async function fetchProducts(
     .map((r) => {
       const score = parseFloat(r.finalScore!);
       const label = resolveLabel(score, labels);
+      const rank = r.categoryRank ?? 0;
       return {
-        rank: r.categoryRank ?? 0,
+        rank,
         code: r.anonymousCode!,
         productName: r.productName ?? "",
         // Company first (the entity), brand second as a fallback when the
@@ -217,6 +224,7 @@ async function fetchProducts(
         scoreFormatted: formatScore(score, cup.ratingScale),
         labelName: cleanLabel(label?.name ?? null),
         labelColor: label?.color ?? null,
+        isPodium: rank > 0 && rank <= PODIUM_DEPTH,
       };
     });
 }
@@ -310,43 +318,51 @@ export default async function PalmaresPage({
     fetchPublicJuries(selectedCup.id),
   ]);
 
-  // Apply the cup's resultsVisibility setting before rendering. Choices made
-  // by the organizer in the dashboard:
-  //  - "podium"            → top 3 ranks per category only
-  //  - "labels"            → only products that earned a label (Or/Argent/Bronze)
-  //  - "labels_and_podium" → union of the two
-  //  - "all"               → no filtering (every scored product shown)
-  const visibility = (selectedCup.resultsVisibility ?? "labels") as
+  // Public results policy depends on the cup's jury model:
+  //
+  //  • PUBLIC-JURY cups → restricted display, regardless of resultsVisibility:
+  //      - Podium    : top 3 of each category, shown WITH their final score.
+  //      - Médaillés : every other label-winner, shown WITH the label but
+  //                    WITHOUT the score ("Médaillé" placeholder).
+  //      - Everything else (no podium, no label) is hidden.
+  //
+  //  • PRO-PANEL cups → the organizer-configured resultsVisibility, with full
+  //    scores shown for every visible product (the historical behaviour).
+  const isPublicJuryCup = selectedCup.type === "public";
+
+  const proVisibility = (selectedCup.resultsVisibility ?? "labels") as
     | "podium"
     | "labels"
     | "labels_and_podium"
     | "all";
-  const PODIUM_DEPTH = 3;
-  const products =
-    visibility === "all"
+
+  const products = isPublicJuryCup
+    ? allProducts.filter((p) => p.isPodium || p.labelName != null)
+    : proVisibility === "all"
       ? allProducts
-      : visibility === "podium"
-        ? allProducts.filter((p) => p.rank > 0 && p.rank <= PODIUM_DEPTH)
-        : visibility === "labels"
+      : proVisibility === "podium"
+        ? allProducts.filter((p) => p.isPodium)
+        : proVisibility === "labels"
           ? allProducts.filter((p) => p.labelName != null)
-          : // labels_and_podium
-            allProducts.filter(
-              (p) =>
-                p.labelName != null ||
-                (p.rank > 0 && p.rank <= PODIUM_DEPTH),
-            );
+          : allProducts.filter((p) => p.isPodium || p.labelName != null);
 
-  const visibilityCopy: Record<typeof visibility, string> = {
-    podium: "Podium uniquement — les 3 premiers de chaque catégorie",
-    labels: "Produits médaillés uniquement",
-    labels_and_podium:
-      "Podium + médaillés — top 3 de chaque catégorie et tous les produits avec un label",
-    all: "Palmarès intégral",
-  };
+  // Public-jury cups mask the score everywhere except the podium; pro cups
+  // always reveal it.
+  const maskNonPodiumScore = isPublicJuryCup;
 
-  // When the organizer publishes podium-only, labels are deliberately hidden
-  // from the public view (no Or/Argent/Bronze pills, no methodology table).
-  const showLabels = visibility !== "podium";
+  // Labels are always shown for public cups; for pro cups they follow the mode
+  // (podium-only deliberately hides the label column + methodology table).
+  const showLabels = isPublicJuryCup || proVisibility !== "podium";
+
+  const policyNote = isPublicJuryCup
+    ? "Top 3 noté · médaillés affichés avec leur label, sans la note"
+    : {
+        podium: "Podium uniquement — les 3 premiers de chaque catégorie",
+        labels: "Produits médaillés uniquement",
+        labels_and_podium:
+          "Podium + médaillés — top 3 de chaque catégorie et tous les produits avec un label",
+        all: "Palmarès intégral",
+      }[proVisibility];
 
   if (products.length === 0) {
     return (
@@ -362,8 +378,14 @@ export default async function PalmaresPage({
     );
   }
 
-  // Best-in-show = highest absolute score across all VISIBLE products
-  const top = [...products].sort((a, b) => b.score - a.score)[0]!;
+  // Best-in-show = highest-scoring product. Scores are a podium-only signal,
+  // so the hero is drawn from the podium first. In practice the global top
+  // scorer is always a category rank-1 (podium), so this matches the absolute
+  // max; the fallback only guards degenerate editions where ranks were never
+  // committed (it then loses its score below, never contradicting the table).
+  const top =
+    [...products].filter((p) => p.isPodium).sort((a, b) => b.score - a.score)[0] ??
+    [...products].sort((a, b) => b.score - a.score)[0]!;
 
   // Filter chips use real category metadata (sorted)
   const activeCategoryId = sp.cat;
@@ -486,31 +508,36 @@ export default async function PalmaresPage({
               flexWrap: "wrap",
             }}
           >
-            <div>
-              <div
-                className="mono fg3"
-                style={{
-                  fontSize: 11,
-                  letterSpacing: ".1em",
-                  textTransform: "uppercase",
-                }}
-              >
-                Score final · {selectedCup.ratingScale ?? "0-20"}
+            {/* Public-jury cups expose the hero score only when the best-in-show
+                is a podium product (consistent with the table's top-3-only
+                policy); pro cups always show it. */}
+            {(top.isPodium || !maskNonPodiumScore) && (
+              <div>
+                <div
+                  className="mono fg3"
+                  style={{
+                    fontSize: 11,
+                    letterSpacing: ".1em",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  Score final · {selectedCup.ratingScale ?? "0-20"}
+                </div>
+                <div
+                  className="mono tabular"
+                  style={{
+                    fontSize: 56,
+                    fontWeight: 300,
+                    letterSpacing: "-0.02em",
+                    color: "var(--accent)",
+                  }}
+                >
+                  {top.scoreFormatted}
+                </div>
               </div>
-              <div
-                className="mono tabular"
-                style={{
-                  fontSize: 56,
-                  fontWeight: 300,
-                  letterSpacing: "-0.02em",
-                  color: "var(--accent)",
-                }}
-              >
-                {top.scoreFormatted}
-              </div>
-            </div>
+            )}
 
-            {showLabels && top.labelName && (
+            {top.labelName && (
               <div>
                 <div
                   className="mono fg3"
@@ -540,7 +567,7 @@ export default async function PalmaresPage({
         </div>
       </section>
 
-      {/* ── VISIBILITY NOTE ─────────────────────────────────────────── */}
+      {/* ── RESULTS POLICY NOTE ─────────────────────────────────────── */}
       <div
         className="mono"
         style={{
@@ -555,8 +582,8 @@ export default async function PalmaresPage({
           flexWrap: "wrap",
         }}
       >
-        <span style={{ color: "var(--accent)" }}>· Mode</span>
-        <span>{visibilityCopy[visibility]}</span>
+        <span style={{ color: "var(--accent)" }}>· Affichage</span>
+        <span>{policyNote}</span>
       </div>
 
       {/* ── CATEGORY FILTER CHIPS ───────────────────────────────────── */}
@@ -612,7 +639,9 @@ export default async function PalmaresPage({
           padding: 0,
           overflow: "hidden",
           marginBottom: 24,
-          background: "color-mix(in srgb, var(--bg-2) 60%, transparent)",
+          // Mostly opaque so the table text stays legible over the 3D emblem
+          // backdrop (the glass blur is kept for a subtle depth hint only).
+          background: "color-mix(in srgb, var(--bg-2) 94%, transparent)",
           backdropFilter: "blur(14px) saturate(140%)",
           WebkitBackdropFilter: "blur(14px) saturate(140%)",
         }}
@@ -699,6 +728,7 @@ export default async function PalmaresPage({
                   row={row}
                   isLast={i === group.rows.length - 1}
                   showLabel={showLabels}
+                  maskNonPodiumScore={maskNonPodiumScore}
                 />
               ))}
             </div>
@@ -825,11 +855,8 @@ export default async function PalmaresPage({
       )}
 
       {/* ── METHODOLOGY ─────────────────────────────────────────────── */}
-      <section
-        className={showLabels ? "grid g-2" : ""}
-        style={{ marginTop: 32 }}
-      >
-        {showLabels && (
+      {showLabels && (
+        <section className="grid g-2" style={{ marginTop: 32 }}>
           <div
             className="card"
             data-methodology-card
@@ -868,9 +895,8 @@ export default async function PalmaresPage({
               )}
             </div>
           </div>
-        )}
-
-      </section>
+        </section>
+      )}
       </div>
     </>
   );

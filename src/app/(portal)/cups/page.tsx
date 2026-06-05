@@ -346,7 +346,7 @@ export default async function CupsPage() {
               Cups<em>.</em>
             </h1>
             <p className="lede" style={{ maxWidth: "52ch" }}>
-              Toutes les éditions du Platinum CBD Cup — concours d'évaluation
+              Toutes les éditions de la Platinum CBD Cup — concours d'évaluation
               aveugle par un panel indépendant de jurés certifiés.
             </p>
           </div>

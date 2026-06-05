@@ -94,7 +94,7 @@ export const metadata: Metadata = {
     template: `%s | ${ORGANIZATION_NAME}`,
   },
   description:
-    "Le concours de référence dédié aux meilleurs CBD de France. Découvrez les médaillés, les producteurs, et les résultats du Platinum CBD Cup.",
+    "Le concours de référence dédié aux meilleurs CBD de France. Découvrez les médaillés, les producteurs, et les résultats de la Platinum CBD Cup.",
   keywords: [
     "Platinum CBD Cup",
     "CBD",

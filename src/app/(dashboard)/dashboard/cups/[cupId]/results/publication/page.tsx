@@ -364,7 +364,10 @@ export default function PublicationPage() {
         </div>
       </div>
 
-      {/* Visibility Settings */}
+      {/* Visibility — "pro" cups pick a display mode; "public" (public-jury)
+          cups follow a fixed public policy (top 3 scored, medalists label-only),
+          so the per-cup selector is replaced by an explanatory note for them. */}
+      {data.type === "pro" ? (
       <div
         style={{
           background: "var(--n-surface)",
@@ -470,6 +473,73 @@ export default function PublicationPage() {
           </RadioGroup>
         </div>
       </div>
+      ) : (
+        <div
+          style={{
+            background: "var(--n-surface)",
+            border: "1px solid var(--n-border)",
+            borderRadius: "12px",
+            overflow: "hidden",
+          }}
+        >
+          <div
+            style={{
+              padding: "16px 20px",
+              borderBottom: "1px solid var(--n-border)",
+            }}
+          >
+            <p
+              style={{
+                fontFamily: "'Doto', 'Space Mono', monospace",
+                fontSize: "12px",
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                color: "var(--n-text-display)",
+                fontWeight: 700,
+                marginBottom: "2px",
+              }}
+            >
+              AFFICHAGE PUBLIC DES RÉSULTATS
+            </p>
+            <p className="n-label">
+              Règle standard, identique pour toutes les éditions à jury public
+            </p>
+          </div>
+          <div style={{ padding: "20px" }}>
+            <div
+              style={{ display: "flex", gap: "12px", alignItems: "flex-start" }}
+            >
+              <Trophy
+                className="h-4 w-4 flex-shrink-0 mt-0.5"
+                style={{ color: "var(--n-text-display)" }}
+              />
+              <div
+                className="space-y-3"
+                style={{ fontSize: "13px", color: "var(--n-text-secondary)" }}
+              >
+                <p>
+                  <strong style={{ color: "var(--n-text-primary)" }}>
+                    Top 3 de chaque catégorie
+                  </strong>{" "}
+                  — affiché avec sa note finale.
+                </p>
+                <p>
+                  <strong style={{ color: "var(--n-text-primary)" }}>
+                    Producteurs médaillés (hors top 3)
+                  </strong>{" "}
+                  — affichés avec leur label, sans la note.
+                </p>
+                <p>
+                  <strong style={{ color: "var(--n-text-primary)" }}>
+                    Autres produits
+                  </strong>{" "}
+                  — non affichés sur la page publique.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Info note */}
       <div
