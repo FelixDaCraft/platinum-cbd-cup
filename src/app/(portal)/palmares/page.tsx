@@ -354,16 +354,6 @@ export default async function PalmaresPage({
   // (podium-only deliberately hides the label column + methodology table).
   const showLabels = isPublicJuryCup || proVisibility !== "podium";
 
-  const policyNote = isPublicJuryCup
-    ? "Top 3 noté · médaillés affichés avec leur label, sans la note"
-    : {
-        podium: "Podium uniquement — les 3 premiers de chaque catégorie",
-        labels: "Produits médaillés uniquement",
-        labels_and_podium:
-          "Podium + médaillés — top 3 de chaque catégorie et tous les produits avec un label",
-        all: "Palmarès intégral",
-      }[proVisibility];
-
   if (products.length === 0) {
     return (
       <div className="page-enter">
@@ -566,25 +556,6 @@ export default async function PalmaresPage({
           </div>
         </div>
       </section>
-
-      {/* ── RESULTS POLICY NOTE ─────────────────────────────────────── */}
-      <div
-        className="mono"
-        style={{
-          marginBottom: 16,
-          fontSize: 11,
-          letterSpacing: ".08em",
-          textTransform: "uppercase",
-          color: "var(--fg-3)",
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-          flexWrap: "wrap",
-        }}
-      >
-        <span style={{ color: "var(--accent)" }}>· Affichage</span>
-        <span>{policyNote}</span>
-      </div>
 
       {/* ── CATEGORY FILTER CHIPS ───────────────────────────────────── */}
       <div
