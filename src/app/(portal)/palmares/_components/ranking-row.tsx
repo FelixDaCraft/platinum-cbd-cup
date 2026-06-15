@@ -28,6 +28,8 @@ interface RankingRowProps {
    * every visible score.
    */
   maskNonPodiumScore?: boolean;
+  /** Edition with no numeric notes (e.g. 2023) — the score cell shows "—". */
+  hideScore?: boolean;
 }
 
 /**
@@ -40,6 +42,7 @@ export function RankingRow({
   isLast,
   showLabel = true,
   maskNonPodiumScore = false,
+  hideScore = false,
 }: RankingRowProps) {
   return (
     <div
@@ -114,10 +117,10 @@ export function RankingRow({
         {row.producerName}
       </span>
 
-      {/* Score — disqualified rows never show a score; otherwise public-jury
-          cups reveal it for the podium only (medalists get "Médaillé") while
-          pro cups always show the number. */}
-      {row.disqualified ? (
+      {/* Score — editions without notes (2023) and disqualified rows show "—";
+          otherwise public-jury cups reveal it for the podium only (medalists get
+          "Médaillé") while pro cups always show the number. */}
+      {hideScore || row.disqualified ? (
         <span
           className="mono"
           style={{ textAlign: "right", fontSize: 11, color: "var(--fg-3)" }}

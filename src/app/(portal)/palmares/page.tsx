@@ -338,6 +338,10 @@ export default async function PalmaresPage({
     .getFullYear()
     .toString();
 
+  // The 2023 edition was ranked by the judges' placement, not by numeric notes,
+  // so its palmarès shows the ranking WITHOUT any score (Thomas, 06/2026).
+  const hideScores = selectedYear === "2023";
+
   const [labels, allCategories, allProducts, publicJuries] = await Promise.all([
     fetchCupLabels(selectedCup.id),
     fetchCategories(selectedCup.id),
@@ -379,19 +383,26 @@ export default async function PalmaresPage({
         return p.isPodium || p.labelName != null;
     }
   };
-  const products = allProducts.filter(isVisible);
+  // Public winner medal: each public category's rank-1 keeps a "Prix du public"
+  // badge even when its real (often low) score earns no score-based label, so
+  // the winner is never left bare (Thomas, 06/2026).
+  const withPublicMedal = isPublicJuryCup
+    ? allProducts.map((p) =>
+        p.rank === 1 && !p.disqualified && !p.labelName
+          ? { ...p, labelName: "Prix du public", labelColor: "var(--accent)" }
+          : p,
+      )
+    : allProducts;
+  const products = withPublicMedal.filter(isVisible);
 
   // Public-jury cups mask the score everywhere except the podium; pro cups
   // always reveal it.
   const maskNonPodiumScore = isPublicJuryCup;
 
-  // Labels are always shown for public cups; for pro cups they follow the mode
-  // (podium-only deliberately hides the label column + methodology table).
-  // A disqualified product forces the column on so its DISQUALIFIÉ badge has a
-  // home even in pro podium-only mode.
-  const hasDisqualified = products.some((p) => p.disqualified);
-  const showLabels =
-    isPublicJuryCup || proVisibility !== "podium" || hasDisqualified;
+  // Labels/medals are a PUBLIC-jury signal only — the Pro jury never shows label
+  // badges, on any edition (Thomas, 06/2026). This also keeps the methodology
+  // table public-only.
+  const showLabels = isPublicJuryCup;
 
   if (products.length === 0) {
     return (
@@ -535,6 +546,7 @@ export default async function PalmaresPage({
           isLast={i === group.rows.length - 1}
           showLabel={showLabels}
           maskNonPodiumScore={maskNonPodiumScore}
+          hideScore={hideScores}
         />
       ))}
     </div>
@@ -646,7 +658,7 @@ export default async function PalmaresPage({
             {/* Public-jury cups expose the hero score only when the best-in-show
                 is a podium product (consistent with the table's top-3-only
                 policy); pro cups always show it. */}
-            {(top.isPodium || !maskNonPodiumScore) && (
+            {!hideScores && (top.isPodium || !maskNonPodiumScore) && (
               <div>
                 <div
                   className="mono fg3"
@@ -672,7 +684,7 @@ export default async function PalmaresPage({
               </div>
             )}
 
-            {top.labelName && (
+            {showLabels && top.labelName && (
               <div>
                 <div
                   className="mono fg3"
