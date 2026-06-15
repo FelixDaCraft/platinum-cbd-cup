@@ -253,8 +253,8 @@ const cup2025Pro: CupImport = {
     { key: "outdoor-eu", code: "OUT", name: "Fleurs CBD Outdoor (Europe)" },
     { key: "greenhouse-eu", code: "GRN", name: "Fleurs CBD Greenhouse (Europe)" },
     { key: "hash-dry", code: "HDR", name: "Hash Dry (Europe)" },
-    { key: "hash-iol", code: "HIO", name: "Hash Ice-O-Lator" },
-    { key: "edibles", code: "EDI", name: "Edibles" },
+    { key: "hash-iol", code: "HIO", name: "Hash Ice-O-Lator (France)" },
+    { key: "edibles", code: "EDI", name: "Edibles (France)" },
   ],
   labels: STANDARD_LABELS,
   products: [
@@ -311,8 +311,8 @@ const cup2025Public: CupImport = {
     { key: "outdoor-eu", code: "OUT", name: "Fleurs CBD Outdoor (Europe)" },
     { key: "greenhouse-eu", code: "GRN", name: "Fleurs CBD Greenhouse (Europe)" },
     { key: "hash-dry", code: "HDR", name: "Hash Dry (Europe)" },
-    { key: "hash-iol", code: "HIO", name: "Hash Ice-O-Lator" },
-    { key: "edibles", code: "EDI", name: "Edibles" },
+    { key: "hash-iol", code: "HIO", name: "Hash Ice-O-Lator (France)" },
+    { key: "edibles", code: "EDI", name: "Edibles (France)" },
   ],
   labels: STANDARD_LABELS,
   products: [

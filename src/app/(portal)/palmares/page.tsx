@@ -77,6 +77,26 @@ function cleanLabel(name: string | null): string | null {
   return name.replace(/^Label\s+/i, "").trim().toUpperCase();
 }
 
+type Region = "FR" | "EU";
+
+/**
+ * 2025 introduced a France/Europe geographic split. A category encodes its
+ * region as a "(France)" / "(Europe)" suffix in its name. Returns null for
+ * editions that don't use the convention (2023/2024/2026), so those keep the
+ * flat category list.
+ */
+function categoryRegion(name: string): Region | null {
+  if (/\(\s*france\s*\)\s*$/i.test(name)) return "FR";
+  if (/\(\s*europe\s*\)\s*$/i.test(name)) return "EU";
+  return null;
+}
+
+/** Drops the trailing "(France)"/"(Europe)" tag — the section banner carries
+ *  the region, so the per-category header doesn't repeat it. */
+function stripRegion(name: string): string {
+  return name.replace(/\s*\(\s*(?:france|europe)\s*\)\s*$/i, "").trim();
+}
+
 function formatScore(score: number, scale: string | null | undefined): string {
   if (scale === "0-100") return score.toFixed(1);
   if (scale === "0-5") return score.toFixed(2);
@@ -422,6 +442,104 @@ export default async function PalmaresPage({
     g.rows.sort((a, b) => Number(a.disqualified) - Number(b.disqualified));
   }
 
+  // Geographic split (2025+): when the cup's categories carry a "(France)" /
+  // "(Europe)" tag, the rankings are presented under two "Classement" banners
+  // — France first, then Europe — each preserving the category sort order.
+  // Editions without the tag (2023/2024/2026) fall through to the flat list.
+  const cupHasRegions = allCategories.some(
+    (c) => categoryRegion(c.name) !== null,
+  );
+  const regionSections: { label: string; groups: CategoryGroup[] }[] = [];
+  if (cupHasRegions) {
+    const franceGroups = grouped.filter((g) => categoryRegion(g.name) === "FR");
+    const europeGroups = grouped.filter((g) => categoryRegion(g.name) === "EU");
+    const otherGroups = grouped.filter((g) => categoryRegion(g.name) === null);
+    if (franceGroups.length > 0)
+      regionSections.push({ label: "France", groups: franceGroups });
+    if (europeGroups.length > 0)
+      regionSections.push({ label: "Europe", groups: europeGroups });
+    if (otherGroups.length > 0)
+      regionSections.push({ label: "Autres", groups: otherGroups });
+  }
+
+  // Single category block (header + column labels + rows). Reused by both the
+  // flat list and the region-grouped layout. `withTopBorder` draws the divider
+  // between consecutive categories (the first in a list/section omits it).
+  const renderCategory = (group: CategoryGroup, withTopBorder: boolean) => (
+    <div key={group.id}>
+      {/* Category header */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "baseline",
+          justifyContent: "space-between",
+          padding: "20px 28px 14px",
+          borderTop: withTopBorder ? "1px solid var(--line)" : 0,
+        }}
+      >
+        <div
+          className="mono"
+          style={{
+            fontSize: 17,
+            letterSpacing: "-0.01em",
+            textTransform: "uppercase",
+            color: "var(--fg)",
+          }}
+        >
+          {cupHasRegions ? stripRegion(group.name) : group.name}
+        </div>
+        <div
+          className="mono fg3"
+          style={{
+            fontSize: 11,
+            letterSpacing: ".1em",
+            textTransform: "uppercase",
+          }}
+        >
+          {group.rows.length} {group.rows.length > 1 ? "produits" : "produit"}
+        </div>
+      </div>
+
+      {/* Column header — desktop only. The mobile card layout is
+          self-explanatory so the column header is hidden via CSS below 880px. */}
+      <div
+        className="ranking-header"
+        style={{
+          display: "grid",
+          gridTemplateColumns: showLabels
+            ? "60px 80px 1.2fr 1fr 90px 110px"
+            : "60px 80px 1.2fr 1fr 90px",
+          padding: "10px 28px",
+          borderTop: "1px solid var(--line)",
+          borderBottom: "1px solid var(--line)",
+          fontFamily: "var(--mono)",
+          fontSize: 10,
+          letterSpacing: ".12em",
+          textTransform: "uppercase",
+          color: "var(--fg-3)",
+        }}
+      >
+        <span>Rang</span>
+        <span>Code</span>
+        <span>Variété</span>
+        <span>Producteur</span>
+        <span style={{ textAlign: "right" }}>Score</span>
+        {showLabels && <span style={{ textAlign: "right" }}>Label</span>}
+      </div>
+
+      {/* Rows */}
+      {group.rows.map((row, i) => (
+        <RankingRow
+          key={row.code + row.categoryId}
+          row={row}
+          isLast={i === group.rows.length - 1}
+          showLabel={showLabels}
+          maskNonPodiumScore={maskNonPodiumScore}
+        />
+      ))}
+    </div>
+  );
+
   // Dedupe labels by name (the prod data has duplicate rows like "Label OR" /
   // "Label OR" or "Label Argent" / "Label ARGENT" — same threshold + color).
   const labelLegend = Array.from(
@@ -655,82 +773,57 @@ export default async function PalmaresPage({
           >
             Aucun produit dans cette catégorie.
           </div>
-        ) : (
-          grouped.map((group, gi) => (
-            <div key={group.id}>
-              {/* Category header */}
+        ) : cupHasRegions ? (
+          regionSections.map((section, si) => (
+            <div key={section.label}>
+              {/* Region banner — "CLASSEMENT FRANCE" / "CLASSEMENT EUROPE" */}
               <div
                 style={{
                   display: "flex",
-                  alignItems: "baseline",
-                  justifyContent: "space-between",
-                  padding: "20px 28px 14px",
-                  borderTop: gi === 0 ? 0 : "1px solid var(--line)",
+                  alignItems: "center",
+                  gap: 14,
+                  padding: "24px 28px 16px",
+                  borderTop:
+                    si === 0 ? 0 : "1px solid var(--line-strong)",
                 }}
               >
-                <div
+                <span
                   className="mono"
                   style={{
-                    fontSize: 17,
-                    letterSpacing: "-0.01em",
+                    fontSize: 12,
+                    letterSpacing: ".2em",
                     textTransform: "uppercase",
-                    color: "var(--fg)",
+                    color: "var(--accent)",
+                    fontWeight: 500,
+                    whiteSpace: "nowrap",
                   }}
                 >
-                  {group.name}
-                </div>
-                <div
+                  Classement {section.label}
+                </span>
+                <span
+                  aria-hidden="true"
+                  style={{ flex: 1, height: 1, background: "var(--line)" }}
+                />
+                <span
                   className="mono fg3"
                   style={{
-                    fontSize: 11,
-                    letterSpacing: ".1em",
+                    fontSize: 10,
+                    letterSpacing: ".12em",
                     textTransform: "uppercase",
+                    whiteSpace: "nowrap",
                   }}
                 >
-                  {group.rows.length} {group.rows.length > 1 ? "produits" : "produit"}
-                </div>
+                  {section.groups.length} catégorie
+                  {section.groups.length > 1 ? "s" : ""}
+                </span>
               </div>
-
-              {/* Column header — desktop only. The mobile card layout is
-                  self-explanatory so the column header is hidden via CSS
-                  below 880px. */}
-              <div
-                className="ranking-header"
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: showLabels
-                    ? "60px 80px 1.2fr 1fr 90px 110px"
-                    : "60px 80px 1.2fr 1fr 90px",
-                  padding: "10px 28px",
-                  borderTop: "1px solid var(--line)",
-                  borderBottom: "1px solid var(--line)",
-                  fontFamily: "var(--mono)",
-                  fontSize: 10,
-                  letterSpacing: ".12em",
-                  textTransform: "uppercase",
-                  color: "var(--fg-3)",
-                }}
-              >
-                <span>Rang</span>
-                <span>Code</span>
-                <span>Variété</span>
-                <span>Producteur</span>
-                <span style={{ textAlign: "right" }}>Score</span>
-                {showLabels && <span style={{ textAlign: "right" }}>Label</span>}
-              </div>
-
-              {/* Rows */}
-              {group.rows.map((row, i) => (
-                <RankingRow
-                  key={row.code + row.categoryId}
-                  row={row}
-                  isLast={i === group.rows.length - 1}
-                  showLabel={showLabels}
-                  maskNonPodiumScore={maskNonPodiumScore}
-                />
-              ))}
+              {section.groups.map((group, gi) =>
+                renderCategory(group, gi !== 0),
+              )}
             </div>
           ))
+        ) : (
+          grouped.map((group, gi) => renderCategory(group, gi !== 0))
         )}
       </section>
 
