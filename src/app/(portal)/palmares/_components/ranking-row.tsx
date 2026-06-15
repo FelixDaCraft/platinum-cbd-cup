@@ -173,6 +173,50 @@ export function RankingRow({
             >
               DISQUALIFIÉ
             </span>
+          ) : row.labelName === "Prix du public" ? (
+            /* ── Public-jury winner medal ────────────────────────────────────
+               "Prix du public" is the category-winner distinction for public
+               jury cups. At 14 chars it never fits a standard short pill, so
+               we render it as a distinct squared badge — not a tier label.
+               Shape: squared geometry (borderRadius 3), gold solid border,
+               subtle accent fill. Two lines stacked: a 7px eyebrow glyph +
+               the label text at 9px tight-tracked caps. The total badge is
+               self-contained at ≤ 110px so the grid column never widens. */
+            <span
+              className="mono"
+              style={{
+                display: "inline-flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 2,
+                padding: "5px 8px",
+                borderRadius: 3,
+                border: "1px solid var(--accent)",
+                background: "var(--accent-dim)",
+                lineHeight: 1,
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 7,
+                  letterSpacing: ".2em",
+                  color: "var(--accent-hi)",
+                  textTransform: "uppercase",
+                }}
+              >
+                ◆ PRIX ◆
+              </span>
+              <span
+                style={{
+                  fontSize: 9,
+                  letterSpacing: ".12em",
+                  color: "var(--accent)",
+                  textTransform: "uppercase",
+                }}
+              >
+                du public
+              </span>
+            </span>
           ) : row.labelName ? (
             <span
               className="mono"

@@ -383,12 +383,12 @@ export default async function PalmaresPage({
         return p.isPodium || p.labelName != null;
     }
   };
-  // Public winner medal: each public category's rank-1 keeps a "Prix du public"
-  // badge even when its real (often low) score earns no score-based label, so
-  // the winner is never left bare (Thomas, 06/2026).
+  // Public winner badge: EVERY public category winner (rank 1) wears the uniform
+  // "Prix du public" medal — never a score-tier label like OR/Argent (Thomas,
+  // 06/2026). Score-tier labels stay on the non-winning public ranks only.
   const withPublicMedal = isPublicJuryCup
     ? allProducts.map((p) =>
-        p.rank === 1 && !p.disqualified && !p.labelName
+        p.rank === 1 && !p.disqualified
           ? { ...p, labelName: "Prix du public", labelColor: "var(--accent)" }
           : p,
       )
@@ -694,20 +694,64 @@ export default async function PalmaresPage({
                     textTransform: "uppercase",
                   }}
                 >
-                  Label
+                  {top.labelName === "Prix du public" ? "Distinction" : "Label"}
                 </div>
-                <div
-                  className="mono"
-                  style={{
-                    fontSize: 24,
-                    fontWeight: 400,
-                    letterSpacing: ".05em",
-                    marginTop: 4,
-                    color: top.labelColor ?? "var(--accent)",
-                  }}
-                >
-                  {top.labelName}
-                </div>
+                {top.labelName === "Prix du public" ? (
+                  /* ── Hero winner badge — "Prix du public" at display scale ──
+                     A squared plaque instead of a plain text line. Uses the same
+                     two-line ◆ PRIX ◆ / du public treatment as the row badge,
+                     scaled up to feel like a real medal in this context. */
+                  <div
+                    className="mono"
+                    style={{
+                      display: "inline-flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      gap: 4,
+                      marginTop: 8,
+                      padding: "10px 18px",
+                      borderRadius: 4,
+                      border: "1px solid var(--accent)",
+                      background: "var(--accent-dim)",
+                      lineHeight: 1,
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: 10,
+                        letterSpacing: ".25em",
+                        color: "var(--accent-hi)",
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      ◆ PRIX ◆
+                    </span>
+                    <span
+                      style={{
+                        fontSize: 18,
+                        letterSpacing: ".14em",
+                        color: "var(--accent)",
+                        textTransform: "uppercase",
+                        fontWeight: 400,
+                      }}
+                    >
+                      du public
+                    </span>
+                  </div>
+                ) : (
+                  <div
+                    className="mono"
+                    style={{
+                      fontSize: 24,
+                      fontWeight: 400,
+                      letterSpacing: ".05em",
+                      marginTop: 4,
+                      color: top.labelColor ?? "var(--accent)",
+                    }}
+                  >
+                    {top.labelName}
+                  </div>
+                )}
               </div>
             )}
           </div>
