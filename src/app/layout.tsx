@@ -127,12 +127,22 @@ export const metadata: Metadata = {
     title: ORGANIZATION_NAME,
     description:
       "Le concours de référence dédié aux meilleurs CBD de France.",
+    url: "https://platinum.aynn.fr",
+    images: [
+      {
+        url: "https://platinum.aynn.fr/og.png?v=1",
+        width: 1200,
+        height: 630,
+        alt: "Platinum CBD Cup — le concours de référence des meilleurs CBD de France",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
     title: ORGANIZATION_NAME,
     description:
       "Le concours de référence dédié aux meilleurs CBD de France.",
+    images: ["https://platinum.aynn.fr/og.png?v=1"],
   },
 };
 
