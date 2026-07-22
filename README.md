@@ -3,7 +3,7 @@
 Standalone event platform for the Platinum CBD Cup competition.
 
 Forked from [CupMetrics v2](https://github.com/FelixDaCraft/cupmetrics-v2) and stripped of all
-multi-tenant / SaaS code. See `CLAUDE.md` for the full architecture overview.
+multi-tenant / SaaS code.
 
 ## Quick start
 

@@ -48,7 +48,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 
-# Claude / tools scratch
+# tools scratch
 .claude
 _bmad-output
 tmpclaude-*
