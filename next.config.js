@@ -34,6 +34,8 @@ const config = {
   },
   images: {
     remotePatterns: [
+      { protocol: "https", hostname: "platinumcbdcup.eu" },
+      { protocol: "https", hostname: "www.platinumcbdcup.eu" },
       { protocol: "https", hostname: "platinum.aynn.fr" },
       { protocol: "https", hostname: "*.aynn.fr" },
       { protocol: "https", hostname: "localhost" },
@@ -45,9 +47,22 @@ const config = {
     ],
   },
   allowedDevOrigins: [
+    "platinumcbdcup.eu",
     "platinum.aynn.fr",
     "*.aynn.fr",
   ],
+
+  // Canonical domain is platinumcbdcup.eu: send the old platinum.aynn.fr host
+  // and www to it. /api/ is left alone so already-registered webhooks (Stripe)
+  // keep working on the old host.
+  async redirects() {
+    return ["platinum.aynn.fr", "www.platinumcbdcup.eu"].map((host) => ({
+      source: "/:path((?!api/).*)",
+      has: [{ type: "host", value: host }],
+      destination: "https://platinumcbdcup.eu/:path",
+      permanent: true,
+    }));
+  },
 
   // Security Headers
   async headers() {
