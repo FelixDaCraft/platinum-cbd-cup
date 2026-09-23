@@ -39,7 +39,7 @@ mkdir -p /opt/platinum-cbd-cup && cd /opt/platinum-cbd-cup
 docker compose up -d
 ```
 
-URL: https://platinumcbdcup.eu (via Traefik). Fallback: http://192.168.1.122:3017.
+URL: https://platinumcbdcup.eu (Cloudflare Tunnel ; platinum.aynn.fr redirige dessus). Fallback: http://192.168.1.122:3017.
 
 ## Interfaces
 

@@ -36,6 +36,8 @@ const config = {
     remotePatterns: [
       { protocol: "https", hostname: "platinumcbdcup.eu" },
       { protocol: "https", hostname: "*.platinumcbdcup.eu" },
+      { protocol: "https", hostname: "platinum.aynn.fr" },
+      { protocol: "https", hostname: "*.aynn.fr" },
       { protocol: "https", hostname: "localhost" },
       { protocol: "http", hostname: "localhost" },
       { protocol: "https", hostname: "res.cloudinary.com" },
@@ -47,7 +49,21 @@ const config = {
   allowedDevOrigins: [
     "platinumcbdcup.eu",
     "*.platinumcbdcup.eu",
+    "platinum.aynn.fr",
+    "*.aynn.fr",
   ],
+
+  // Canonical domain is platinumcbdcup.eu: send the old platinum.aynn.fr host
+  // and www to it. /api/ is left alone so a POST to the old host is not
+  // turned into a redirect that drops its body.
+  async redirects() {
+    return ["platinum.aynn.fr", "www.platinumcbdcup.eu"].map((host) => ({
+      source: "/:path((?!api/).*)",
+      has: [{ type: "host", value: host }],
+      destination: "https://platinumcbdcup.eu/:path",
+      permanent: true,
+    }));
+  },
 
   // Security Headers
   async headers() {

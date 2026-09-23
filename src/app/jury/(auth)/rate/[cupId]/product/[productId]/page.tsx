@@ -749,17 +749,24 @@ export default function RatingPage() {
                 marginBottom: "16px",
               }}
             >
-              <span
-                style={{
-                  fontFamily: "'Doto', monospace",
-                  fontSize: "48px",
-                  fontWeight: 700,
-                  color: "var(--n-text-display)",
-                  lineHeight: 1,
-                }}
-              >
-                {currentAverage}
-              </span>
+              {(() => {
+                const [intPart, decPart] = String(currentAverage).split(".");
+                return (
+                  <span
+                    style={{
+                      fontFamily: "'Doto', monospace",
+                      fontWeight: 700,
+                      color: "var(--n-text-display)",
+                      lineHeight: 1,
+                    }}
+                  >
+                    <span style={{ fontSize: "48px" }}>{intPart}</span>
+                    {decPart && (
+                      <span style={{ fontSize: "24px" }}>,{decPart}</span>
+                    )}
+                  </span>
+                );
+              })()}
               <span className="n-label" style={{ fontSize: "13px" }}>
                 /{maxScore}
               </span>
