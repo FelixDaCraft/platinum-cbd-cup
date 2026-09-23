@@ -14,6 +14,14 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
+      # Surcharge volontaire du .env : Compose donne la priorité à
+      # `environment:` sur `env_file:`. Le .env du homelab contient encore
+      # noreply@platinum.aynn.fr, un sous-domaine que Resend n'a jamais
+      # vérifié (seul aynn.fr l'était) — tous les envois partaient en 403
+      # « domain is not verified », erreur étouffée par Better Auth.
+      # platinumcbdcup.eu est vérifié depuis le 23/09. À supprimer d'ici le
+      # jour où la même valeur sera posée directement dans le .env.
+      - EMAIL_FROM=Platinum CBD Cup <noreply@platinumcbdcup.eu>
     volumes:
       - ./uploads:/app/public/uploads
     networks:
