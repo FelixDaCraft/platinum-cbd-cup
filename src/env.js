@@ -7,7 +7,12 @@ export const env = createEnv({
     BETTER_AUTH_SECRET: z.string().min(32),
     BETTER_AUTH_URL: z.string().url(),
     RESEND_API_KEY: z.string().min(1),
-    EMAIL_FROM: z.string().min(1).default("Platinum CBD Cup <noreply@platinumcbdcup.eu>"),
+    // NE PAS basculer sur @platinumcbdcup.eu tant que Resend n'a pas vérifié
+    // ce domaine (DKIM + SPF dans Cloudflare). Cette valeur s'applique dès que
+    // EMAIL_FROM est absent ou vide du .env : la changer prématurément fait
+    // répondre 403 « domain is not verified » à Resend, et Better Auth étouffe
+    // l'erreur — tous les emails disparaissent en silence.
+    EMAIL_FROM: z.string().min(1).default("Platinum CBD Cup <noreply@platinum.aynn.fr>"),
     NODE_ENV: z
       .enum(["development", "test", "production"])
       .default("development"),
