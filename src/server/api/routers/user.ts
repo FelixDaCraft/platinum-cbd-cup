@@ -41,7 +41,7 @@ export const userRouter = createTRPCRouter({
       return { path: "/producer/dashboard", role: "producer" };
     }
 
-    return { path: "/account", role: "user" };
+    return { path: "/", role: "user" };
   }),
 
   /**

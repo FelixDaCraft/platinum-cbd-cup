@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 };
 
 const CONTACT_INFO = {
-  email: "contact@platinum-cbd-cup.fr",
+  email: "contact@platinumcbdcup.eu",
   hours: "Lun–Ven · 09h–18h",
   address: "Europe · Indépendant",
 };

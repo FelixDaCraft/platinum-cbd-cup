@@ -7,18 +7,24 @@ export const env = createEnv({
     BETTER_AUTH_SECRET: z.string().min(32),
     BETTER_AUTH_URL: z.string().url(),
     RESEND_API_KEY: z.string().min(1),
-    EMAIL_FROM: z.string().min(1).default("Platinum CBD Cup <noreply@platinum.aynn.fr>"),
+    EMAIL_FROM: z.string().min(1).default("Platinum CBD Cup <noreply@platinumcbdcup.eu>"),
     NODE_ENV: z
       .enum(["development", "test", "production"])
       .default("development"),
-    // Stripe - for producer registration payments via Stripe Connect
-    STRIPE_SECRET_KEY: z.string().min(1),
-    STRIPE_WEBHOOK_SECRET: z.string().min(1),
+    // Viva.com (Viva Wallet) — producer registration payments.
+    // Optional so the app still boots before the credentials are filled in;
+    // `assertVivaConfigured()` in ~/lib/viva raises a clear error at checkout
+    // time when something is missing.
+    VIVA_ENV: z.enum(["demo", "production"]).default("production"),
+    VIVA_CLIENT_ID: z.string().min(1).optional(),
+    VIVA_CLIENT_SECRET: z.string().min(1).optional(),
+    VIVA_SOURCE_CODE: z.string().min(1).optional(),
+    VIVA_MERCHANT_ID: z.string().min(1).optional(),
+    VIVA_API_KEY: z.string().min(1).optional(),
   },
 
   client: {
     NEXT_PUBLIC_APP_URL: z.string().url(),
-    NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: z.string().min(1),
   },
 
   runtimeEnv: {
@@ -29,9 +35,12 @@ export const env = createEnv({
     EMAIL_FROM: process.env.EMAIL_FROM,
     NODE_ENV: process.env.NODE_ENV,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
-    STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
-    STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET,
-    NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY,
+    VIVA_ENV: process.env.VIVA_ENV,
+    VIVA_CLIENT_ID: process.env.VIVA_CLIENT_ID,
+    VIVA_CLIENT_SECRET: process.env.VIVA_CLIENT_SECRET,
+    VIVA_SOURCE_CODE: process.env.VIVA_SOURCE_CODE,
+    VIVA_MERCHANT_ID: process.env.VIVA_MERCHANT_ID,
+    VIVA_API_KEY: process.env.VIVA_API_KEY,
   },
 
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,

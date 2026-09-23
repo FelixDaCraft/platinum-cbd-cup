@@ -394,7 +394,7 @@ function buildInvitationEmailHtml(params: InvitationEmailParams): string {
       <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 32px 0;" />
 
       <p style="color: #9ca3af; font-size: 12px; text-align: center;">
-        CupMetrics - Plateforme de gestion de competitions de degustation
+        Platinum CBD Cup - Le concours de reference des meilleurs CBD
       </p>
     </div>
   `;
@@ -464,7 +464,7 @@ function buildReminderEmailHtml(params: ReminderEmailParams): string {
       <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 32px 0;" />
 
       <p style="color: #9ca3af; font-size: 12px; text-align: center;">
-        CupMetrics - Plateforme de gestion de competitions de degustation
+        Platinum CBD Cup - Le concours de reference des meilleurs CBD
       </p>
     </div>
   `;
@@ -697,7 +697,7 @@ function buildRatingReminderEmailHtml(params: RatingReminderEmailParams): string
       <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 32px 0;" />
 
       <p style="color: #9ca3af; font-size: 12px; text-align: center;">
-        CupMetrics - Plateforme de gestion de competitions de degustation
+        Platinum CBD Cup - Le concours de reference des meilleurs CBD
         <br />
         <a href="#" style="color: #9ca3af;">Gerer mes preferences de notification</a>
       </p>
@@ -949,7 +949,7 @@ function buildRatingSheetEmailHtml(params: RatingSheetEmailParams): string {
       <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 32px 0;" />
 
       <p style="color: #9ca3af; font-size: 12px; text-align: center;">
-        CupMetrics - Plateforme de gestion de competitions de degustation
+        Platinum CBD Cup - Le concours de reference des meilleurs CBD
       </p>
     </div>
   `;
@@ -1103,7 +1103,7 @@ function buildJuryWelcomeEmailHtml(params: JuryWelcomeEmailParams): string {
       <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 32px 0;" />
 
       <p style="color: #9ca3af; font-size: 12px; text-align: center;">
-        CupMetrics - Plateforme de gestion de competitions de degustation
+        Platinum CBD Cup - Le concours de reference des meilleurs CBD
       </p>
     </div>
   `;

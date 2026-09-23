@@ -195,7 +195,7 @@ export default function PressEditorPage() {
               type="email"
               value={pressEmail}
               onChange={(e) => setPressEmail(e.target.value)}
-              placeholder="press@platinum-cbd-cup.eu"
+              placeholder="press@platinumcbdcup.eu"
             />
           </div>
           <div className="space-y-2">

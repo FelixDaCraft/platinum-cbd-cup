@@ -199,14 +199,15 @@ export const widgetRouter = createTRPCRouter({
     }
 
     // Generate base URL for widget
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://cupmetrics.com";
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://platinumcbdcup.eu";
     const widgetUrl = `${baseUrl}/widget/producer/${producer.id}`;
 
     // Generate iframe code
     const iframeCode = `<iframe src="${widgetUrl}" width="350" height="400" frameborder="0" style="border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);"></iframe>`;
 
-    // Generate script code (for more dynamic integration)
-    const scriptCode = `<div id="cupmetrics-widget" data-producer-id="${producer.id}"></div>
+    // Generate script code (for more dynamic integration).
+    // The attribute must match the selector in public/widget/embed.js.
+    const scriptCode = `<div data-platinum-widget data-producer-id="${producer.id}"></div>
 <script src="${baseUrl}/widget/embed.js" async></script>`;
 
     return {

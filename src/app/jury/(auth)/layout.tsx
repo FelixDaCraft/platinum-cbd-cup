@@ -27,8 +27,9 @@ export default async function ProtectedJuryLayout({
   const access = await getUserPortalAccess();
 
   if (!access.hasAccess) {
-    // User is logged in but has no profile for this organization
-    redirect("/login");
+    // Signed in but no role or profile at all. Never send them back to
+    // /login: it redirects by role and would bounce them straight here.
+    redirect("/");
   }
 
   if (access.role !== "jury" && access.role !== "organizer") {

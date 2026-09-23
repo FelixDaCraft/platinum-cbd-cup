@@ -16,21 +16,23 @@ import { PortalProvider } from "~/lib/portal/portal-provider";
 import type { PortalContextValue, PortalThemeConfig } from "~/lib/portal/context";
 import { generateCssVariables, sanitizeCustomCss } from "~/lib/portal/css-variables";
 import { platinumCSS } from "~/components/portal/platinum/platinum-styles";
+import {
+  ORGANIZATION_NAME,
+  ORGANIZATION_SLUG,
+  ORGANIZATION_LOGO,
+} from "~/lib/organization";
 
 /**
  * Static organization identity for Platinum CBD Cup
  *
- * Single-tenant app — no DB lookup, no subdomain routing.
+ * Single-tenant app — no DB lookup, no subdomain routing. The constants live
+ * in ~/lib/organization so the server routers and this layout cannot drift.
  */
-const ORGANIZATION_NAME = "Platinum CBD Cup";
-const ORGANIZATION_SLUG = "platinum-cbd-cup";
-const ORGANIZATION_ID = "platinum-cbd-cup";
-
 const ORGANIZATION = {
-  id: ORGANIZATION_ID,
+  id: ORGANIZATION_SLUG,
   name: ORGANIZATION_NAME,
   slug: ORGANIZATION_SLUG,
-  logo: null,
+  logo: ORGANIZATION_LOGO,
   createdAt: new Date(0),
 };
 
@@ -127,10 +129,10 @@ export const metadata: Metadata = {
     title: ORGANIZATION_NAME,
     description:
       "Le concours de référence dédié aux meilleurs CBD de France.",
-    url: "https://platinum.aynn.fr",
+    url: "https://platinumcbdcup.eu",
     images: [
       {
-        url: "https://platinum.aynn.fr/og.png?v=1",
+        url: "https://platinumcbdcup.eu/og.png?v=1",
         width: 1200,
         height: 630,
         alt: "Platinum CBD Cup — le concours de référence des meilleurs CBD de France",
@@ -142,7 +144,7 @@ export const metadata: Metadata = {
     title: ORGANIZATION_NAME,
     description:
       "Le concours de référence dédié aux meilleurs CBD de France.",
-    images: ["https://platinum.aynn.fr/og.png?v=1"],
+    images: ["https://platinumcbdcup.eu/og.png?v=1"],
   },
 };
 

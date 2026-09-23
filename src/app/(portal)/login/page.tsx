@@ -162,8 +162,9 @@ function PortalLoginForm() {
 
     const registered = searchParams.get("registered");
     const logout = searchParams.get("logout");
+    const reset = searchParams.get("reset");
 
-    if (registered === "true" || logout === "true") {
+    if (registered === "true" || logout === "true" || reset === "true") {
       hasShownParamToast.current = true;
 
       if (registered === "true") {
@@ -179,10 +180,17 @@ function PortalLoginForm() {
         toast.success("Vous avez été déconnecté avec succès.");
       }
 
+      if (reset === "true") {
+        toast.success(
+          "Mot de passe modifié ! Connectez-vous avec votre nouveau mot de passe."
+        );
+      }
+
       // Clean up URL
       const url = new URL(window.location.href);
       url.searchParams.delete("registered");
       url.searchParams.delete("logout");
+      url.searchParams.delete("reset");
       window.history.replaceState({}, "", url.pathname + url.search);
     }
   }, [searchParams]);

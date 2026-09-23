@@ -11,7 +11,7 @@ const resend = new Resend(env.RESEND_API_KEY);
 /**
  * Extrait le domaine de base depuis une URL pour les cookies cross-subdomain.
  * Ex: "http://lvh.me:3000" → ".lvh.me"
- * Ex: "https://platinum-cbd-cup.fr" → ".platinum-cbd-cup.fr"
+ * Ex: "https://platinumcbdcup.eu" → ".platinumcbdcup.eu"
  */
 function extractBaseDomain(url: string): string {
   try {

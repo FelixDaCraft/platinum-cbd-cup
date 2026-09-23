@@ -17,6 +17,11 @@ export type PortalRole = "organizer" | "producer" | "jury" | null;
 interface UserAccessResult {
   hasAccess: boolean;
   role: PortalRole;
+  /**
+   * True when the user is a producer by role but has not created their
+   * producer profile yet. They may only reach `/producer/complete-profile`.
+   */
+  needsProducerProfile: boolean;
 }
 
 /**
@@ -28,7 +33,7 @@ export async function getUserPortalAccess(): Promise<UserAccessResult> {
   const session = await auth.api.getSession({ headers: headersList });
 
   if (!session?.user?.id) {
-    return { hasAccess: false, role: null };
+    return { hasAccess: false, role: null, needsProducerProfile: false };
   }
 
   const userId = session.user.id;
@@ -40,7 +45,7 @@ export async function getUserPortalAccess(): Promise<UserAccessResult> {
   });
 
   if (user?.isAdmin || user?.role === "organizer") {
-    return { hasAccess: true, role: "organizer" };
+    return { hasAccess: true, role: "organizer", needsProducerProfile: false };
   }
 
   // 2. Producer — has a producer profile
@@ -50,7 +55,7 @@ export async function getUserPortalAccess(): Promise<UserAccessResult> {
   });
 
   if (producerProfile) {
-    return { hasAccess: true, role: "producer" };
+    return { hasAccess: true, role: "producer", needsProducerProfile: false };
   }
 
   // 3. Jury — has a jury profile
@@ -60,10 +65,19 @@ export async function getUserPortalAccess(): Promise<UserAccessResult> {
   });
 
   if (juryProfile) {
-    return { hasAccess: true, role: "jury" };
+    return { hasAccess: true, role: "jury", needsProducerProfile: false };
   }
 
-  return { hasAccess: false, role: null };
+  // 4. Producer by role, but the profile has not been created yet.
+  //    Public sign-ups land here: `signUp.email` only creates the user row,
+  //    the producer profile is created later by `/producer/complete-profile`.
+  //    Without this branch such users bounce forever between `/login` and
+  //    `/producer/dashboard`.
+  if (user?.role === "producer") {
+    return { hasAccess: true, role: "producer", needsProducerProfile: true };
+  }
+
+  return { hasAccess: false, role: null, needsProducerProfile: false };
 }
 
 /**

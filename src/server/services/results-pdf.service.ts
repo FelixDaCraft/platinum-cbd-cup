@@ -610,7 +610,7 @@ function createProductPage(
     React.createElement(
       View,
       { style: styles.footer },
-      React.createElement(Text, { style: styles.footerText }, "Document généré automatiquement par CupMetrics"),
+      React.createElement(Text, { style: styles.footerText }, "Document généré automatiquement par Platinum CBD Cup"),
       React.createElement(
         Text,
         { style: styles.footerText },
@@ -1234,7 +1234,7 @@ function createLabAnalysisPage(
       React.createElement(
         Text,
         { style: styles.footerText },
-        "Analyse fournie par le laboratoire · Document généré par CupMetrics",
+        "Analyse fournie par le laboratoire · Document généré par Platinum CBD Cup",
       ),
       React.createElement(
         Text,

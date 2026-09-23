@@ -20,7 +20,7 @@ services:
       - platinum-internal
     ports:
       # Exposed on 127.0.0.1:3017 so only Cloudflare Tunnel (on the host) can
-      # reach it. The tunnel maps platinum.aynn.fr -> http://localhost:3017.
+      # reach it. The tunnel maps platinumcbdcup.eu -> http://localhost:3017.
       - "127.0.0.1:3017:3000"
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3000/api/health"]

@@ -31,11 +31,11 @@ ENCRYPTION_KEY="${crypto.randomBytes(32).toString("hex")}"
    → Reset your database password
    → Update DATABASE_URL in .env.production
 
-2. STRIPE:
-   → Go to: https://dashboard.stripe.com/apikeys
-   → Roll your API keys (create new ones, delete old)
-   → Update STRIPE_SECRET_KEY
-   → Go to Webhooks and get new STRIPE_WEBHOOK_SECRET
+2. VIVA.COM:
+   → Go to: https://www.vivapayments.com (Settings › API Access)
+   → Roll the OAuth2 credentials (VIVA_CLIENT_ID / VIVA_CLIENT_SECRET)
+   → Settings › Security › API Keys for VIVA_MERCHANT_ID / VIVA_API_KEY
+   → Sales › Payment Sources for VIVA_SOURCE_CODE
 
 3. RESEND:
    → Go to: https://resend.com/api-keys

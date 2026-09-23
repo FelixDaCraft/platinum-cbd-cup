@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 
 export const metadata: Metadata = {
-  title: "CupMetrics Jury",
+  title: "Platinum CBD Cup — Jury",
   description: "Espace jury - Notez les produits en compétition",
   appleWebApp: {
     capable: true,

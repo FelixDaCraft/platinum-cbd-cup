@@ -171,7 +171,7 @@ function SponsorCard({ sponsor, tier }: SponsorCardProps) {
 
   if (hasDetailPage) {
     return (
-      <Link href={`/portal/sponsors/${sponsor.id}`} className="block">
+      <Link href={`/sponsors/${sponsor.id}`} className="block">
         {content}
       </Link>
     );

@@ -1,7 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { nanoid } from "nanoid";
-import Stripe from "stripe";
 
 import {
   createTRPCRouter,
@@ -23,28 +22,10 @@ import {
   canEditDate,
 } from "~/lib/validations/phases";
 import { canPublishCup } from "~/lib/validations/publish";
+import { isVivaConfigured } from "~/lib/viva";
 import { eq, and, count, inArray, asc, isNotNull } from "drizzle-orm";
-import { encryptJson, decryptJson, isEncryptionConfigured } from "~/lib/encryption";
 import { hasAnonymizedProducts } from "~/server/services/anonymization.service";
 import { computeResults } from "~/server/api/routers/results";
-
-// Payment configuration types
-interface StripeConfig {
-  secretKey: string;
-  publishableKey: string;
-}
-
-interface VivaWalletConfig {
-  merchantId: string;
-  apiKey: string;
-  clientId: string;
-  clientSecret: string;
-}
-
-interface PaymentConfig {
-  stripe?: StripeConfig;
-  vivaWallet?: VivaWalletConfig;
-}
 
 const requireCup = async (
   ctx: { db: typeof import("~/server/db").db },
@@ -252,7 +233,7 @@ export const cupRouter = createTRPCRouter({
         };
       }
 
-      const validation = await canPublishCup(input.cupId, ctx.db);
+      const validation = await canPublishCup(input.cupId, ctx.db, isVivaConfigured());
 
       return {
         ...validation,
@@ -346,7 +327,7 @@ export const cupRouter = createTRPCRouter({
         });
       }
 
-      const validation = await canPublishCup(input.cupId, ctx.db);
+      const validation = await canPublishCup(input.cupId, ctx.db, isVivaConfigured());
       if (!validation.canPublish) {
         throw new TRPCError({
           code: "BAD_REQUEST",
@@ -586,165 +567,6 @@ export const cupRouter = createTRPCRouter({
         categories: categoriesWithCriteria,
         canRegister,
       };
-    }),
-
-  /**
-   * Get payment configuration for a cup (organizer only)
-   */
-  getPaymentConfig: organizerProcedure
-    .input(z.object({ cupId: z.string().min(1, "Cup ID requis") }))
-    .query(async ({ ctx, input }) => {
-      const cup = await requireCup(ctx, input.cupId);
-
-      return {
-        paymentProvider: cup.paymentProvider,
-        isConfigured: !!cup.paymentProvider && !!cup.paymentConfigEncrypted,
-        configuredAt: cup.paymentConfiguredAt,
-        encryptionAvailable: isEncryptionConfigured(),
-      };
-    }),
-
-  /**
-   * Update payment configuration for a cup (organizer only)
-   */
-  updatePaymentConfig: organizerProcedure
-    .input(
-      z.object({
-        cupId: z.string().min(1, "Cup ID requis"),
-        provider: z.enum(["stripe", "viva_wallet"]),
-        config: z.union([
-          z.object({
-            type: z.literal("stripe"),
-            secretKey: z.string().min(1, "Clé secrète requise"),
-            publishableKey: z.string().min(1, "Clé publique requise"),
-          }),
-          z.object({
-            type: z.literal("viva_wallet"),
-            merchantId: z.string().min(1, "Merchant ID requis"),
-            apiKey: z.string().min(1, "API Key requise"),
-            clientId: z.string().min(1, "Client ID requis"),
-            clientSecret: z.string().min(1, "Client Secret requis"),
-          }),
-        ]),
-      })
-    )
-    .mutation(async ({ ctx, input }) => {
-      if (!isEncryptionConfigured()) {
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: "La configuration de chiffrement n'est pas disponible",
-        });
-      }
-
-      await requireCup(ctx, input.cupId);
-
-      let paymentConfig: PaymentConfig;
-      if (input.config.type === "stripe") {
-        paymentConfig = {
-          stripe: {
-            secretKey: input.config.secretKey,
-            publishableKey: input.config.publishableKey,
-          },
-        };
-      } else {
-        paymentConfig = {
-          vivaWallet: {
-            merchantId: input.config.merchantId,
-            apiKey: input.config.apiKey,
-            clientId: input.config.clientId,
-            clientSecret: input.config.clientSecret,
-          },
-        };
-      }
-
-      const encryptedConfig = encryptJson(paymentConfig);
-
-      const [updatedCup] = await ctx.db
-        .update(schema.cups)
-        .set({
-          paymentProvider: input.provider,
-          paymentConfigEncrypted: encryptedConfig,
-          paymentConfiguredAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .where(eq(schema.cups.id, input.cupId))
-        .returning();
-
-      return {
-        success: true,
-        paymentProvider: updatedCup?.paymentProvider,
-        configuredAt: updatedCup?.paymentConfiguredAt,
-      };
-    }),
-
-  /**
-   * Test payment connection for a cup (organizer only)
-   */
-  testPaymentConnection: organizerProcedure
-    .input(z.object({ cupId: z.string().min(1, "Cup ID requis") }))
-    .mutation(async ({ ctx, input }) => {
-      const cup = await requireCup(ctx, input.cupId);
-
-      if (!cup.paymentProvider || !cup.paymentConfigEncrypted) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "Aucun processeur de paiement configuré",
-        });
-      }
-
-      let config: PaymentConfig;
-      try {
-        config = decryptJson<PaymentConfig>(cup.paymentConfigEncrypted);
-      } catch {
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: "Erreur lors du déchiffrement de la configuration",
-        });
-      }
-
-      if (cup.paymentProvider === "stripe" && config.stripe) {
-        try {
-          const stripe = new Stripe(config.stripe.secretKey, {
-            apiVersion: "2025-12-15.clover",
-          });
-          await stripe.balance.retrieve();
-          return { success: true, message: "Connexion Stripe réussie" };
-        } catch (error) {
-          const message = error instanceof Error ? error.message : "Erreur inconnue";
-          return { success: false, message: `Erreur Stripe: ${message}` };
-        }
-      }
-
-      if (cup.paymentProvider === "viva_wallet" && config.vivaWallet) {
-        return {
-          success: false,
-          message: "Test de connexion Viva Wallet non implémenté - veuillez vérifier vos identifiants manuellement",
-        };
-      }
-
-      return { success: false, message: "Configuration invalide" };
-    }),
-
-  /**
-   * Remove payment configuration for a cup (organizer only)
-   */
-  removePaymentConfig: organizerProcedure
-    .input(z.object({ cupId: z.string().min(1, "Cup ID requis") }))
-    .mutation(async ({ ctx, input }) => {
-      await requireCup(ctx, input.cupId);
-
-      await ctx.db
-        .update(schema.cups)
-        .set({
-          paymentProvider: null,
-          paymentConfigEncrypted: null,
-          paymentConfiguredAt: null,
-          updatedAt: new Date(),
-        })
-        .where(eq(schema.cups.id, input.cupId))
-        .returning();
-
-      return { success: true };
     }),
 
   /**

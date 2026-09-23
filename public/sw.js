@@ -1,5 +1,5 @@
-// CupMetrics Service Worker
-const CACHE_NAME = 'cupmetrics-v2';
+// Platinum CBD Cup Service Worker
+const CACHE_NAME = 'platinum-cbd-cup-v1';
 const STATIC_ASSETS = [
   '/favicon.ico',
   '/offline.html',

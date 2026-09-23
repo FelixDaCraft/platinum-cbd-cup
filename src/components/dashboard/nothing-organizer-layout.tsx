@@ -355,10 +355,10 @@ function NothingOrgSidebar({ baseUrl = "" }: { baseUrl?: string }) {
           </div>
           <div>
             <p className="n-font-data text-xs font-bold" style={{ color: "var(--n-text-display)", letterSpacing: "0.08em" }}>
-              CUPMETRICS
+              {organization.name.toUpperCase()}
             </p>
             <p className="text-[10px]" style={{ color: "var(--n-text-disabled)", fontFamily: "'Space Mono', monospace", letterSpacing: "0.08em" }}>
-              {organization.name.toUpperCase()}
+              ORGANISATEUR
             </p>
           </div>
         </Link>

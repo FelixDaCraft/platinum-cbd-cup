@@ -24,7 +24,12 @@ export interface PublishValidationResult {
  */
 export async function canPublishCup(
   cupId: string,
-  db: typeof dbType
+  db: typeof dbType,
+  /**
+   * Whether the payment processor is configured. Passed in by the caller so
+   * this stays a pure validation function with no environment access.
+   */
+  paymentConfigured = false
 ): Promise<PublishValidationResult> {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -57,10 +62,11 @@ export async function canPublishCup(
     }
   }
 
-  // Check payment configuration (warning, not blocking)
-  // Only warn if cup has pricing configured (not free)
+  // Check payment configuration (warning, not blocking).
+  // Payments are configured globally through the VIVA_* environment
+  // variables, not per cup — only warn when the cup actually charges.
   if (cup && cup.defaultPricePerProduct && cup.defaultPricePerProduct > 0) {
-    if (!cup.paymentProvider || !cup.paymentConfigEncrypted) {
+    if (!paymentConfigured) {
       warnings.push("Aucun processeur de paiement configuré. Les paiements ne fonctionneront pas.");
     }
   }

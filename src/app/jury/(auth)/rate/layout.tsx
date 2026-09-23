@@ -104,7 +104,7 @@ export default function RateLayout({
               textTransform: "uppercase",
             }}
           >
-            CUPMETRICS
+            PLATINUM CBD CUP
           </span>
           <span
             style={{

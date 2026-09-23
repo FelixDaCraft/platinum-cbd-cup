@@ -163,7 +163,7 @@ export default function RegisterPage() {
   // addProduct — used at step 4 (Payer) to commit the specimen into the DB
   const addProduct = api.registration.addProduct.useMutation();
 
-  // createCheckoutSession — redirects user to Stripe after addProduct succeeds
+  // createCheckoutSession — redirects user to Viva.com after addProduct succeeds
   const createCheckoutSession = api.registration.createCheckoutSession.useMutation({
     onSuccess: (data) => {
       if (data.checkoutUrl) {
@@ -314,8 +314,8 @@ export default function RegisterPage() {
       // Fields collected by the wizard but NOT accepted by addProduct:
       //   - origin, vintage, thc %, cbd %, hasCoa → TODO: store in product.description or a future schema column
       //   - phone, companyName, siret → TODO: these belong to the producer profile, not the product
-      //   - payment method (card/sepa) → Stripe handles this; wizard's picker is cosmetic only
-      //   - email → already on the user account (used by Stripe via ctx.session.user.email)
+      //   - payment method (card/sepa) → Viva handles this; wizard's picker is cosmetic only
+      //   - email → already on the user account (passed to Viva as the order customer)
       const productResult = await addProduct.mutateAsync({
         registrationId,
         categoryId: resolvedCategoryId,
@@ -333,13 +333,13 @@ export default function RegisterPage() {
           .join(" · ") || undefined,
       });
 
-      // Step B: create Stripe checkout session
+      // Step B: create the Viva payment order
       // If totalAmount === 0 → confirmFreeRegistration instead (not implemented here,
       // as cup registration fees are always > 0 in the current design).
       await createCheckoutSession.mutateAsync({ registrationId });
 
       // If we reach here without redirect, generate local code for step 5 display
-      // (Stripe redirect will have fired; this is the no-redirect fallback)
+      // (Viva redirect will have fired; this is the no-redirect fallback)
       setAnonymousCode(`${data.categoryCode}·${Math.floor(Math.random() * 90 + 10)}`);
       setStep(5);
     } catch (err) {
@@ -727,7 +727,7 @@ export default function RegisterPage() {
                 })}
               </div>
 
-              {/* Card fields — cosmetic only; real payment handled by Stripe Checkout */}
+              {/* Card fields — cosmetic only; real payment handled by Viva checkout */}
               {data.payment === "card" && (
                 <div
                   style={{
@@ -739,8 +739,7 @@ export default function RegisterPage() {
                 >
                   {/*
                    * TODO: These card fields are UI-only placeholders per the design.
-                   * Actual payment collection happens on Stripe's hosted checkout page.
-                   * Real card tokenization would require Stripe Elements integration.
+                   * Actual payment collection happens on Viva's hosted checkout page.
                    */}
                   <Field
                     label="Numéro de carte"

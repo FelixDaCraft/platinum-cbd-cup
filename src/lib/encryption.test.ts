@@ -116,9 +116,9 @@ describe("Encryption Utility", () => {
 
     it("should handle nested objects", () => {
       const data = {
-        stripe: {
-          secretKey: "sk_test_xxx",
-          publishableKey: "pk_test_xxx",
+        credentials: {
+          clientId: "client_xxx",
+          clientSecret: "secret_xxx",
         },
         settings: {
           enabled: true,

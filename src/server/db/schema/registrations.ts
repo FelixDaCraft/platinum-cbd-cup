@@ -37,7 +37,15 @@ export const registrations = pgTable(
       .default("pending_payment"),
     totalAmount: integer("total_amount").notNull().default(0), // Price in cents
     currency: text("currency").$type<Currency>().default("EUR"),
-    stripePaymentIntentId: text("stripe_payment_intent_id"), // For payment tracking
+    // Viva.com payment tracking. `paymentOrderCode` is created up-front when
+    // the producer is sent to checkout; `paymentTransactionId` lands on the
+    // webhook once the payment settles.
+    paymentOrderCode: text("payment_order_code"),
+    paymentTransactionId: text("payment_transaction_id"),
+    // Legacy: payments taken through Stripe before the switch to Viva.com.
+    // Kept read-only so old registrations keep their audit trail; nothing
+    // writes to it any more.
+    stripePaymentIntentId: text("stripe_payment_intent_id"),
     // Invoice fields
     invoiceNumber: text("invoice_number").unique(), // Format: INV-YYYY-XXXXX
     invoiceGeneratedAt: timestamp("invoice_generated_at"),

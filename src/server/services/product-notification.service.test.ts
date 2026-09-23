@@ -33,7 +33,7 @@ vi.mock("resend", () => {
 vi.mock("~/env", () => ({
   env: {
     RESEND_API_KEY: "test-key",
-    EMAIL_FROM: "test@platinum-cbd-cup.com",
+    EMAIL_FROM: "test@platinumcbdcup.eu",
     BETTER_AUTH_URL: "http://localhost:3000",
     NODE_ENV: "test",
   },

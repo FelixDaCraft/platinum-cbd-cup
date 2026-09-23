@@ -49,7 +49,7 @@ export default async function PressPage() {
           Communiqués, dossiers de presse, kit média et galerie photo en haute
           résolution. Pour toute demande, écrivez à{" "}
           <span className="mono" style={{ color: "var(--fg)" }}>
-            {settings?.pressEmail ?? "press@platinum.aynn.fr"}
+            {settings?.pressEmail ?? "press@platinumcbdcup.eu"}
           </span>
           .
         </p>
@@ -186,7 +186,7 @@ export default async function PressPage() {
           <div className="kv" style={{ marginTop: 16 }}>
             <span className="kv-k">Email</span>
             <span className="kv-v">
-              {settings?.pressEmail ?? "press@platinum.aynn.fr"}
+              {settings?.pressEmail ?? "press@platinumcbdcup.eu"}
             </span>
           </div>
           {settings?.pressPhone && (

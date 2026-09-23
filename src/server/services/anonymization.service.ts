@@ -79,7 +79,7 @@ export async function generateAnonymousCode(
 
 /**
  * Anonymize all products in a registration
- * Called after payment confirmation (Stripe webhook or free registration)
+ * Called after payment confirmation (Viva webhook or free registration)
  * Idempotent: skips products that already have an anonymous code
  *
  * @param db - Database client

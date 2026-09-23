@@ -6,7 +6,7 @@ import { getUserPortalAccess } from "~/lib/portal/server-auth";
 import { NothingProducerLayout } from "~/components/portal/nothing-producer-layout";
 
 export const metadata: Metadata = {
-  title: "CupMetrics Producer",
+  title: "Platinum CBD Cup — Producteur",
   description: "Espace producteur - Gérez vos inscriptions et labels",
   appleWebApp: {
     capable: true,
@@ -14,6 +14,8 @@ export const metadata: Metadata = {
     title: "Producer",
   },
 };
+
+const COMPLETE_PROFILE_PATH = "/producer/complete-profile";
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -44,8 +46,9 @@ export default async function PortalProducerLayout({
   const access = await getUserPortalAccess();
 
   if (!access.hasAccess) {
-    // User is logged in but has no profile for this organization
-    redirect("/login");
+    // Signed in but no role or profile at all. Never send them back to
+    // /login: it redirects by role and would bounce them straight here.
+    redirect("/");
   }
 
   if (access.role !== "producer" && access.role !== "organizer") {
@@ -55,6 +58,14 @@ export default async function PortalProducerLayout({
     }
     // Fallback
     redirect("/");
+  }
+
+  // Signed up but never completed the producer profile: every page under
+  // /producer needs one, so funnel them to the form instead of bouncing
+  // them back to /login (which would send them straight back here).
+  const pathname = headersList.get("x-pathname") ?? "";
+  if (access.needsProducerProfile && pathname !== COMPLETE_PROFILE_PATH) {
+    redirect(COMPLETE_PROFILE_PATH);
   }
 
   return <NothingProducerLayout>{children}</NothingProducerLayout>;

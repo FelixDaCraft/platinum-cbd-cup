@@ -1,12 +1,13 @@
 import { TRPCError } from "@trpc/server";
+import { z } from "zod";
 import { nanoid } from "nanoid";
 import { and as drizzleAnd, eq, gte, lte } from "drizzle-orm";
 
 import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
 import { db } from "~/server/db";
 import * as schema from "~/server/db/schema";
-import { stripe } from "~/lib/stripe";
-import { env } from "~/env";
+import { createPaymentOrder, getTransaction } from "~/lib/viva";
+import { confirmPaidRegistration } from "~/server/services/registration-payment.service";
 import {
   addProductSchema,
   removeProductSchema,
@@ -15,13 +16,6 @@ import {
   listByCupSchema,
 } from "~/lib/validations/registration";
 import { anonymizeRegistrationProducts } from "~/server/services/anonymization.service";
-
-/**
- * Build the base URL for the single-tenant app.
- */
-function getPortalBaseUrl(): string {
-  return env.BETTER_AUTH_URL;
-}
 
 type ProtectedContext = {
   db: typeof db;
@@ -530,8 +524,9 @@ export const registrationRouter = createTRPCRouter({
   }),
 
   /**
-   * Create Stripe checkout session for registration payment
-   * Only works for pending_payment registrations with products
+   * Create a Viva.com payment order for a registration and return the URL the
+   * producer must be sent to. Only works for pending_payment registrations
+   * that actually have products and a non-zero total.
    */
   createCheckoutSession: protectedProcedure
     .input(getRegistrationSchema)
@@ -584,50 +579,97 @@ export const registrationRouter = createTRPCRouter({
         });
       }
 
-      // Get portal URL for redirect after payment
-      const baseUrl = getPortalBaseUrl();
-      const cupId = registration.cupId;
-
-      // Create Stripe Checkout Session for one-time payment
+      // The success / cancel URLs are configured on the Viva payment source
+      // (VIVA_SOURCE_CODE) in the Viva back-office, not per order.
       try {
-        const checkoutSession = await stripe.checkout.sessions.create({
-          mode: "payment",
-          payment_method_types: ["card"],
-          line_items: [
-            {
-              price_data: {
-                currency: (registration.currency ?? "EUR").toLowerCase(),
-                product_data: {
-                  name: `Inscription - ${registration.cup.name}`,
-                  description: `${registration.products.length} produit(s)`,
-                },
-                unit_amount: registration.totalAmount,
-              },
-              quantity: 1,
-            },
-          ],
-          success_url: `${baseUrl}/cups/${cupId}/register/success?session_id={CHECKOUT_SESSION_ID}`,
-          cancel_url: `${baseUrl}/cups/${cupId}/register?cancelled=true`,
-          customer_email: ctx.session.user.email ?? undefined,
-          metadata: {
-            type: "producer_registration",
-            registrationId: registration.id,
-            cupId,
-            producerId: producer.id,
-          },
+        const { orderCode, checkoutUrl } = await createPaymentOrder({
+          amount: registration.totalAmount,
+          customerTrns: `Inscription ${registration.cup.name} — ${registration.products.length} produit(s)`,
+          // Echoed back on the webhook; this is how a payment is matched to
+          // the registration it settles.
+          merchantTrns: registration.id,
+          customerEmail: ctx.session.user.email ?? undefined,
+          customerName: ctx.session.user.name ?? undefined,
         });
 
-        return {
-          checkoutUrl: checkoutSession.url,
-          sessionId: checkoutSession.id,
-        };
+        await ctx.db
+          .update(schema.registrations)
+          .set({ paymentOrderCode: orderCode, updatedAt: new Date() })
+          .where(eq(schema.registrations.id, registration.id));
+
+        return { checkoutUrl, orderCode };
       } catch (error) {
-        console.error("[Registration] Stripe checkout session creation failed:", error);
+        console.error("[Registration] Viva payment order creation failed:", error);
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
-          message: "Erreur lors de la creation de la session de paiement. Veuillez reessayer.",
+          message:
+            "Erreur lors de la creation de la session de paiement. Veuillez reessayer.",
         });
       }
+    }),
+
+  /**
+   * Settle a Viva payment from the success redirect.
+   *
+   * The webhook is the source of truth, but it can arrive after the producer
+   * is back on the site — or not at all if the webhook URL has not been
+   * registered in the Viva back-office yet. This re-reads the transaction
+   * from Viva and confirms the registration itself; `confirmPaidRegistration`
+   * is idempotent, so whichever path runs second is a no-op.
+   */
+  confirmVivaPayment: protectedProcedure
+    .input(z.object({ transactionId: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      const producer = await requireProducerByUser(ctx);
+
+      let transaction;
+      try {
+        transaction = await getTransaction(input.transactionId);
+      } catch (error) {
+        console.error("[Registration] Viva transaction lookup failed:", error);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Impossible de verifier le paiement aupres de Viva.",
+        });
+      }
+
+      // "F" = finished/settled. Anything else is not a completed payment.
+      if (transaction.statusId !== "F") {
+        return { status: "pending" as const, registrationId: null };
+      }
+
+      const registrationId = transaction.merchantTrns;
+      if (!registrationId) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Paiement non rattache a une inscription.",
+        });
+      }
+
+      // The transaction must belong to a registration of the caller.
+      const registration = await ctx.db.query.registrations.findFirst({
+        where: (reg, { eq: eqFn, and: andFn }) =>
+          andFn(
+            eqFn(reg.id, registrationId),
+            eqFn(reg.producerId, producer.id)
+          ),
+        columns: { id: true },
+      });
+
+      if (!registration) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Inscription non trouvee",
+        });
+      }
+
+      await confirmPaidRegistration({
+        registrationId,
+        transactionId: transaction.transactionId,
+        orderCode: transaction.orderCode,
+      });
+
+      return { status: "confirmed" as const, registrationId };
     }),
 
   /**

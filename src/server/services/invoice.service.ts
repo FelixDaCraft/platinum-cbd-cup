@@ -491,7 +491,7 @@ function createInvoiceDocument(data: InvoiceData) {
           { style: styles.legalLine },
           `Paiement effectue par carte bancaire${data.paymentDate ? ` le ${formatDate(data.paymentDate)}` : ""}`
         ),
-        React.createElement(Text, { style: styles.legalLine }, "Facture generee automatiquement par CupMetrics"),
+        React.createElement(Text, { style: styles.legalLine }, "Facture generee automatiquement par Platinum CBD Cup"),
         React.createElement(
           Text,
           { style: styles.legalLine },

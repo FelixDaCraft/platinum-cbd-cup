@@ -544,7 +544,7 @@ function createJuryPdfDocument(data: JuryPdfData) {
           React.createElement(
             Text,
             { style: styles.footerText },
-            "Document confidentiel — Synthèse générée par CupMetrics"
+            "Document confidentiel — Synthèse générée par Platinum CBD Cup"
           ),
           React.createElement(
             Text,
@@ -1316,7 +1316,7 @@ function createDetailPage(data: JuryProductDetailPdfData): React.ReactElement {
     React.createElement(
       View,
       { style: detailStyles.footer },
-      React.createElement(Text, { style: detailStyles.footerText }, "Document confidentiel — Généré par CupMetrics"),
+      React.createElement(Text, { style: detailStyles.footerText }, "Document confidentiel — Généré par Platinum CBD Cup"),
       React.createElement(
         Text,
         { style: detailStyles.footerText },

@@ -8,7 +8,7 @@ import { users } from "./auth";
 /**
  * Payment provider enum values
  */
-export const paymentProviderEnum = ["stripe", "viva_wallet"] as const;
+export const paymentProviderEnum = ["viva_wallet"] as const;
 export type PaymentProvider = (typeof paymentProviderEnum)[number];
 
 /**

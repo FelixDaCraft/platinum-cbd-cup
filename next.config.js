@@ -34,8 +34,8 @@ const config = {
   },
   images: {
     remotePatterns: [
-      { protocol: "https", hostname: "platinum.aynn.fr" },
-      { protocol: "https", hostname: "*.aynn.fr" },
+      { protocol: "https", hostname: "platinumcbdcup.eu" },
+      { protocol: "https", hostname: "*.platinumcbdcup.eu" },
       { protocol: "https", hostname: "localhost" },
       { protocol: "http", hostname: "localhost" },
       { protocol: "https", hostname: "res.cloudinary.com" },
@@ -45,8 +45,8 @@ const config = {
     ],
   },
   allowedDevOrigins: [
-    "platinum.aynn.fr",
-    "*.aynn.fr",
+    "platinumcbdcup.eu",
+    "*.platinumcbdcup.eu",
   ],
 
   // Security Headers
@@ -85,13 +85,13 @@ const config = {
             key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
               "font-src 'self' data: https://fonts.gstatic.com",
               "img-src 'self' data: blob: https:",
               "media-src 'self' blob:",
-              "connect-src 'self' https://api.stripe.com",
-              "frame-src 'self' https://js.stripe.com https://hooks.stripe.com",
+              "connect-src 'self'",
+              "frame-src 'self'",
               "worker-src 'self' blob:",
               "object-src 'none'",
               "base-uri 'self'",

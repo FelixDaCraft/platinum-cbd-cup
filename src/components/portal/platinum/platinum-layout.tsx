@@ -194,7 +194,7 @@ export function PlatinumLayout({
           </span>
           <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span className="pt-live-dot" />
-            Powered by CupMetrics
+            Platinum CBD Cup
           </span>
           <nav
             style={{ display: "flex", gap: 20 }}

@@ -165,8 +165,6 @@ describe("canPublishCup", () => {
     it("should return warning when cup has pricing but no payment processor", async () => {
       mockDb.query.cups.findFirst.mockResolvedValue({
         id: "cup_123",
-        paymentProvider: null,
-        paymentConfigEncrypted: null,
         defaultPricePerProduct: 1500, // Has pricing
       });
       mockDb.query.categories.findMany.mockResolvedValue([
@@ -189,8 +187,6 @@ describe("canPublishCup", () => {
     it("should not return warning when cup is free (no pricing)", async () => {
       mockDb.query.cups.findFirst.mockResolvedValue({
         id: "cup_123",
-        paymentProvider: null,
-        paymentConfigEncrypted: null,
         defaultPricePerProduct: null, // Free cup
       });
       mockDb.query.categories.findMany.mockResolvedValue([
@@ -211,8 +207,6 @@ describe("canPublishCup", () => {
     it("should not return warning when payment processor is configured", async () => {
       mockDb.query.cups.findFirst.mockResolvedValue({
         id: "cup_123",
-        paymentProvider: "stripe",
-        paymentConfigEncrypted: "encrypted:data",
         defaultPricePerProduct: 1500,
       });
       mockDb.query.categories.findMany.mockResolvedValue([
@@ -224,7 +218,8 @@ describe("canPublishCup", () => {
         name: "Criterion",
       });
 
-      const result = await canPublishCup("cup_123", mockDb as never);
+      // Payments are configured globally (VIVA_* env), passed in by the caller.
+      const result = await canPublishCup("cup_123", mockDb as never, true);
 
       expect(result.canPublish).toBe(true);
       expect(result.warnings).toHaveLength(0);

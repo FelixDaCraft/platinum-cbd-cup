@@ -112,16 +112,11 @@ function JuryRegisterContent() {
       }
 
       try {
-        // Store pending jury invitation for after email verification
+        // Store the pending invitation for after email verification.
+        // `/login` reads this exact key to send the user to /activate once
+        // they sign in, so it must stay in sync with login/page.tsx.
         if (typeof window !== "undefined") {
-          localStorage.setItem(
-            "jury_pending_activation",
-            JSON.stringify({
-              code: invitationCode,
-              cupId: codeValidation.cup?.id,
-              cupName: codeValidation.cup?.name,
-            })
-          );
+          localStorage.setItem("pendingActivationCode", invitationCode);
         }
 
         const result = await signUp.email({
@@ -142,7 +137,9 @@ function JuryRegisterContent() {
             errorMessage.includes("exists")
           ) {
             toast.error("Cet email est déjà utilisé. Connectez-vous pour activer votre code.");
-            router.push(`/login?redirect=/jury&code=${invitationCode}`);
+            router.push(
+              `/login?callbackUrl=${encodeURIComponent(`/activate?code=${invitationCode}`)}`
+            );
             return;
           }
 

@@ -38,7 +38,7 @@ export default function ImportPage() {
             Importation depuis une compétition existante
           </p>
           <p style={{ color: "var(--n-text-secondary)" }}>
-            Vous avez déjà organisé votre cup en dehors de CupMetrics ? Importez vos producteurs,
+            Vous avez déjà organisé votre cup en dehors de la plateforme ? Importez vos producteurs,
             produits et jurys pour utiliser la plateforme pour la notation.
           </p>
           <p style={{ color: "var(--n-text-secondary)" }}>
