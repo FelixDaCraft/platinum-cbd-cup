@@ -24,10 +24,14 @@ import dynamic from "next/dynamic";
  * as a blocking modal which hurts iteration speed.
  *
  * We filter exactly that prefix once, on the client, and leave every
- * other error untouched. No effect on the production build (no overlay
- * either way).
+ * other error untouched.
+ *
+ * Development only. This used to run in production too, where it silently
+ * swallowed the very same message when a CSP rule blocked the textures for
+ * real — the emblem rendered untextured with a clean console. Never hide a
+ * loader error on a build where it is the only symptom left.
  */
-if (typeof window !== "undefined") {
+if (typeof window !== "undefined" && process.env.NODE_ENV === "development") {
   const original = console.error;
   // Three.js passes the prefix and message as separate console.error args
   // ("THREE.GLTFLoader:", "Couldn't load texture blob:..."), so we can't

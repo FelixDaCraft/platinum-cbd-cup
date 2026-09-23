@@ -106,7 +106,13 @@ const config = {
               "font-src 'self' data: https://fonts.gstatic.com",
               "img-src 'self' data: blob: https:",
               "media-src 'self' blob:",
-              "connect-src 'self'",
+              // blob: is required by GLTFLoader: it wraps each texture
+              // embedded in a .glb into a blob: URL and loads it through
+              // ImageBitmapLoader, which uses fetch() — so the textures fall
+              // under connect-src, not img-src. Without it the 3D emblem
+              // renders untextured. Blobs are minted by our own page, so
+              // this grants nothing an attacker running script lacks.
+              "connect-src 'self' blob:",
               "frame-src 'self'",
               "worker-src 'self' blob:",
               "object-src 'none'",
