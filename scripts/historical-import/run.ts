@@ -183,13 +183,13 @@ async function importCup(
          rating_start_at, rating_end_at,
          results_published_at, event_date, event_location,
          results_visibility,
-         anonymization_prefix, default_price_per_product,
+         default_price_per_product,
          created_at, updated_at
        ) VALUES (
          $1, $2, $3, $4, 'completed', 'EUR', '0-20',
          $5, $6, $7, $8, $9, $10, $11,
          $12,
-         'A', 0,
+         0,
          $13, now()
        )`,
       [

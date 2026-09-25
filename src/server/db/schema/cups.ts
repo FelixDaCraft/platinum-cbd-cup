@@ -76,20 +76,6 @@ export const cups = pgTable(
     // When set, all ratings are locked regardless of ratingEndAt
     ratingsLockedAt: timestamp("ratings_locked_at", { withTimezone: true }),
     ratingsLockedBy: text("ratings_locked_by").references(() => users.id, { onDelete: "set null" }),
-    // Préfixe des codes anonymes (A-Z).
-    // ATTENTION : plus aucun code ne le lit. `generateAnonymousCode`
-    // (src/server/services/anonymization.service.ts) construit le préfixe à
-    // partir des initiales du nom de la catégorie ("Café Filtre" -> CF23).
-    // La colonne n'a plus que deux écrivains : la mutation tRPC
-    // `cup.updateAnonymizationPrefix` — qu'aucun écran n'appelle, elle n'est
-    // atteignable qu'en appel direct — et l'INSERT SQL brut de
-    // scripts/historical-import/run.ts.
-    // On ne supprime pas la colonne ici : il faut d'abord trancher entre
-    // « le service honore le préfixe » et « le réglage disparaît » (colonne +
-    // mutation + script dans le même lot), sinon le DROP COLUMN casse l'import
-    // historique — et comme c'est du SQL en chaîne, ni tsc ni les tests ne le
-    // verraient avant la panne.
-    anonymizationPrefix: text("anonymization_prefix").default("A"),
     // PDF customization - Story 8.3
     pdfLogoUrl: text("pdf_logo_url"), // URL to logo for PDF syntheses
     pdfIntroText: text("pdf_intro_text"), // Custom intro text for PDF syntheses

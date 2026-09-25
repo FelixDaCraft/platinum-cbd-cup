@@ -1,0 +1,17 @@
+-- Retrait de `cups.anonymization_prefix` (DO-10).
+--
+-- La colonne portait le préfixe des codes anonymes dans une conception
+-- abandonnée (format `#[PREFIX][NUMBER]`, ex. `#A127`). `generateAnonymousCode`
+-- construit en réalité le préfixe à partir des initiales du nom de la
+-- catégorie ("Café Filtre" -> CF23), et ne l'a jamais lue.
+--
+-- Vérifié avant suppression : aucun lecteur. Ses deux seuls écrivains
+-- partent dans le même lot — la mutation `cup.updateAnonymizationPrefix`,
+-- qu'aucun écran n'appelait, et l'INSERT SQL brut de
+-- scripts/historical-import/run.ts. Ce dernier point comptait : c'est du SQL
+-- en chaîne de caractères, donc ni le typecheck ni les tests n'auraient vu
+-- la panne — elle ne serait apparue qu'au prochain import d'archives.
+--
+-- DESTRUCTIF ET IRRÉVERSIBLE, mais sans perte de sens : la valeur était 'A'
+-- partout, et rien ne s'en servait.
+ALTER TABLE "cups" DROP COLUMN "anonymization_prefix";

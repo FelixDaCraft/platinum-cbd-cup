@@ -20,6 +20,27 @@ export type JuryCodeStatus = (typeof juryCodeStatusEnum)[number];
  * Used for public cups where jury members are not known in advance
  * They receive a code (via QR or text) that they can use to register as jury
  */
+/**
+ * Codes d'invitation jurés — À NE PAS FUSIONNER avec `public_jury_tokens`.
+ *
+ * Les audits successifs proposent de réunir les deux tables, qui se
+ * ressemblent de loin. Elles couvrent deux canaux de distribution distincts :
+ *
+ *   - `public_jury_tokens` : un QR code, rattaché à UNE catégorie
+ *     (`category_id` NOT NULL), généré par lots (`batch_id`), avec une date
+ *     d'expiration obligatoire.
+ *   - `jury_invitation_codes` (ici) : un code lisible à la main
+ *     ("FLR-7X9-KM2"), imprimé et envoyé à une boutique (`destination`),
+ *     couvrant PLUSIEURS catégories via `jury_invitation_code_categories`,
+ *     à expiration facultative.
+ *
+ * Les réunir donnerait une table où `category_id`, `destination` et `batch_id`
+ * sont tous nullables, avec deux formats de jeton mutuellement exclusifs et un
+ * cycle de vie qui est l'union de deux cycles ('available/claimed' d'un côté,
+ * 'pending/activated/revoked/expired' de l'autre). C'est une table large à
+ * colonnes optionnelles, pas une consolidation — et les deux parcours jurés
+ * sont parmi les plus sensibles de l'application.
+ */
 export const juryInvitationCodes = pgTable(
   "jury_invitation_codes",
   {

@@ -24,7 +24,6 @@ import {
 import { canPublishCup } from "~/lib/validations/publish";
 import { isVivaConfigured } from "~/lib/viva";
 import { eq, and, count, inArray, asc, isNotNull } from "drizzle-orm";
-import { hasAnonymizedProducts } from "~/server/services/anonymization.service";
 import { computeResults } from "~/server/api/routers/results";
 
 const requireCup = (
@@ -609,50 +608,6 @@ export const cupRouter = createTRPCRouter({
   /**
    * Update anonymization prefix for a cup (organizer only)
    */
-  updateAnonymizationPrefix: organizerProcedure
-    .input(
-      z.object({
-        cupId: z.string().min(1, "Cup ID requis"),
-        prefix: z
-          .string()
-          .length(1, "Le prefixe doit etre une seule lettre")
-          .regex(/^[A-Z]$/, "Le prefixe doit etre une lettre majuscule (A-Z)"),
-      })
-    )
-    .mutation(async ({ ctx, input }) => {
-      const existingCup = await requireCup(ctx, input.cupId);
-
-      if (existingCup.status === "rating" || existingCup.status === "completed") {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message:
-            "Le prefixe d'anonymisation ne peut pas etre modifie pendant ou apres la phase de notation",
-        });
-      }
-
-      const hasAnonymized = await hasAnonymizedProducts(ctx.db, input.cupId);
-      if (hasAnonymized) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message:
-            "Le prefixe ne peut pas etre modifie car des produits ont deja ete anonymises",
-        });
-      }
-
-      const [updatedCup] = await ctx.db
-        .update(schema.cups)
-        .set({
-          anonymizationPrefix: input.prefix,
-          updatedAt: new Date(),
-        })
-        .where(eq(schema.cups.id, input.cupId))
-        .returning();
-
-      return {
-        success: true,
-        anonymizationPrefix: updatedCup?.anonymizationPrefix,
-      };
-    }),
 
   /**
    * Get results publication settings for a cup
