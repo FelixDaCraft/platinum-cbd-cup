@@ -6,6 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useRouter } from "next/navigation";
 import { api } from "~/trpc/react";
+import { GdprSettings } from "~/components/profile/gdpr-settings";
 import { authClient } from "~/lib/auth-client";
 
 // ─── Form schema ──────────────────────────────────────────────────────────────
@@ -985,6 +986,11 @@ export default function JuryProfileEditPage() {
           </div>
         </div>
       </div>
+
+      {/* Export des données et suppression du compte (RGPD) — voir le
+          commentaire de l'espace producteur : ce bloc ne vivait que côté
+          organisateur. */}
+      <GdprSettings />
 
       {/* Responsive styles */}
       <style>{`

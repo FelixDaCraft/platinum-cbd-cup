@@ -84,12 +84,17 @@ export default function CompleteProfilePage() {
         } catch {
           // ignore
         }
-      } else {
-        toast.error("Aucun profil en attente. Inscrivez-vous via le portail.");
-        router.push("/");
       }
+      // Pas de renvoi vers l'accueil quand la clé est absente : ce stockage ne
+      // sert qu'à pré-remplir les deux champs saisis à l'inscription, et le
+      // formulaire fonctionne très bien sans (il a son propre texte pour ce
+      // cas). Or le layout producteur envoie ICI tout producteur sans profil,
+      // depuis n'importe quelle route /producer/** : la page le rejetait donc
+      // aussitôt vers l'accueil public dès qu'il changeait d'appareil, vidait
+      // son navigateur ou suivait un lien reçu par email — sans aucun moyen de
+      // créer son profil, donc sans aucun moyen d'accéder à son espace.
     }
-  }, [setValue, router]);
+  }, [setValue]);
 
   const onSubmit = (data: CompleteProfileInput) => {
     createProfile.mutate(data);

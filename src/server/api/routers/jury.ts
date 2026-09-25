@@ -2095,33 +2095,55 @@ export const juryRouter = createTRPCRouter({
       }
 
       const now = new Date();
-      const ratingId = existingRating?.id ?? nanoid();
       const existingScores = existingRating?.scores ?? [];
 
       // Une coupure entre l'insertion de la note et celle de ses scores laissait
       // une notation partielle marquee submittedAt, donc des moyennes faussees
       // dans computeResults : tout est ecrit d'un bloc.
-      await ctx.db.transaction(async (tx) => {
-        if (!existingRating) {
-          await tx.insert(schema.productRatings).values({
-            id: ratingId,
+      const ratingId = await ctx.db.transaction(async (tx) => {
+        // Upsert, et NON un « si existant alors UPDATE sinon INSERT » décidé sur
+        // une lecture faite hors transaction.
+        //
+        // L'écran de notation émet deux requêtes pour la même note :
+        // l'enregistrement automatique (submit:false, 300 ms après le dernier
+        // clic) et la validation (submit:true). Parties ensemble, elles
+        // lisaient toutes deux « aucune notation » et tentaient chacune un
+        // INSERT : la perdante remontait au juré l'erreur Postgres brute
+        // « duplicate key value violates unique constraint ».
+        //
+        // Plus grave, dans l'autre ordre : l'enregistrement automatique
+        // arrivait APRÈS la validation et remettait `submittedAt` à NULL. La
+        // page affichait « notation soumise » pendant que la base gardait un
+        // brouillon — une voix perdue, sans que personne ne puisse le savoir.
+        // D'où le `submit ? now : <valeur actuelle>` : une notation soumise ne
+        // redevient jamais un brouillon.
+        const [ligne] = await tx
+          .insert(schema.productRatings)
+          .values({
+            id: nanoid(),
             productId: input.productId,
             juryId: juryMembership.id,
             comment: input.comment,
             submittedAt: input.submit ? now : null,
             createdAt: now,
             updatedAt: now,
-          });
-        } else {
-          await tx
-            .update(schema.productRatings)
-            .set({
-              comment: input.comment,
-              submittedAt: input.submit ? now : null,
+          })
+          .onConflictDoUpdate({
+            target: [schema.productRatings.productId, schema.productRatings.juryId],
+            set: {
+              comment: sql`excluded.comment`,
+              submittedAt: input.submit
+                ? now
+                : sql`${schema.productRatings.submittedAt}`,
               updatedAt: now,
-            })
-            .where(eq(schema.productRatings.id, ratingId));
-        }
+            },
+          })
+          .returning({ id: schema.productRatings.id });
+
+        // L'identifiant qui ressort est celui de la ligne RÉELLE — pas le
+        // nanoid généré plus haut, qui est jeté en cas de conflit. Les scores
+        // doivent s'y rattacher, sinon ils partent sur une notation fantôme.
+        const idReel = ligne!.id;
 
         // Un seul upsert pour tous les criteres, adosse a l'unicite
         // (product_rating_id, criterion_id). La reprise d'un brouillon faisait
@@ -2134,7 +2156,7 @@ export const juryRouter = createTRPCRouter({
               id:
                 existingScores.find((s) => s.criterionId === score.criterionId)?.id ??
                 nanoid(),
-              productRatingId: ratingId,
+              productRatingId: idReel,
               criterionId: score.criterionId,
               score: score.score,
               createdAt: now,
@@ -2160,6 +2182,8 @@ export const juryRouter = createTRPCRouter({
             updatedAt: now,
           })
           .where(eq(schema.cupJuries.id, juryMembership.id));
+
+        return idReel;
       });
 
       // Calculate weighted average score

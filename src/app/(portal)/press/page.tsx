@@ -40,6 +40,13 @@ async function getPressData() {
 export default async function PressPage() {
   const { releases, gallery, settings } = await getPressData();
 
+  // `??` ne se déclenche que sur null et undefined. Dès qu'une ligne
+  // press_settings existait avec un `press_email` vide — ce que le formulaire
+  // d'administration produit en enregistrant un champ non renseigné — la page
+  // affichait « écrivez à . » et une fiche contact sans adresse, aux deux
+  // endroits. Un site de presse sans adresse de presse.
+  const emailPresse = settings?.pressEmail?.trim() || "press@platinumcbdcup.eu";
+
   return (
     <div className="page-enter">
       <section style={{ paddingTop: 40, paddingBottom: 40 }}>
@@ -51,7 +58,7 @@ export default async function PressPage() {
           Communiqués, dossiers de presse, kit média et galerie photo en haute
           résolution. Pour toute demande, écrivez à{" "}
           <span className="mono" style={{ color: "var(--fg)" }}>
-            {settings?.pressEmail ?? "press@platinumcbdcup.eu"}
+            {emailPresse}
           </span>
           .
         </p>
@@ -191,7 +198,7 @@ export default async function PressPage() {
           <div className="kv" style={{ marginTop: 16 }}>
             <span className="kv-k">Email</span>
             <span className="kv-v">
-              {settings?.pressEmail ?? "press@platinumcbdcup.eu"}
+              {emailPresse}
             </span>
           </div>
           {settings?.pressPhone && (

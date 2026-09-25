@@ -10,6 +10,7 @@ import { Input } from "~/components/ui/input";
 import { Switch } from "~/components/ui/switch";
 import { ImageUpload } from "~/components/ui/image-upload";
 import { api } from "~/trpc/react";
+import { GdprSettings } from "~/components/profile/gdpr-settings";
 import { authClient } from "~/lib/auth-client";
 import {
   producerProfileUpdateSchema,
@@ -408,6 +409,16 @@ export default function ProducerProfilePage() {
           SE DECONNECTER
         </button>
       </div>
+
+      {/*
+        Export des données et suppression du compte (RGPD).
+        Ce bloc n'était monté que dans l'espace organisateur : un producteur
+        n'avait aucun moyen d'exercer son droit à l'effacement depuis
+        l'interface, alors que les procédures serveur l'autorisent (elles sont
+        `protected`, pas `organizer`). Pour une association qui collecte des
+        données d'entreprise, ce n'était pas une option.
+      */}
+      <GdprSettings />
     </div>
   );
 }
