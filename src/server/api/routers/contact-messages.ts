@@ -2,7 +2,6 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { nanoid } from "nanoid";
 import { eq, and, count, desc, or } from "drizzle-orm";
-import { Resend } from "resend";
 
 import {
   createTRPCRouter,
@@ -11,13 +10,19 @@ import {
 } from "~/server/api/trpc";
 import { env } from "~/env";
 import { db } from "~/server/db";
+import {
+  escapeHtml,
+  getResendClient,
+  renderButton,
+  renderCallout,
+  renderEmailLayout,
+} from "~/server/services/email";
+import { getPortalBaseUrl } from "~/server/services/app-url";
 import * as schema from "~/server/db/schema";
 import {
   contactSubjectEnum,
   type ContactSubject,
 } from "~/server/db/schema/contact-messages";
-
-const resend = new Resend(env.RESEND_API_KEY);
 
 /**
  * Destinataire de repli quand aucun compte organisateur n'existe encore en
@@ -35,23 +40,6 @@ const CONTACT_SUBJECT_LABELS: Record<ContactSubject, string> = {
   technical: "Support technique",
   other: "Autre",
 };
-
-/**
- * Échappe les valeurs saisies par le public avant interpolation dans le HTML
- * de l'email : sans cela un nom ou un message peut y injecter des balises.
- */
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-function getPortalBaseUrl(): string {
-  return process.env.NEXT_PUBLIC_APP_URL ?? env.BETTER_AUTH_URL;
-}
 
 /**
  * Prévient l'organisateur qu'un message vient d'arriver dans la boîte de
@@ -88,44 +76,36 @@ async function notifyOrganizersOfContactMessage(params: {
       console.log("=".repeat(60) + "\n");
     }
 
-    const result = await resend.emails.send({
+    const header = renderCallout({
+      // `block` : l'encadré porte trois paragraphes, le `<p>` par défaut du
+      // helper produirait un HTML mal imbriqué.
+      block: true,
+      background: "#f9fafb",
+      textColor: "#4b5563",
+      borderColor: "#d4af37",
+      content: `
+            <p style="color: #4b5563; font-size: 15px; margin: 0 0 8px 0;"><strong>Expéditeur :</strong> ${escapeHtml(senderName)}</p>
+            <p style="color: #4b5563; font-size: 15px; margin: 0 0 8px 0;"><strong>Email :</strong> ${escapeHtml(senderEmail)}</p>
+            <p style="color: #4b5563; font-size: 15px; margin: 0;"><strong>Sujet :</strong> ${escapeHtml(subjectLabel)}</p>`,
+    });
+
+    // Le corps du message garde son `white-space: pre-wrap` propre : le
+    // visiteur écrit du texte libre, et `renderParagraph` écraserait ses
+    // retours à la ligne en un seul bloc illisible.
+    const body = `${header}
+      <p style="color: #4b5563; font-size: 16px; line-height: 1.6; white-space: pre-wrap; margin-bottom: 24px;">${escapeHtml(message)}</p>
+${renderButton(`${portalBaseUrl}/dashboard/settings/portal/messages`, "Ouvrir la boîte de réception")}`;
+
+    // Envoi direct plutôt que via `sendEmail` : cette notification part vers
+    // plusieurs organisateurs et pose un `replyTo` sur l'adresse du visiteur
+    // (l'organisateur répond depuis son client mail), deux options que le
+    // helper partagé n'expose pas encore.
+    const result = await getResendClient().emails.send({
       from: env.EMAIL_FROM,
       to: recipients,
       replyTo: senderEmail,
       subject: `Nouveau message de contact - ${subjectLabel}`,
-      html: `
-        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px; background-color: #ffffff;">
-          <div style="text-align: center; margin-bottom: 32px;">
-            <h1 style="color: #d4af37; font-size: 32px; margin: 0;">
-              Platinum CBD Cup
-            </h1>
-          </div>
-
-          <h2 style="color: #1f2937; font-size: 24px; margin-bottom: 16px;">
-            Nouveau message de contact
-          </h2>
-
-          <div style="background-color: #f9fafb; border-radius: 8px; padding: 24px; margin-bottom: 24px; border-left: 4px solid #d4af37;">
-            <p style="color: #4b5563; font-size: 15px; margin: 0 0 8px 0;"><strong>Expéditeur :</strong> ${escapeHtml(senderName)}</p>
-            <p style="color: #4b5563; font-size: 15px; margin: 0 0 8px 0;"><strong>Email :</strong> ${escapeHtml(senderEmail)}</p>
-            <p style="color: #4b5563; font-size: 15px; margin: 0;"><strong>Sujet :</strong> ${escapeHtml(subjectLabel)}</p>
-          </div>
-
-          <p style="color: #4b5563; font-size: 16px; line-height: 1.6; white-space: pre-wrap; margin-bottom: 24px;">${escapeHtml(message)}</p>
-
-          <div style="text-align: center; margin: 32px 0;">
-            <a href="${portalBaseUrl}/dashboard/settings/portal/messages" style="display: inline-block; background-color: #d4af37; color: #0a0a0f; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">
-              Ouvrir la boîte de réception
-            </a>
-          </div>
-
-          <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 32px 0;" />
-
-          <p style="color: #9ca3af; font-size: 12px; text-align: center;">
-            Platinum CBD Cup
-          </p>
-        </div>
-      `,
+      html: renderEmailLayout({ title: "Nouveau message de contact", body }),
     });
 
     if (result.error) {

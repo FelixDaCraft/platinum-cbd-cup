@@ -3,7 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Hors ligne - Platinum CBD Cup</title>
+  <meta name="theme-color" content="#d4af37">
+  <title>Hors ligne — Platinum CBD Cup</title>
+  <!--
+    Page servie par le service worker quand le réseau est tombé. Elle ne peut
+    dépendre d'AUCUNE ressource externe : polices, CSS et logo ne seraient pas
+    joignables au moment précis où elle s'affiche. Tout est donc en ligne ici,
+    et la palette recopie les jetons de platinum-styles.ts (--bg #0a0a0a,
+    --fg #f2f2f2, --accent #d4af37) plutôt que le bleu générique hérité du
+    gabarit d'origine, qui donnait un écran manifestement étranger au site.
+  -->
   <style>
     * {
       margin: 0;
@@ -11,62 +20,92 @@
       box-sizing: border-box;
     }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: linear-gradient(135deg, #0a0f1a 0%, #1a1f2e 100%);
+      font-family: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+      background: #0a0a0a;
       min-height: 100vh;
       display: flex;
       align-items: center;
       justify-content: center;
-      color: #e2e8f0;
+      color: #f2f2f2;
+      letter-spacing: -0.005em;
+      -webkit-font-smoothing: antialiased;
+    }
+    /* Trame de points décorative : la même que `.matrix` du portail, pour que
+       la page hors ligne reste reconnaissable comme une page du site. */
+    .matrix {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background-image: radial-gradient(circle, rgba(242, 242, 242, .08) 1px, transparent 1.2px);
+      background-size: 22px 22px;
+      -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 40%, #000 30%, transparent 100%);
+      mask-image: radial-gradient(ellipse 80% 60% at 50% 40%, #000 30%, transparent 100%);
     }
     .container {
+      position: relative;
       text-align: center;
       padding: 2rem;
-      max-width: 400px;
+      max-width: 420px;
     }
-    .icon {
-      font-size: 4rem;
-      margin-bottom: 1.5rem;
+    .eyebrow {
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: .6875rem;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+      color: #d4af37;
+      margin-bottom: 1.25rem;
     }
     h1 {
-      font-size: 1.5rem;
+      font-family: "Louize Display", "Playfair Display", Didot, "Bodoni 72", serif;
+      font-style: italic;
+      font-size: 1.75rem;
+      font-weight: 700;
       margin-bottom: 1rem;
-      color: #f1f5f9;
+      color: #f2f2f2;
     }
     p {
-      color: #94a3b8;
+      color: rgba(242, 242, 242, .62);
       margin-bottom: 2rem;
       line-height: 1.6;
     }
-    button {
-      background: #3b82f6;
-      color: white;
-      border: none;
+    /* Lien, et non bouton : un `onclick="location.reload()"` est un
+       gestionnaire inline, donc le premier élément à casser le jour où la CSP
+       perdra `unsafe-inline` sur script-src. Un href vide se résout sur l'URL
+       du document — ici celle de la page demandée — donc le clic relance
+       exactement la même navigation, sans une ligne de script. */
+    .retry {
+      display: inline-block;
+      background: #d4af37;
+      color: #0a0a0a;
+      text-decoration: none;
       padding: 0.75rem 2rem;
-      border-radius: 0.5rem;
+      border-radius: 14px;
       font-size: 1rem;
-      cursor: pointer;
+      font-weight: 600;
       transition: background 0.2s;
     }
-    button:hover {
-      background: #2563eb;
+    .retry:hover {
+      background: #f5e6a8;
     }
-    button:active {
+    .retry:active {
       transform: scale(0.98);
+    }
+    .retry:focus-visible {
+      outline: 2px solid #f5e6a8;
+      outline-offset: 3px;
     }
   </style>
 </head>
 <body>
+  <div class="matrix" aria-hidden="true"></div>
   <div class="container">
-    <div class="icon">📡</div>
+    <div class="eyebrow">Platinum CBD Cup</div>
     <h1>Vous êtes hors ligne</h1>
     <p>
-      Impossible de se connecter à Platinum CBD Cup.
-      Vérifiez votre connexion internet et réessayez.
+      Impossible de joindre Platinum CBD Cup.
+      Vérifiez votre connexion internet, puis réessayez.
     </p>
-    <button onclick="window.location.reload()">
-      Réessayer
-    </button>
+    <a class="retry" href="">Réessayer</a>
   </div>
 </body>
 </html>

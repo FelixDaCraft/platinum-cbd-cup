@@ -131,9 +131,19 @@ export default function SponsorsSettingsPage() {
                   className="h-32 flex items-center justify-center p-4"
                   style={{ borderBottom: "1px solid var(--n-border)" }}
                 >
+                  {/* Pas de width/height ici : le logo d'un sponsor a un
+                      rapport hauteur/largeur quelconque et c'est le cadre
+                      (h-32) qui réserve la place — la grille ne bouge donc
+                      pas à l'arrivée de l'image. Forcer des dimensions
+                      agrandirait au contraire les petits logos. Restent le
+                      décodage hors du thread principal et le chargement
+                      paresseux : la liste des sponsors défile sur plusieurs
+                      écrans. */}
                   <img
                     src={sponsor.logo}
                     alt={sponsor.name}
+                    loading="lazy"
+                    decoding="async"
                     className="max-h-full max-w-full object-contain"
                     onError={(e) => {
                       const target = e.target as HTMLImageElement;

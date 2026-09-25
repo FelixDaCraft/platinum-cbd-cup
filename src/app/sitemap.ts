@@ -2,6 +2,11 @@ import type { MetadataRoute } from "next";
 import { unstable_cache } from "next/cache";
 import { db } from "~/server/db";
 
+// Même point unique que robots.ts et que les pages du portail : une copie
+// locale de l'URL de base finit par diverger, et un plan de site qui pointe
+// vers l'ancien domaine se traduit par autant d'URL mortes à l'indexation.
+import { canonical } from "./(portal)/_lib/seo";
+
 // Query the DB at request time, not at build time — avoids connecting to a
 // placeholder DB during `next build`. Le rendu reste dynamique pour cette
 // raison, mais les lectures sont mémoïsées ci-dessous : un robot
@@ -12,13 +17,6 @@ export const revalidate = 0;
 /** Le plan du site ne change qu'à la publication d'un contenu : une heure de
  *  retard sur un fichier destiné aux robots n'a aucune conséquence. */
 const SITEMAP_REVALIDATE = 3600;
-
-/**
- * Base URL for the single-tenant Platinum CBD Cup app.
- */
-function getBaseUrl(): string {
-  return process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-}
 
 /**
  * Inventaire des contenus référençables.
@@ -60,7 +58,6 @@ const getIndexableContent = unstable_cache(
  * No org filter — the whole DB belongs to one tenant now.
  */
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const baseUrl = getBaseUrl();
   const now = new Date();
 
   const [cups, articles, sponsors] = await getIndexableContent();
@@ -68,73 +65,73 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Static pages
   const staticPages: MetadataRoute.Sitemap = [
     {
-      url: baseUrl,
+      url: canonical(),
       lastModified: now,
       changeFrequency: "daily",
       priority: 1,
     },
     {
-      url: `${baseUrl}/cups`,
+      url: canonical("/cups"),
       lastModified: now,
       changeFrequency: "daily",
       priority: 0.9,
     },
     {
-      url: `${baseUrl}/about`,
+      url: canonical("/about"),
       lastModified: now,
       changeFrequency: "monthly",
       priority: 0.7,
     },
     {
-      url: `${baseUrl}/sponsors`,
+      url: canonical("/sponsors"),
       lastModified: now,
       changeFrequency: "weekly",
       priority: 0.7,
     },
     {
-      url: `${baseUrl}/articles`,
+      url: canonical("/articles"),
       lastModified: now,
       changeFrequency: "daily",
       priority: 0.8,
     },
     {
-      url: `${baseUrl}/archives`,
+      url: canonical("/archives"),
       lastModified: now,
       changeFrequency: "weekly",
       priority: 0.5,
     },
     {
-      url: `${baseUrl}/press`,
+      url: canonical("/press"),
       lastModified: now,
       changeFrequency: "weekly",
       priority: 0.6,
     },
     {
-      url: `${baseUrl}/palmares`,
+      url: canonical("/palmares"),
       lastModified: now,
       changeFrequency: "weekly",
       priority: 0.6,
     },
     {
-      url: `${baseUrl}/contact`,
+      url: canonical("/contact"),
       lastModified: now,
       changeFrequency: "monthly",
       priority: 0.5,
     },
     {
-      url: `${baseUrl}/reglement`,
+      url: canonical("/reglement"),
       lastModified: now,
       changeFrequency: "yearly",
       priority: 0.5,
     },
     {
-      url: `${baseUrl}/mentions-legales`,
+      url: canonical("/mentions-legales"),
       lastModified: now,
       changeFrequency: "yearly",
       priority: 0.3,
     },
     {
-      url: `${baseUrl}/confidentialite`,
+      url: canonical("/confidentialite"),
       lastModified: now,
       changeFrequency: "yearly",
       priority: 0.3,
@@ -142,21 +139,21 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   ];
 
   const cupPages: MetadataRoute.Sitemap = cups.map((cup) => ({
-    url: `${baseUrl}/cups/${cup.id}`,
+    url: canonical(`/cups/${cup.id}`),
     lastModified: cup.updatedAt ?? now,
     changeFrequency: "daily" as const,
     priority: 0.8,
   }));
 
   const articlePages: MetadataRoute.Sitemap = articles.map((article) => ({
-    url: `${baseUrl}/articles/${article.slug}`,
+    url: canonical(`/articles/${article.slug}`),
     lastModified: article.updatedAt ?? now,
     changeFrequency: "weekly" as const,
     priority: 0.7,
   }));
 
   const sponsorPages: MetadataRoute.Sitemap = sponsors.map((sponsor) => ({
-    url: `${baseUrl}/sponsors/${sponsor.id}`,
+    url: canonical(`/sponsors/${sponsor.id}`),
     lastModified: sponsor.updatedAt ?? now,
     changeFrequency: "monthly" as const,
     priority: 0.5,

@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 
-import { User, Mail, Shield } from "lucide-react";
+import { User, Mail, Shield, KeyRound } from "lucide-react";
 
 import { ProfileForm } from "~/components/profile/profile-form";
 import { EmailChangeForm } from "~/components/profile/email-change-form";
 import { GdprSettings } from "~/components/profile/gdpr-settings";
+import { PasswordChangeForm } from "./_components/password-change-form";
 
 interface SettingsCardProps {
   icon: React.ReactNode;
@@ -62,6 +63,19 @@ export default function SettingsPage() {
           description="MODIFIEZ VOTRE ADRESSE EMAIL"
         >
           <EmailChangeForm />
+        </SettingsCard>
+
+        {/* Le compte pouvait changer son email mais pas son mot de passe :
+            il fallait se déconnecter et passer par « mot de passe oublié ».
+            Sur toute la largeur, la liste des critères tenant mal dans une
+            demi-colonne. */}
+        <SettingsCard
+          icon={<KeyRound className="h-4 w-4" />}
+          title="Mot de passe"
+          description="CHANGEZ VOTRE MOT DE PASSE ET FERMEZ LES AUTRES SESSIONS"
+          className="md:col-span-2"
+        >
+          <PasswordChangeForm />
         </SettingsCard>
 
         <SettingsCard

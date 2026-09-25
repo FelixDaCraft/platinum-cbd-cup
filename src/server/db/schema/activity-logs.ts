@@ -14,22 +14,14 @@ export const activityActionEnum = pgEnum("activity_action", [
   "password_reset",
   "email_change",
   // Admin actions
-  // [LEGACY CupMetrics] admin_suspend_organization, admin_reactivate_organization,
-  // admin_update_plan_config, organization_* et subscription_* ne sont plus
-  // jamais écrits. Postgres ne sait pas retirer une valeur d'un type enum :
-  // les purger demande un nouveau type + cast, donc une migration versionnée.
+  // Les huit valeurs héritées de CupMetrics (admin_suspend_organization,
+  // admin_reactivate_organization, admin_update_plan_config, organization_*,
+  // subscription_*) ont été retirées : aucun code ne les écrit depuis le fork
+  // mono-tenant et le journal de production n'en contient aucune ligne. Tant
+  // qu'elles restaient dans le type, `ActivityAction` proposait à l'autocomplétion
+  // et laissait passer au typage des actions qui ne peuvent plus se produire ici.
   "admin_create_organizer",
-  "admin_suspend_organization",
-  "admin_reactivate_organization",
   "admin_toggle_admin",
-  "admin_update_plan_config",
-  // Organization actions
-  "organization_created",
-  "organization_updated",
-  // Subscription actions
-  "subscription_created",
-  "subscription_updated",
-  "subscription_cancelled",
   // Cup actions
   "cup_created",
   "cup_updated",

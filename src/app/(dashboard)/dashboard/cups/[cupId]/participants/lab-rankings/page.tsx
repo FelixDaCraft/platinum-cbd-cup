@@ -244,14 +244,17 @@ function CategoryRanking({ category }: { category: CategoryData }) {
           <p style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: "12px", letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--n-text-display)", fontWeight: 700 }}>Classement détaillé</p>
         </div>
         <table style={{ width: "100%", fontSize: "13px" }}>
+          {/* scope="col" : sans lui, ce classement se restitue en une suite de
+              pourcentages sans en-tête — on n'entend plus quelle colonne porte
+              le taux de terpènes. */}
           <thead>
             <tr style={{ background: "var(--n-surface-raised)", borderBottom: "1px solid var(--n-border)" }}>
-              <th style={{ padding: "8px 12px", textAlign: "left", fontFamily: "'Space Mono', monospace", fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--n-text-secondary)", fontWeight: 600 }}>Rang</th>
-              <th style={{ padding: "8px 12px", textAlign: "left", fontFamily: "'Space Mono', monospace", fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--n-text-secondary)", fontWeight: 600 }}>Code</th>
-              <th style={{ padding: "8px 12px", textAlign: "left", fontFamily: "'Space Mono', monospace", fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--n-text-secondary)", fontWeight: 600 }}>Produit</th>
-              <th style={{ padding: "8px 12px", textAlign: "left", fontFamily: "'Space Mono', monospace", fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--n-text-secondary)", fontWeight: 600 }}>Producteur</th>
-              <th style={{ padding: "8px 12px", textAlign: "right", fontFamily: "'Space Mono', monospace", fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--n-text-secondary)", fontWeight: 600 }}>Terpènes %</th>
-              <th style={{ padding: "8px 12px", textAlign: "left", fontFamily: "'Space Mono', monospace", fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--n-text-secondary)", fontWeight: 600 }}>Top 3 terpènes</th>
+              <th scope="col" style={{ padding: "8px 12px", textAlign: "left", fontFamily: "'Space Mono', monospace", fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--n-text-secondary)", fontWeight: 600 }}>Rang</th>
+              <th scope="col" style={{ padding: "8px 12px", textAlign: "left", fontFamily: "'Space Mono', monospace", fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--n-text-secondary)", fontWeight: 600 }}>Code</th>
+              <th scope="col" style={{ padding: "8px 12px", textAlign: "left", fontFamily: "'Space Mono', monospace", fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--n-text-secondary)", fontWeight: 600 }}>Produit</th>
+              <th scope="col" style={{ padding: "8px 12px", textAlign: "left", fontFamily: "'Space Mono', monospace", fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--n-text-secondary)", fontWeight: 600 }}>Producteur</th>
+              <th scope="col" style={{ padding: "8px 12px", textAlign: "right", fontFamily: "'Space Mono', monospace", fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--n-text-secondary)", fontWeight: 600 }}>Terpènes %</th>
+              <th scope="col" style={{ padding: "8px 12px", textAlign: "left", fontFamily: "'Space Mono', monospace", fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--n-text-secondary)", fontWeight: 600 }}>Top 3 terpènes</th>
             </tr>
           </thead>
           <tbody>

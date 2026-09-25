@@ -4,6 +4,7 @@ import { getCupOrThrow } from "~/server/api/helpers/cup";
 import * as schema from "~/server/db/schema";
 import { eq, and, count, isNotNull, inArray } from "drizzle-orm";
 import { convertScoreToScale } from "~/lib/validations/labels";
+import { calculateWeightedScore } from "~/lib/validations/criteria";
 import { ratingCriteria } from "~/server/db/schema/rating-criteria";
 
 /**
@@ -476,16 +477,22 @@ export const scoringRouter = createTRPCRouter({
         const ratingAverages: number[] = [];
 
         for (const rating of product.ratings) {
-          let weightedSum = 0;
-          let coeffSum = 0;
-          for (const score of rating.scores) {
-            const coeff = criteriaCoefficients.get(score.criterionId) ?? 1;
-            weightedSum += score.score * coeff;
-            coeffSum += coeff;
-          }
-          if (coeffSum > 0) {
-            ratingAverages.push(weightedSum / coeffSum);
-          }
+          // Implémentation partagée (`~/lib/validations/criteria`) : ce
+          // classement live et le calcul définitif de `computeResults`
+          // recopiaient la même formule, et tout écart entre les deux faisait
+          // bouger le podium au moment de la publication des résultats.
+          // Une notation sans aucun score n'entre pas dans la moyenne des
+          // jurés — le helper renverrait 0, ce qui ferait chuter le produit.
+          if (rating.scores.length === 0) continue;
+          ratingAverages.push(
+            calculateWeightedScore(
+              rating.scores.map((score) => ({
+                score: score.score,
+                criterionCoefficient:
+                  criteriaCoefficients.get(score.criterionId) ?? 1,
+              }))
+            )
+          );
         }
 
         const averageScore =

@@ -20,6 +20,7 @@ import {
   getProductResultsForPdf,
 } from "~/server/services/results-pdf.service";
 import { getMaxScoreForScale } from "~/lib/validations/labels";
+import { calculateWeightedScore } from "~/lib/validations/criteria";
 
 const getProducerIdByUser = async (ctx: AuthedContext) => {
   const producer = await ctx.db.query.producers.findFirst({
@@ -1301,17 +1302,18 @@ export const producerRouter = createTRPCRouter({
           };
         });
 
-        // Calculate total score for this jury
-        let totalWeightedScore = 0;
-        let totalCoefficients = 0;
-        criteriaData.forEach((c) => {
-          if (c.score !== null) {
-            totalWeightedScore += c.score * c.coefficient;
-            totalCoefficients += c.coefficient;
-          }
-        });
+        // Note globale de ce juré, via l'implémentation partagée
+        // (`~/lib/validations/criteria`) : le producteur et l'organisateur
+        // lisent la même page de détail, ils doivent y lire le même chiffre.
+        // Les critères laissés vides sont retirés d'abord, pour que « non
+        // noté » reste `null` au lieu de devenir 0.
+        const notedCriteria = criteriaData.flatMap((c) =>
+          c.score === null
+            ? []
+            : [{ score: c.score, criterionCoefficient: c.coefficient }]
+        );
         const juryTotalScore =
-          totalCoefficients > 0 ? totalWeightedScore / totalCoefficients : null;
+          notedCriteria.length > 0 ? calculateWeightedScore(notedCriteria) : null;
 
         return {
           juryId: `jury-${index + 1}`,

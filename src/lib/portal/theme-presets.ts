@@ -3,6 +3,8 @@
  * Each preset defines a cohesive color scheme and style
  */
 
+import { ORGANIZATION_NAME } from "~/lib/organization";
+
 export interface ThemePresetConfig {
   id: string;
   name: string;
@@ -23,8 +25,11 @@ export interface ThemePresetConfig {
 export const themePresets: Record<string, ThemePresetConfig> = {
   default: {
     id: "default",
-    name: "CupMetrics",
-    description: "Le thème signature CupMetrics avec des tons ambrés chaleureux",
+    // Le préréglage portait encore le nom du SaaS dont cette application est
+    // issue : « CupMetrics » s'affichait dans le sélecteur de thème d'un
+    // produit qui n'existe plus.
+    name: ORGANIZATION_NAME,
+    description: `Le thème signature ${ORGANIZATION_NAME} avec des tons ambrés chaleureux`,
     primaryColor: "#f59e0b",
     secondaryColor: "#3b82f6",
     backgroundColor: "#ffffff",
@@ -127,20 +132,15 @@ export const themePresets: Record<string, ThemePresetConfig> = {
   },
 };
 
-// Default theme configuration (used as fallback)
-const defaultTheme: ThemePresetConfig = {
-  id: "default",
-  name: "CupMetrics",
-  description: "Le thème signature CupMetrics avec des tons ambrés chaleureux",
-  primaryColor: "#f59e0b",
-  secondaryColor: "#3b82f6",
-  backgroundColor: "#ffffff",
-  foregroundColor: "#0f172a",
-  mutedColor: "#64748b",
-  accentColor: "#fbbf24",
-  borderRadius: "0.5rem",
-  fontFamily: "Inter, system-ui, sans-serif",
-};
+/**
+ * Repli pour un identifiant de préréglage inconnu.
+ *
+ * Recopié à la main du préréglage `default`, il en divergeait : la marque y
+ * était restée « CupMetrics » alors que la table était corrigée, si bien
+ * qu'un `themePreset` obsolète en base ramenait l'ancien nom à l'écran. On
+ * pointe désormais sur la même entrée.
+ */
+const defaultTheme: ThemePresetConfig = themePresets.default!;
 
 /**
  * Get a theme preset by ID

@@ -1,10 +1,12 @@
 /**
  * Construction des URL absolues du portail.
  *
- * `metadataBase` n'est pas défini sur le layout racine : Next ne peut donc
- * pas résoudre lui-même les chemins relatifs des balises canoniques et Open
- * Graph, il faut les donner en absolu. La même base servait déjà, recopiée,
- * dans robots.ts, sitemap.ts et cinq pages — d'où ce point unique.
+ * `metadataBase` est désormais posé sur le layout racine, donc Next sait
+ * résoudre un chemin relatif. On continue néanmoins de donner les URL en
+ * absolu ici : les balises canoniques et `openGraph.url` doivent l'être quoi
+ * qu'il arrive, et robots.ts comme sitemap.ts ne passent pas du tout par
+ * l'API metadata. La même base était recopiée dans huit fichiers — d'où ce
+ * point unique.
  */
 export function baseUrl(): string {
   return process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";

@@ -12,6 +12,11 @@ celle de la production). Node 20 est en fin de vie depuis avril 2026 ;
 développer sur une version plus récente que 22 expose à des écarts dev/prod
 silencieux (undici/fetch, binaires sharp).
 
+> Écart connu : le workflow de déploiement installe encore `node-version: "20"`
+> sur le runner. L'image livrée reste en Node 22 — seuls `pnpm typecheck` et
+> `pnpm test` tournent sur 20 côté CI. Une régression propre à Node 22 peut
+> donc passer la CI. À aligner sur 22 dans `.github/workflows/deploy.yml`.
+
 ```bash
 # 1. Install deps
 pnpm install
@@ -93,7 +98,11 @@ le libellé est faux depuis la bascule, la commande exécutée est bien
 `drizzle-kit migrate`.
 
 Reprendre une migration à froid sur une base vide (nouvel environnement) :
-`pnpm db:migrate` suffit, les deux fichiers s'appliquent dans l'ordre.
+`pnpm db:migrate` suffit, les cinq fichiers `0000` → `0004` s'appliquent dans
+l'ordre du journal. Ne pas lancer `baseline-migrations.mjs` sur une base
+vierge : il marquerait `0000_baseline_production` comme appliquée alors que
+rien n'existe, et les migrations suivantes échoueraient sur des tables
+absentes. Ce script ne sert qu'aux bases déjà construites par `db:push`.
 
 ### Sauvegarde / restauration
 
@@ -126,15 +135,38 @@ affiche des valeurs à recopier.
 | Script | À quoi il sert | Quand |
 |---|---|---|
 | `node scripts/generate-secrets.js` | Génère `BETTER_AUTH_SECRET`, `CRON_SECRET`, `POSTGRES_PASSWORD` et rappelle les révocations côté fournisseur | Installation, rotation |
-| `node scripts/baseline-migrations.mjs --apply` | Marque `0000_baseline_production` comme déjà appliquée sur une base construite par `db:push` | Une seule fois, avant le premier `db:migrate` |
+| `DATABASE_URL=… node scripts/baseline-migrations.mjs --apply` | Marque `0000_baseline_production` comme déjà appliquée sur une base construite par `db:push` | Une seule fois, avant le premier `db:migrate` |
 | `pnpm tsx scripts/process-account-deletions.ts --apply` | Anonymise les comptes dont la suppression RGPD est arrivée à échéance | **Une fois par jour**, cron ou timer systemd sur l'hôte |
 | `pnpm tsx scripts/verify-imported-accounts.ts --apply` | Débloque les comptes créés par import CSV, qui n'ont ni mot de passe ni email vérifié | Après un import de producteurs |
-| `pnpm tsx scripts/historical-import/run.ts --apply` | Injecte les palmarès 2023-2025 décrits dans `plan.ts` | Ponctuel, après relecture de `REVIEW.md` |
+| `TARGET_DATABASE_URL=… pnpm tsx scripts/historical-import/run.ts --apply` | Injecte les palmarès 2023-2025 décrits dans `plan.ts` (5 cups, 60 produits) | Ponctuel, après relecture de `REVIEW.md` |
+
+Attention aux variables d'environnement : seuls `process-account-deletions.ts`
+et `verify-imported-accounts.ts` chargent `dotenv` et trouvent donc `.env` tout
+seuls. Les autres attendent la variable sur la ligne de commande —
+`historical-import/run.ts` et `migrate-from-cupmetrics.ts` lisent
+`TARGET_DATABASE_URL`, `baseline-migrations.mjs` lit `DATABASE_URL` — et
+sortent aussitôt sur « … is required » si elle manque.
 
 `scripts/migrate-from-cupmetrics.ts` est une **migration one-shot déjà
 exécutée** : elle écrit dans `TARGET_DATABASE_URL` et sait tronquer les
 tables cibles. Elle n'est conservée que comme trace de ce qui a été transféré
-et refuse de démarrer sans `CONFIRM_ONE_SHOT_MIGRATION=1`. Ne pas la rejouer.
+et refuse de démarrer sans `CONFIRM_ONE_SHOT_MIGRATION=1` — y compris pour un
+`DRY_RUN=1`.
+
+Ne comptez sur aucun autre garde-fou. Elle nomme les tables d'archives à
+l'ancien préfixe `cupmetrics_historical_*`, que la migration `0003` a renommées
+côté cible — mais elle **n'échoue pas** pour autant : `copyRows()` interroge
+`information_schema`, ne trouve aucune colonne commune, émet un avertissement
+et passe à la table suivante. La boucle appelante attrape d'ailleurs chaque
+erreur pour poursuivre. Relancée par erreur avec `TRUNCATE_TARGET=1`, elle
+viderait donc les autres tables cibles sans jamais s'arrêter.
+
+Ce script est le **seul** consommateur de `@neondatabase/serverless`, `ws` et
+`@types/ws` : la source était une base Neon, l'application ne parle qu'au
+Postgres du homelab via `pg`. Ces trois dépendances ne servent plus à rien à
+l'exécution et pèsent sur l'image. Elles ne sont pas retirées ici parce que
+`package.json` est gelé pendant la campagne d'audit — à faire dans une passe
+dédiée, avec `pnpm remove` et un `pnpm typecheck` de contrôle.
 
 `scripts/debug-lab-pdf.ts` et `scripts/test-lab-parser.ts` lisent des
 échantillons dans `tmp/lab-samples/`, volontairement hors dépôt (documents

@@ -1,3 +1,7 @@
+// L'URL publique est lue dans `process.env` par `~/server/services/app-url`,
+// qui refuse de fabriquer un lien sans elle. Posée avant les imports.
+process.env.NEXT_PUBLIC_APP_URL = "https://test.platinumcbdcup.eu";
+
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { TRPCError } from "@trpc/server";
 

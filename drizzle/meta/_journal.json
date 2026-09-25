@@ -36,6 +36,13 @@
       "when": 1790259246977,
       "tag": "0004_checks_etats_restants",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790329611588,
+      "tag": "0005_corrections_enum_et_galerie",
+      "breakpoints": true
     }
   ]
 }

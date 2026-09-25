@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, integer, check } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, integer, jsonb, check } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 import { generateId } from "./id";
 import { categories } from "./categories";
@@ -76,8 +76,19 @@ export const cups = pgTable(
     // When set, all ratings are locked regardless of ratingEndAt
     ratingsLockedAt: timestamp("ratings_locked_at", { withTimezone: true }),
     ratingsLockedBy: text("ratings_locked_by").references(() => users.id, { onDelete: "set null" }),
-    // Anonymization configuration for product codes
-    // Prefix used for anonymous codes (A-Z), format: #[PREFIX][NUMBER] e.g., #A127
+    // Préfixe des codes anonymes (A-Z).
+    // ATTENTION : plus aucun code ne le lit. `generateAnonymousCode`
+    // (src/server/services/anonymization.service.ts) construit le préfixe à
+    // partir des initiales du nom de la catégorie ("Café Filtre" -> CF23).
+    // La colonne n'a plus que deux écrivains : la mutation tRPC
+    // `cup.updateAnonymizationPrefix` — qu'aucun écran n'appelle, elle n'est
+    // atteignable qu'en appel direct — et l'INSERT SQL brut de
+    // scripts/historical-import/run.ts.
+    // On ne supprime pas la colonne ici : il faut d'abord trancher entre
+    // « le service honore le préfixe » et « le réglage disparaît » (colonne +
+    // mutation + script dans le même lot), sinon le DROP COLUMN casse l'import
+    // historique — et comme c'est du SQL en chaîne, ni tsc ni les tests ne le
+    // verraient avant la panne.
     anonymizationPrefix: text("anonymization_prefix").default("A"),
     // PDF customization - Story 8.3
     pdfLogoUrl: text("pdf_logo_url"), // URL to logo for PDF syntheses
@@ -85,7 +96,17 @@ export const cups = pgTable(
     // Public page customization - Story 9.1
     bannerUrl: text("banner_url"), // URL to banner image for public page
     publicPageDescription: text("public_page_description"), // Extended description for public page
-    galleryUrls: text("gallery_urls"), // JSON array of gallery image URLs
+    // Galerie de la page publique. Stockée en `jsonb` comme les autres
+    // galeries du schéma (sponsors.gallery, organization_about.gallery_images) :
+    // en `text`, le tableau était sérialisé à la main et un contenu invalide
+    // (écriture hors application, troncature) ne se voyait qu'au JSON.parse du
+    // routeur, qui repliait silencieusement sur une galerie vide. Une fois la
+    // migration 0005 appliquée, Postgres refuse la valeur à l'écriture.
+    // ATTENTION à l'ordre de déploiement : tant que la colonne est en `text`
+    // côté base, Drizzle rend la chaîne brute là où le type annonce
+    // `string[]`. Rien ne le lit aujourd'hui (la colonne est NULL partout en
+    // production), mais le code et la base ne se rejoignent qu'après 0005.
+    galleryUrls: jsonb("gallery_urls").$type<string[]>(),
     eventDate: timestamp("event_date", { withTimezone: true }), // Main event date shown on public page
     eventLocation: text("event_location"), // Location/venue for the event
     contactEmail: text("contact_email"), // Contact email shown on public page

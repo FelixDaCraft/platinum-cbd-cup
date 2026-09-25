@@ -65,18 +65,21 @@ function ProductDetailRow({ productId, cupId }: ProductDetailRowProps) {
             </p>
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                {/* scope="col" : le rattachement cellule/en-tête n'est pas déduit du
+                    seul <thead>. Sans lui, la restitution vocale de ce tableau est une
+                    file de notes détachées de leur critère. */}
                 <thead>
                   <tr style={{ borderBottom: "1px solid var(--n-border-visible)" }}>
-                    <th style={{ padding: "8px 12px", textAlign: "left" }}>
+                    <th scope="col" style={{ padding: "8px 12px", textAlign: "left" }}>
                       <span className="n-label" style={{ color: "var(--n-text-secondary)" }}>CRITÈRE</span>
                     </th>
-                    <th style={{ padding: "8px 12px", textAlign: "center" }}>
+                    <th scope="col" style={{ padding: "8px 12px", textAlign: "center" }}>
                       <span className="n-label" style={{ color: "var(--n-text-secondary)" }}>MA NOTE</span>
                     </th>
-                    <th style={{ padding: "8px 12px", textAlign: "center" }}>
+                    <th scope="col" style={{ padding: "8px 12px", textAlign: "center" }}>
                       <span className="n-label" style={{ color: "var(--n-text-secondary)" }}>MOY. CAT.</span>
                     </th>
-                    <th style={{ padding: "8px 12px", textAlign: "right" }}>
+                    <th scope="col" style={{ padding: "8px 12px", textAlign: "right" }}>
                       <span className="n-label" style={{ color: "var(--n-text-secondary)" }}>ÉCART</span>
                     </th>
                   </tr>
@@ -379,24 +382,26 @@ export default function JuryResultsComparisonPage({ params }: PageProps) {
           {/* Products table */}
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              {/* scope="col" — même raison que le tableau des critères plus haut :
+                  sans en-tête rattaché, les trois colonnes de notes se confondent. */}
               <thead>
                 <tr style={{ borderBottom: "1px solid var(--n-border-visible)" }}>
-                  <th style={{ padding: "10px 12px", textAlign: "left", width: "48px" }}>
+                  <th scope="col" style={{ padding: "10px 12px", textAlign: "left", width: "48px" }}>
                     <span className="n-label" style={{ color: "var(--n-text-secondary)" }}>#</span>
                   </th>
-                  <th style={{ padding: "10px 12px", textAlign: "left" }}>
+                  <th scope="col" style={{ padding: "10px 12px", textAlign: "left" }}>
                     <span className="n-label" style={{ color: "var(--n-text-secondary)" }}>PRODUIT</span>
                   </th>
-                  <th style={{ padding: "10px 12px", textAlign: "left" }}>
+                  <th scope="col" style={{ padding: "10px 12px", textAlign: "left" }}>
                     <span className="n-label" style={{ color: "var(--n-text-secondary)" }}>PRODUCTEUR</span>
                   </th>
-                  <th style={{ padding: "10px 12px", textAlign: "right" }}>
+                  <th scope="col" style={{ padding: "10px 12px", textAlign: "right" }}>
                     <span className="n-label" style={{ color: "var(--n-text-secondary)" }}>MA NOTE</span>
                   </th>
-                  <th style={{ padding: "10px 12px", textAlign: "right" }}>
+                  <th scope="col" style={{ padding: "10px 12px", textAlign: "right" }}>
                     <span className="n-label" style={{ color: "var(--n-text-secondary)" }}>SCORE FINAL</span>
                   </th>
-                  <th style={{ padding: "10px 12px", textAlign: "right" }}>
+                  <th scope="col" style={{ padding: "10px 12px", textAlign: "right" }}>
                     <span className="n-label" style={{ color: "var(--n-text-secondary)" }}>ÉCART</span>
                   </th>
                 </tr>

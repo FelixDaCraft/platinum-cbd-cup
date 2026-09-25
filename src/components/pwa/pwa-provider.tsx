@@ -70,12 +70,11 @@ export function PWAProvider({
       link.setAttribute("href", href);
     };
 
+    // Ne restent ici que les deux valeurs qui dépendent du thème chargé à
+    // l'exécution. Le manifeste, `mobile-web-app-capable`, sa variante Apple
+    // et la barre d'état sont désormais déclarés par l'API metadata dans
+    // src/app/layout.tsx : les reposer ici produisait des balises en double.
     upsertMeta("theme-color", finalThemeColor);
-    upsertMeta("mobile-web-app-capable", "yes");
-    upsertMeta("apple-mobile-web-app-capable", "yes");
-    upsertMeta("apple-mobile-web-app-status-bar-style", "black-translucent");
-
-    upsertLink("manifest", "/manifest.json");
     upsertLink("apple-touch-icon", logoUrl ?? FALLBACK_APPLE_TOUCH_ICON);
   }, [finalThemeColor, logoUrl]);
 

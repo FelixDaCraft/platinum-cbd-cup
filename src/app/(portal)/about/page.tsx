@@ -177,8 +177,20 @@ export default async function AboutPage() {
                 <figure key={m.id ?? i} className="team-member">
                   <div className="team-photo-frame">
                     {m.photo ? (
+                      // Le cadre réserve déjà la place (aspect-ratio 4/5 dans
+                      // platinumCSS) : les dimensions ne servent ici qu'à
+                      // annoncer ce même rapport au navigateur. Le décodage
+                      // asynchrone évite qu'une galerie de portraits bloque
+                      // le thread principal pendant le défilement.
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={m.photo} alt={m.name} loading="lazy" />
+                      <img
+                        src={m.photo}
+                        alt={m.name}
+                        width={400}
+                        height={500}
+                        loading="lazy"
+                        decoding="async"
+                      />
                     ) : (
                       <span className="team-photo-placeholder">
                         {getInitials(m.name)}

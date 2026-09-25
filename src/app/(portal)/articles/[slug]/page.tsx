@@ -190,13 +190,29 @@ function RenderTipTap({ content }: { content: unknown }): React.ReactNode {
       return <hr className="hr" />;
     case "image":
       if (node.attrs?.src) {
+        // Une illustration en cours d'article s'affichait à hauteur nulle
+        // puis poussait d'un coup tout le texte qui la suit : le lecteur
+        // perdait sa ligne en plein paragraphe. Quand l'éditeur a enregistré
+        // les dimensions, on les repasse au navigateur — avec height:auto il
+        // en déduit le rapport et réserve la hauteur avant le chargement.
+        const largeur = Number(node.attrs.width);
+        const hauteur = Number(node.attrs.height);
+        const dimensions =
+          Number.isFinite(largeur) && largeur > 0 &&
+          Number.isFinite(hauteur) && hauteur > 0
+            ? { width: largeur, height: hauteur }
+            : {};
         return (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={node.attrs.src}
             alt={node.attrs.alt ?? ""}
+            {...dimensions}
+            loading="lazy"
+            decoding="async"
             style={{
               width: "100%",
+              height: "auto",
               borderRadius: 10,
               border: "1px solid var(--line)",
               margin: "1.5em 0",

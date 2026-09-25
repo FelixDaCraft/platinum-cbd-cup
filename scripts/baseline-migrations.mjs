@@ -13,7 +13,22 @@
  * Usage :
  *   node scripts/baseline-migrations.mjs                    # simulation
  *   node scripts/baseline-migrations.mjs --apply            # écrit
- *   node scripts/baseline-migrations.mjs --apply --through 0000_baseline_production
+ *   node scripts/baseline-migrations.mjs --apply --through=0000_baseline_production
+ *
+ * DANGER — `--through` marque comme appliquées TOUTES les migrations jusqu'au
+ * tag inclus, SANS exécuter leur SQL. Sur la base de production, la seule
+ * valeur correcte est `0000_baseline_production`, qui est aussi la valeur par
+ * défaut : c'est la seule migration dont le contenu est déjà en place. Passer
+ * un tag plus avancé ferait sauter le DDL des migrations intermédiaires, et
+ * l'écart ne se verrait qu'à l'exécution, longtemps après. N'utilisez un autre
+ * tag que si vous savez précisément pourquoi le schéma décrit par ces
+ * migrations est déjà en base.
+ *
+ * Le signe « = » est obligatoire : l'analyse ne lit que `--through=<tag>`. La
+ * forme séparée par une espace, telle qu'elle était documentée ici, n'était
+ * jamais reconnue — le script retombait en silence sur la valeur par défaut et
+ * marquait donc un jeu de migrations différent de celui demandé, sur une base
+ * qu'on croyait alignée. D'où le garde-fou ci-dessous.
  *
  * DATABASE_URL doit pointer sur la base à marquer.
  */
@@ -25,6 +40,15 @@ import { Pool } from "pg";
 
 const args = process.argv.slice(2);
 const apply = args.includes("--apply");
+
+// `--through 0000_x` (sans « = ») serait ignoré et la valeur par défaut
+// appliquée : on refuse plutôt que d'écrire un jeu de migrations que
+// l'opérateur n'a pas demandé.
+if (args.includes("--through")) {
+  console.error("--through attend la forme --through=<tag>, sans espace.");
+  process.exit(1);
+}
+
 const through =
   args.find((a) => a.startsWith("--through="))?.split("=")[1] ??
   "0000_baseline_production";

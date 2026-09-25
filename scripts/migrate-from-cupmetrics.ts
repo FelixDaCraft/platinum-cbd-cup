@@ -17,10 +17,17 @@
  * Postgres instance.
  *
  * Usage:
+ *   CONFIRM_ONE_SHOT_MIGRATION=1 \
  *   SOURCE_DATABASE_URL="postgresql://user:pass@ep-xxx.neon.tech/neondb?sslmode=require" \
  *   TARGET_DATABASE_URL="postgresql://platinum:...@localhost:5432/platinum_cbd_cup" \
  *   PLATINUM_ORG_ID="<the organization id of Platinum CBD Cup in CupMetrics>" \
  *   pnpm migrate-from-cupmetrics
+ *
+ * CONFIRM_ONE_SHOT_MIGRATION=1 est exigé même pour un DRY_RUN : le garde-fou
+ * s'exécute avant toute autre vérification. La documentation ne le listait
+ * qu'en tête de fichier, pas dans l'usage, et un lecteur qui recopiait le bloc
+ * ci-dessus pour « juste regarder les compteurs » tombait sur une exception
+ * qu'il pouvait prendre pour une panne de connexion à la source.
  *
  * Optional flags (set to "1" to enable):
  *   DRY_RUN=1         → print row counts only, don't write

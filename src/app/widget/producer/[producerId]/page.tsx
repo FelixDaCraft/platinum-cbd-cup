@@ -79,6 +79,11 @@ export default async function ProducerWidgetPage({
             alt=""
             width={32}
             height={32}
+            // Dimensions déjà posées ; reste le décodage hors du thread
+            // principal, le widget étant embarqué dans la page d'un tiers
+            // dont il ne doit pas retarder l'affichage. Pas de chargement
+            // paresseux : c'est la première chose visible de l'embed.
+            decoding="async"
             style={{ borderRadius: 6, objectFit: "contain", flexShrink: 0 }}
           />
         )}

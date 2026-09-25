@@ -1,8 +1,20 @@
 /**
  * Anonymization Service
- * Generates unique anonymous codes for products after payment confirmation
- * Format: #[PREFIX][NUMBER] where PREFIX is configurable per cup (A-Z)
- * and NUMBER auto-increments per category
+ * Génère les codes anonymes des produits après confirmation du paiement.
+ * Format : [INITIALES DE CATÉGORIE][NOMBRE], par exemple CF23 pour « Café Filtre ».
+ *
+ * ATTENTION — la colonne `cups.anonymization_prefix` n'est PAS lue ici, et ne
+ * l'a jamais été depuis le fork : le préfixe est dérivé du nom de la catégorie,
+ * pas d'un réglage de la cup. La mutation `cup.updateAnonymizationPrefix`
+ * l'écrit encore et refuse même de la modifier « une fois des produits
+ * anonymisés », ce qui laisse croire à l'organisateur qu'il pilote quelque
+ * chose : régler le préfixe sur « B » ne change aucun code.
+ *
+ * Le comportement conservé est celui-ci, volontairement : un préfixe unique par
+ * cup donnerait à deux produits de catégories différentes des codes voisins
+ * (A1, A2, …) alors que les initiales de catégorie disent au juré de quel
+ * classement relève l'échantillon qu'il a en main. C'est donc la colonne et sa
+ * mutation qui doivent disparaître, pas ce calcul.
  */
 
 import { eq, and, sql } from "drizzle-orm";
@@ -46,7 +58,9 @@ async function lockCategoryNumbering(db: DbClient, categoryId: string): Promise<
  * and NUMBER is a random number, unique within the category
  *
  * @param db - Database client
- * @param cupId - The cup ID (unused, kept for API compatibility)
+ * @param cupId - Inutilisé : le préfixe vient de la catégorie, pas de la cup.
+ *   Conservé pour ne pas casser les appelants tant que la signature n'est pas
+ *   reprise (voir l'avertissement en tête de fichier).
  * @param categoryId - The category ID for numbering scope
  * @returns Anonymous code like CF23 (Café Filtre), EPA87 (Espresso Pur Arabica), etc.
  */
@@ -166,7 +180,11 @@ export async function anonymizeRegistrationProducts(
 
 /**
  * Check if a cup has any anonymized products
- * Used to prevent changing anonymization prefix after products are anonymized
+ *
+ * Appelée par `cup.updateAnonymizationPrefix`, qui s'en sert pour refuser un
+ * changement de préfixe « trop tard », et couverte par son propre bloc de
+ * tests. Ce garde-fou protège un réglage qui n'a aucun effet (voir l'en-tête
+ * du fichier) : il partira avec la mutation, le jour où l'on tranchera.
  *
  * @param db - Database client
  * @param cupId - The cup ID to check

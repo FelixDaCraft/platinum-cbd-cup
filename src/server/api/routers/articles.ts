@@ -12,6 +12,7 @@ import {
   organizerProcedure,
 } from "~/server/api/trpc";
 import * as schema from "~/server/db/schema";
+import { tiptapDocumentInput } from "~/server/api/schemas/tiptap";
 
 // Slug generation helper
 function generateSlug(title: string): string {
@@ -94,7 +95,9 @@ export const articlesRouter = createTRPCRouter({
         title: z.string().min(1, "Le titre est requis"),
         slug: z.string().optional(),
         excerpt: z.string().optional(),
-        content: z.record(z.unknown()), // TipTap JSON
+        // Contenu riche de l'éditeur. Borné en forme, en profondeur et en
+        // taille : voir `~/server/api/schemas/tiptap`.
+        content: tiptapDocumentInput,
         coverImage: z.string().optional(),
         category: z.string().optional(),
         tags: z.array(z.string()).optional(),
@@ -157,7 +160,7 @@ export const articlesRouter = createTRPCRouter({
         title: z.string().min(1).optional(),
         slug: z.string().optional(),
         excerpt: z.string().optional().nullable(),
-        content: z.record(z.unknown()).optional(),
+        content: tiptapDocumentInput.optional(),
         coverImage: z.string().nullable().optional(),
         category: z.string().optional().nullable(),
         tags: z.array(z.string()).optional(),

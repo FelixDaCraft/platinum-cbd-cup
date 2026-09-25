@@ -4,7 +4,20 @@ import { APIError, createAuthMiddleware } from "better-auth/api";
 
 import { db } from "~/server/db";
 import { env } from "~/env";
-import { escapeHtml, renderAuthEmail, sendEmail } from "~/lib/email";
+/**
+ * Les emails d'authentification passent par le service email du serveur, pas
+ * par un client Resend dédié : un second client signifiait un second endroit
+ * où changer de fournisseur, et surtout un second `escapeHtml` et un second
+ * gabarit HTML qui divergeaient de ceux des onze autres templates. Le `scope`
+ * passé à `sendEmail` reste le préfixe grepable des logs d'échec.
+ */
+import {
+  escapeHtml,
+  renderButton,
+  renderEmailLayout,
+  renderParagraph,
+  sendEmail,
+} from "~/server/services/email";
 import { passwordSchema } from "~/lib/validations/auth";
 import * as schema from "~/server/db/schema";
 
@@ -171,21 +184,23 @@ export const auth = betterAuth({
         }
 
         const result = await sendEmail({
-          template: "change-email",
+          scope: "Auth Change Email",
           // Better Auth crée le jeton sur l'adresse ACTUELLE : c'est le
           // titulaire du compte qui doit approuver, pas le destinataire de
           // la nouvelle adresse. Envoyer au `newEmail` permettrait à une
           // session volée de rebinder le compte sans trace côté victime.
           to: user.email,
           subject: "Confirmez le changement d'adresse email - Platinum CBD Cup",
-          html: renderAuthEmail({
+          html: renderEmailLayout({
             title: "Confirmez le changement d'adresse email",
-            intro: `Une demande a été faite pour remplacer l'adresse email de votre compte par
-                  <strong>${escapeHtml(newEmail)}</strong>. Cliquez sur le bouton ci-dessous pour approuver ce changement :`,
-            cta: { label: "Confirmer le changement", url },
-            footnote: `Si vous n'êtes pas à l'origine de cette demande, <strong>ne cliquez pas</strong> sur
-                  le bouton : votre adresse email reste inchangée. Changez votre mot de passe par
-                  précaution, quelqu'un pourrait avoir accès à votre session.`,
+            body:
+              renderParagraph(
+                `Une demande a été faite pour remplacer l'adresse email de votre compte par <strong>${escapeHtml(newEmail)}</strong>. Cliquez sur le bouton ci-dessous pour approuver ce changement :`
+              ) +
+              renderButton(url, "Confirmer le changement") +
+              renderParagraph(
+                "Si vous n'êtes pas à l'origine de cette demande, <strong>ne cliquez pas</strong> sur le bouton : votre adresse email reste inchangée. Changez votre mot de passe par précaution, quelqu'un pourrait avoir accès à votre session."
+              ),
           }),
         });
 
@@ -215,16 +230,19 @@ export const auth = betterAuth({
       }
 
       const result = await sendEmail({
-        template: "reset-password",
+        scope: "Auth Reset Password",
         to: user.email,
         subject: "Réinitialisez votre mot de passe - Platinum CBD Cup",
-        html: renderAuthEmail({
+        html: renderEmailLayout({
           title: "Réinitialisation de mot de passe",
-          intro:
-            "Vous avez demandé à réinitialiser votre mot de passe. Cliquez sur le bouton ci-dessous pour choisir un nouveau mot de passe :",
-          cta: { label: "Réinitialiser mon mot de passe", url },
-          footnote:
-            "Ce lien expire dans 1 heure. Si vous n'avez pas demandé cette réinitialisation, vous pouvez ignorer cet email en toute sécurité.",
+          body:
+            renderParagraph(
+              "Vous avez demandé à réinitialiser votre mot de passe. Cliquez sur le bouton ci-dessous pour choisir un nouveau mot de passe :"
+            ) +
+            renderButton(url, "Réinitialiser mon mot de passe") +
+            renderParagraph(
+              "Ce lien expire dans 1 heure. Si vous n'avez pas demandé cette réinitialisation, vous pouvez ignorer cet email en toute sécurité."
+            ),
         }),
       });
 
@@ -272,16 +290,19 @@ export const auth = betterAuth({
       }
 
       const result = await sendEmail({
-        template: "verification",
+        scope: "Auth Verification",
         to: user.email,
         subject: "Confirmez votre inscription - Platinum CBD Cup",
-        html: renderAuthEmail({
+        html: renderEmailLayout({
           title: "Bienvenue sur Platinum CBD Cup !",
-          intro:
-            "Merci de vous être inscrit. Cliquez sur le bouton ci-dessous pour confirmer votre adresse email et activer votre compte :",
-          cta: { label: "Confirmer mon email", url },
-          footnote:
-            "Si vous n'avez pas créé de compte sur Platinum CBD Cup, vous pouvez ignorer cet email en toute sécurité.",
+          body:
+            renderParagraph(
+              "Merci de vous être inscrit. Cliquez sur le bouton ci-dessous pour confirmer votre adresse email et activer votre compte :"
+            ) +
+            renderButton(url, "Confirmer mon email") +
+            renderParagraph(
+              "Si vous n'avez pas créé de compte sur Platinum CBD Cup, vous pouvez ignorer cet email en toute sécurité."
+            ),
         }),
       });
 

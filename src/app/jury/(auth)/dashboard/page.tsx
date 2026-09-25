@@ -364,9 +364,18 @@ export default function PortalJuryDashboardPage() {
         {/* Org identity */}
         <div>
           {theme.logoUrl ? (
+            // La hauteur est fixée à 32 px, pas la largeur : sans attributs
+            // le logo compte pour 0 px de large tant qu'il n'est pas chargé.
+            // Les dimensions annoncent un rapport de repli (4:1, celui du
+            // logo Platinum) le temps du chargement ; `width:auto` rend la
+            // main à la largeur réelle ensuite. En-tête : pas de chargement
+            // paresseux.
             <img
               src={theme.logoUrl}
               alt={organization.name}
+              width={128}
+              height={32}
+              decoding="async"
               style={{ height: 32, width: "auto", objectFit: "contain", marginBottom: 8, filter: "brightness(0) invert(1) opacity(0.6)" }}
             />
           ) : null}

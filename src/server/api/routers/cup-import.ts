@@ -11,6 +11,7 @@ import { createTRPCRouter, organizerProcedure } from "~/server/api/trpc";
 import { auth } from "~/lib/auth";
 import type { db as Database } from "~/server/db";
 import * as schema from "~/server/db/schema";
+import { generateId } from "~/server/db/schema/id";
 import { sendBulkInvitations } from "~/server/services/jury-invitation.service";
 import { generateAnonymousCode as generateAnonymousCodeFromService } from "~/server/services/anonymization.service";
 
@@ -329,7 +330,12 @@ export const cupImportRouter = createTRPCRouter({
             const userCreated = !user;
 
             if (!user) {
-              const userId = nanoid();
+              // `generateId` plutôt que `nanoid` : la table `users` appartient
+              // à Better Auth, qui pose lui-même les identifiants des comptes
+              // créés par le formulaire d'inscription. L'import CSV écrit la
+              // ligne directement ; il doit produire le format garanti par le
+              // schéma, pas celui d'un paquet tiers susceptible d'évoluer.
+              const userId = generateId();
               const [inserted] = await tx
                 .insert(schema.users)
                 .values({
@@ -401,7 +407,11 @@ export const cupImportRouter = createTRPCRouter({
               await sendAccountSetupEmail(outcome.email);
               invitesSent++;
             } catch (e) {
-              console.error("Error sending setup email:", outcome.email, e);
+              // Le numéro de ligne suffit à l'organisateur pour retrouver le
+              // producteur dans son CSV. L'adresse elle-même reste hors du
+              // journal : les logs Docker ne sont ni chiffrés ni purgés, y
+              // écrire une donnée personnelle la rend indéracinable (RGPD).
+              console.error(`[Import] Envoi du lien d'activation en echec (ligne ${index + 1}):`, e);
               failures.push({
                 row: index + 1,
                 identifier: producer.email,
@@ -412,7 +422,10 @@ export const cupImportRouter = createTRPCRouter({
             }
           }
         } catch (e) {
-          console.error("Error importing producer:", producer.email, e);
+          // Même raison : la ligne fautive est identifiée par son rang, pas
+          // par l'adresse du producteur. Celle-ci repart à l'organisateur
+          // dans `failures`, où elle lui est utile et reste éphémère.
+          console.error(`[Import] Ligne ${index + 1} non importee:`, e);
           failures.push({
             row: index + 1,
             identifier: producer.email,
@@ -465,7 +478,10 @@ export const cupImportRouter = createTRPCRouter({
           await sendAccountSetupEmail(producer.email);
           sent++;
         } catch (e) {
-          console.error("Error sending setup email:", producer.email, e);
+          // `userId` plutôt que l'adresse : identifiant technique suffisant
+          // pour enquêter, et qui ne fait pas du journal un fichier de
+          // données personnelles.
+          console.error(`[Import] Relance d'activation en echec (user ${producer.userId}):`, e);
           failures.push({
             email: producer.email,
             reason: e instanceof Error ? e.message : "Erreur inconnue",

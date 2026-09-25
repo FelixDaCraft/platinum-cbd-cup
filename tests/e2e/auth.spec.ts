@@ -57,7 +57,21 @@ test.describe("Authentification", () => {
 
       // Reste sur /login : aucune redirection vers un espace authentifié.
       await expect(page).toHaveURL(/\/login/);
-      await expect(page.locator("body")).not.toContainText(/compte introuvable|utilisateur inconnu/i);
+
+      // L'échec est annoncé par un toast sonner (Toaster monté dans
+      // providers.tsx), jamais dans le corps de la page. La version précédente
+      // cherchait l'absence de « compte introuvable » / « utilisateur inconnu »
+      // dans <body> : ces deux tournures n'existent nulle part dans le dépôt,
+      // l'assertion ne pouvait donc pas échouer et fermait à tort le point
+      // « pas d'énumération de comptes ». On vérifie désormais positivement le
+      // message générique de login/page.tsx : si une branche distinguant
+      // « ce compte n'existe pas » de « mot de passe incorrect » est
+      // réintroduite, le texte change et le test tombe.
+      const toast = page.locator("[data-sonner-toast]").first();
+      await expect(toast).toBeVisible();
+      await expect(toast, "message d'échec de connexion").toContainText(
+        /email ou mot de passe incorrect/i
+      );
     });
 
     test("@P1 renvoie vers la création de compte", async ({ page }) => {

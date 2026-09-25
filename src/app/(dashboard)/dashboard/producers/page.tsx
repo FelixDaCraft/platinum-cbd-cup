@@ -119,14 +119,17 @@ export default function ProducersPage() {
       {/* Table */}
       <div style={{ background: "var(--n-surface)", border: "1px solid var(--n-border)", borderRadius: "12px", overflow: "hidden" }}>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          {/* scope="col" : sans lui, un lecteur d'écran lit chaque ligne comme
+              une suite de valeurs sans étiquette — impossible de distinguer la
+              colonne CUPS de la colonne DATE. */}
           <thead>
             <tr style={{ borderBottom: "1px solid var(--n-border-visible)" }}>
-              <th style={{ textAlign: "left", padding: "12px 16px" }}><span className="n-label" style={{ color: "var(--n-text-disabled)" }}>ENTREPRISE</span></th>
-              <th style={{ textAlign: "left", padding: "12px 16px" }}><span className="n-label" style={{ color: "var(--n-text-disabled)" }}>MARQUE</span></th>
-              <th style={{ textAlign: "left", padding: "12px 16px" }}><span className="n-label" style={{ color: "var(--n-text-disabled)" }}>CONTACT</span></th>
-              <th style={{ textAlign: "left", padding: "12px 16px" }}><span className="n-label" style={{ color: "var(--n-text-disabled)" }}>TEL</span></th>
-              <th style={{ textAlign: "right", padding: "12px 16px" }}><span className="n-label" style={{ color: "var(--n-text-disabled)" }}>CUPS</span></th>
-              <th style={{ textAlign: "right", padding: "12px 16px" }}><span className="n-label" style={{ color: "var(--n-text-disabled)" }}>DATE</span></th>
+              <th scope="col" style={{ textAlign: "left", padding: "12px 16px" }}><span className="n-label" style={{ color: "var(--n-text-disabled)" }}>ENTREPRISE</span></th>
+              <th scope="col" style={{ textAlign: "left", padding: "12px 16px" }}><span className="n-label" style={{ color: "var(--n-text-disabled)" }}>MARQUE</span></th>
+              <th scope="col" style={{ textAlign: "left", padding: "12px 16px" }}><span className="n-label" style={{ color: "var(--n-text-disabled)" }}>CONTACT</span></th>
+              <th scope="col" style={{ textAlign: "left", padding: "12px 16px" }}><span className="n-label" style={{ color: "var(--n-text-disabled)" }}>TEL</span></th>
+              <th scope="col" style={{ textAlign: "right", padding: "12px 16px" }}><span className="n-label" style={{ color: "var(--n-text-disabled)" }}>CUPS</span></th>
+              <th scope="col" style={{ textAlign: "right", padding: "12px 16px" }}><span className="n-label" style={{ color: "var(--n-text-disabled)" }}>DATE</span></th>
             </tr>
           </thead>
           <tbody>

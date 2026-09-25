@@ -1014,6 +1014,15 @@ export default async function PalmaresPage({
                       <img
                         src={j.image}
                         alt={j.displayName}
+                        // 48x48 : la taille du médaillon parent. La pastille
+                        // réserve déjà la place, mais l'attribut évite au
+                        // navigateur de repeindre le cercle à l'arrivée de
+                        // chaque portrait. Le jury est en bas de page, d'où
+                        // le chargement paresseux.
+                        width={48}
+                        height={48}
+                        loading="lazy"
+                        decoding="async"
                         style={{ width: "100%", height: "100%", objectFit: "cover" }}
                       />
                     ) : (

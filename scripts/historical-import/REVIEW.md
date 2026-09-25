@@ -168,13 +168,32 @@ Après dédup `companyName` (case-insensitive, normalisé) → **~22 producteurs
 
 ---
 
-## 🟢 Prochaine étape
+## 🟢 Exécution
 
-Je crée `scripts/historical-import/run.ts` qui exécute le plan. Lancement :
+`scripts/historical-import/run.ts` existe et exécute le plan. Cette section
+demandait encore « Tu valides ? » pour un script à écrire : elle décrivait un
+état du dépôt révolu, et on ne pouvait pas savoir en la lisant si l'import
+avait déjà été lancé.
 
 ```bash
-pnpm tsx scripts/historical-import/run.ts          # dry-run, affiche le plan
-pnpm tsx scripts/historical-import/run.ts --apply  # écrit en DB
+# TARGET_DATABASE_URL est obligatoire et n'est PAS lu depuis .env : contrairement
+# aux autres scripts d'exploitation, run.ts ne charge pas dotenv. Sans elle il
+# sort immédiatement en erreur.
+TARGET_DATABASE_URL="postgresql://platinum:...@127.0.0.1:5432/platinum_cbd_cup" \
+  pnpm tsx scripts/historical-import/run.ts            # dry-run, affiche le plan
+
+TARGET_DATABASE_URL="..." \
+  pnpm tsx scripts/historical-import/run.ts --apply    # écrit en DB
 ```
 
-**Tu valides ?**
+L'import est idempotent à deux niveaux : une cup déjà présente (match par
+`name`) est entièrement sautée, et un producteur dont le `company_name`
+normalisé existe déjà en base est réutilisé — la table de résolution est
+amorcée depuis `producers` au démarrage, pas seulement avec les stubs du run
+courant. Relancer ne dédouble donc pas le palmarès.
+
+Avant cet amorçage, la promesse était fausse : la carte partait vide à chaque
+exécution, une société déjà importée lors d'un run précédent se voyait recréer
+un stub, et l'`INSERT INTO users` (sans `ON CONFLICT`) violait l'unicité de
+`historic-<slug>@platinum-cbd-cup.local`, faisant tomber toute la transaction
+en `ROLLBACK`.

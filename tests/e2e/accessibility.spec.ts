@@ -93,9 +93,22 @@ test.describe("Accessibilité — formulaires", () => {
 
     // Tab depuis l'email doit rester dans le formulaire, pas repartir dans
     // la page : un piège de focus ou un tabindex négatif se voit ici.
+    //
+    // L'assertion précédente se contentait du nom de balise de l'élément
+    // focalisé (INPUT, BUTTON ou A) : sur ce gabarit, n'importe quel lien de
+    // la navigation ou du pied de page l'aurait satisfaite, donc un tabindex
+    // qui éjecte le focus hors du formulaire passait inaperçu — exactement ce
+    // que le test prétend détecter. On vérifie maintenant l'appartenance au
+    // <form> qui contient le champ email.
     await page.keyboard.press("Tab");
-    const focusedTag = await page.evaluate(() => document.activeElement?.tagName ?? "");
-    expect(["INPUT", "BUTTON", "A"]).toContain(focusedTag);
+    const stillInsideForm = await page.evaluate(() => {
+      const form = document.querySelector('input[id="email"]')?.closest("form");
+      const active = document.activeElement;
+      return Boolean(form && active && form.contains(active));
+    });
+    expect(stillInsideForm, "le focus doit rester dans le formulaire de connexion").toBe(
+      true
+    );
   });
 
   test("@P1 une erreur de validation est rattachée au champ fautif", async ({ page }) => {

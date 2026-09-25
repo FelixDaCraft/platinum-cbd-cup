@@ -11,7 +11,7 @@
  * (Russo 2011, Sommano et al. 2020, Leafly/Weedmaps aromatic references).
  */
 
-export const TERPENE_AROMAS: Record<string, readonly string[]> = {
+const TERPENE_AROMAS: Record<string, readonly string[]> = {
   // Monoterpenes
   MYRC: ["terreux", "musqué", "mangue"],
   LIMON: ["agrumes", "citron"],
@@ -43,8 +43,13 @@ export const TERPENE_AROMAS: Record<string, readonly string[]> = {
 /**
  * Return the aroma descriptors for a given terpene abbreviation, or an
  * empty array when we don't have a match. Safe to call on unknown inputs.
+ *
+ * Interne : les deux appelants (dialogue d'analyse et PDF de synthèse) ne
+ * consomment que `formatTerpeneAroma`. Exporter la table et cet accesseur
+ * laissait croire que d'autres écrans affichaient les arômes autrement,
+ * et figeait une API que personne ne tenait.
  */
-export function getTerpeneAroma(abbreviation: string): readonly string[] {
+function getTerpeneAroma(abbreviation: string): readonly string[] {
   return TERPENE_AROMAS[abbreviation] ?? [];
 }
 

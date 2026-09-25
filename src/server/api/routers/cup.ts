@@ -569,14 +569,11 @@ export const cupRouter = createTRPCRouter({
       const ratingScale = getRatingScaleValues(cup.ratingScale);
       const canRegister = isRegistrationOpen(cup);
 
-      let galleryUrls: string[] = [];
-      if (cup.galleryUrls) {
-        try {
-          galleryUrls = JSON.parse(cup.galleryUrls) as string[];
-        } catch {
-          galleryUrls = [];
-        }
-      }
+      // `gallery_urls` est une colonne `jsonb` : Drizzle rend directement le
+      // tableau. L'ancien JSON.parse sur une colonne `text` avalait toute
+      // erreur de désérialisation et renvoyait une galerie vide — la page
+      // publique perdait ses photos sans qu'aucune trace ne le signale.
+      const galleryUrls = cup.galleryUrls ?? [];
 
       return {
         cup: {

@@ -120,8 +120,9 @@ describe("Results Email Service", () => {
         void args;
         return Promise.resolve(registrationRow("reg-x"));
       });
-      // La deuxième inscription fait tomber la génération du PDF de façon
-      // non rattrapée par le service lui-même.
+      // Un des trois rendus de PDF échoue. `sendResultsEmail` rattrape cet
+      // échec lui-même et répond `{ success: false }` : ce cas vérifie donc le
+      // comptage du lot, pas le filet de sécurité (couvert plus bas).
       mockPdf
         .mockResolvedValueOnce({ buffer: Buffer.from("pdf"), filename: "a.pdf" })
         .mockRejectedValueOnce(new Error("rendu impossible"))
@@ -130,8 +131,54 @@ describe("Results Email Service", () => {
       const summary = await sendBulkResultsEmails("cup-1");
 
       expect(summary.results).toHaveLength(3);
-      expect(summary.success + summary.failed + summary.skipped).toBe(3);
-      expect(summary.failed).toBeGreaterThanOrEqual(1);
+      expect(summary).toMatchObject({ success: 2, failed: 1, skipped: 0 });
+      expect(
+        summary.results.find((r) => !r.success)?.error
+      ).toContain("rendu impossible");
+    });
+
+    it("isole une inscription inexploitable au lieu de faire tomber tout le lot", async () => {
+      // Ce qui atteint le try/catch du lot, c'est une exception INATTENDUE :
+      // le service attrape déjà lui-même l'échec de rendu du PDF et rend
+      // `{ success: false }`, donc faire échouer le rendu n'y mène jamais.
+      // On simule ici un incident de lecture en base au milieu du lot — un
+      // pool saturé, une coupure réseau. Sans le filet, ce rejet remonterait à
+      // `mapWithConcurrency` : l'organisateur perdrait le compte rendu entier,
+      // y compris la liste des envois déjà partis, et relancerait en double.
+      //
+      // Une version précédente de ce test passait `producer: null`, un état que
+      // le schéma interdit (`producer_id` est NOT NULL avec une FK en cascade,
+      // cf. drizzle/0000_baseline_production.sql) : il prouvait donc la
+      // robustesse face à un cas qui ne peut pas se produire.
+      mockFindMany.mockResolvedValue([
+        registrationRow("reg-1"),
+        registrationRow("reg-2"),
+        registrationRow("reg-3"),
+      ]);
+      // La condition `where` de Drizzle porte des références circulaires : on
+      // ne peut pas l'inspecter pour reconnaître une inscription. On fait donc
+      // échouer une lecture sur trois, peu importe laquelle — c'est bien une
+      // seule des trois qui doit tomber.
+      let lectures = 0;
+      mockFindFirst.mockImplementation((args: { where?: unknown } | undefined) => {
+        void args;
+        lectures += 1;
+        return lectures === 2
+          ? Promise.reject(new Error("connection terminated unexpectedly"))
+          : Promise.resolve(registrationRow("reg-x"));
+      });
+
+      const summary = await sendBulkResultsEmails("cup-1");
+
+      expect(summary.results).toHaveLength(3);
+      expect(summary).toMatchObject({ success: 2, failed: 1, skipped: 0 });
+      // Les deux inscriptions saines sont bien parties malgré la troisième.
+      expect(mockSend).toHaveBeenCalledTimes(2);
+      // L'inscription fautive est nommément rendue à l'organisateur, avec la
+      // cause : sans cela il ne saurait pas laquelle relancer.
+      const echec = summary.results.find((r) => !r.success);
+      expect(echec?.registrationId).toMatch(/^reg-[123]$/);
+      expect(echec?.error).toContain("connection terminated");
     });
 
     it("compte à part les inscriptions sans produit noté, sans les envoyer", async () => {

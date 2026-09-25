@@ -17,6 +17,7 @@ import {
 } from "~/server/api/trpc";
 import { getCupOrThrow } from "~/server/api/helpers/cup";
 import * as schema from "~/server/db/schema";
+import { generateId } from "~/server/db/schema/id";
 import { hashPassword } from "better-auth/crypto";
 import {
   sendJuryInvitation,
@@ -29,6 +30,8 @@ import {
   sendJuryWelcomeEmail,
 } from "~/server/services/jury-invitation.service";
 import { getMaxScoreForScale } from "~/lib/validations/labels";
+import { calculateWeightedScore } from "~/lib/validations/criteria";
+import { weightedAverageOrNull } from "~/server/services/weighted-score";
 import { formatPhaseDate } from "~/lib/validations/phases";
 import { ORGANIZATION_NAME } from "~/lib/organization";
 import type { RatingScale } from "~/server/db/schema/cups";
@@ -729,8 +732,15 @@ export const juryRouter = createTRPCRouter({
       const hashedPassword = await hashPassword(input.password);
 
       // Create user with emailVerified: true (invitation link = proof of email)
-      const userId = nanoid();
-      const accountId = nanoid();
+      //
+      // `generateId` plutôt que `nanoid` : les lignes `users` et `accounts`
+      // sont normalement écrites par Better Auth, jamais par un routeur. Ce
+      // chemin les crée à la main (il hache le mot de passe lui-même) et doit
+      // donc produire des identifiants du format que le reste du schéma
+      // garantit, et non celui d'un paquet tiers qui peut changer d'alphabet
+      // ou de longueur à la prochaine montée de version.
+      const userId = generateId();
+      const accountId = generateId();
       const now = new Date();
 
       const cupJuryId = nanoid();
@@ -2184,16 +2194,15 @@ export const juryRouter = createTRPCRouter({
         product.category.criteria.map((c) => [c.id, c.coefficient])
       );
 
-      let weightedSum = 0;
-      let totalWeight = 0;
-
-      for (const score of input.scores) {
-        const coefficient = criteriaMap.get(score.criterionId) ?? 1;
-        weightedSum += score.score * coefficient;
-        totalWeight += coefficient;
-      }
-
-      const averageScore = totalWeight > 0 ? weightedSum / totalWeight : 0;
+      // Implémentation partagée (`~/lib/validations/criteria`) : la note d'une
+      // fiche recalculée par le routeur et celle affichée par le dashboard
+      // venaient de deux copies de la même formule.
+      const averageScore = calculateWeightedScore(
+        input.scores.map((score) => ({
+          score: score.score,
+          criterionCoefficient: criteriaMap.get(score.criterionId) ?? 1,
+        }))
+      );
 
       // Story 7.18: Find next unrated product, prioritizing same category
       let nextProductId: string | null = null;
@@ -3278,17 +3287,20 @@ export const juryRouter = createTRPCRouter({
         if (!productScores) continue;
 
         const categoryCriteria = criteriaByCategory.get(product.categoryId) ?? [];
-        let weightedSum = 0;
-        let coeffSum = 0;
-        for (const c of categoryCriteria) {
+        // Implémentation partagée. Les critères que ce juré n'a pas notés sont
+        // écartés avant l'appel : sans aucune note, le produit ne doit pas
+        // entrer dans la comparaison avec un score de 0, il doit en être absent.
+        const notedCriteria = categoryCriteria.flatMap((c) => {
           const score = productScores.get(c.id);
-          if (score !== undefined) {
-            weightedSum += score * c.coefficient;
-            coeffSum += c.coefficient;
-          }
-        }
-        if (coeffSum > 0) {
-          juryScoreByProduct.set(product.productId, weightedSum / coeffSum);
+          return score === undefined
+            ? []
+            : [{ score, criterionCoefficient: c.coefficient }];
+        });
+        if (notedCriteria.length > 0) {
+          juryScoreByProduct.set(
+            product.productId,
+            calculateWeightedScore(notedCriteria)
+          );
         }
       }
 
@@ -3542,13 +3554,15 @@ export const juryRouter = createTRPCRouter({
         };
       });
 
-      // Compute jury weighted average
-      const scoredCriteria = criteriaDetails.filter((c) => c.juryScore !== null);
-      const totalCoeff = scoredCriteria.reduce((sum, c) => sum + c.coefficient, 0);
-      const juryWeightedAverage =
-        totalCoeff > 0
-          ? scoredCriteria.reduce((sum, c) => sum + c.juryScore! * c.coefficient, 0) / totalCoeff
-          : null;
+      // Moyenne pondérée du juré, par le helper commun. Cette fiche affiche
+      // `juryWeightedAverage` à côté de `finalScore` : c'est l'écran où une
+      // divergence entre le calcul du juré et le calcul officiel se verrait
+      // immédiatement, donc le dernier endroit où garder une copie de la
+      // formule. `weightedAverageOrNull` porte exactement la sémantique
+      // attendue ici : pas de note, pas de moyenne — surtout pas un zéro.
+      const juryWeightedAverage = weightedAverageOrNull(
+        criteriaDetails.map((c) => ({ score: c.juryScore, coefficient: c.coefficient }))
+      );
 
       return {
         productId: product.productId,

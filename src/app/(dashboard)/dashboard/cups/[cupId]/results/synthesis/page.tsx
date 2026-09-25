@@ -405,10 +405,18 @@ export default function SynthesisPage() {
                   }}
                 >
                   <p className="n-label" style={{ marginBottom: "8px" }}>Aperçu :</p>
+                  {/* Aperçu d'un logo saisi à la main : rapport inconnu, et
+                      c'est `max-h-24` qui borne la hauteur. Poser des
+                      dimensions fixes déformerait l'aperçu — or c'est
+                      précisément ce qu'il sert à vérifier. On se limite au
+                      décodage asynchrone et au chargement paresseux, le bloc
+                      étant en bas d'un formulaire long. */}
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={pdfLogoUrl}
                     alt="Logo preview"
+                    loading="lazy"
+                    decoding="async"
                     className="max-h-24 object-contain"
                     onError={(e) => {
                       (e.target as HTMLImageElement).style.display = "none";

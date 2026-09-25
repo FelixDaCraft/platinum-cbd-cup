@@ -77,9 +77,17 @@ export default function ProducerDashboardPage() {
       <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
         <div className="flex items-center gap-4">
           {theme.logoUrl ? (
+            // 48x48 : les dimensions imposées par h-12 w-12, reprises en
+            // attributs pour que le navigateur réserve le carré avant même
+            // de connaître l'image — sinon le nom du producteur, à droite,
+            // glisse à l'arrivée du logo. En-tête de page : pas de
+            // chargement paresseux, il retarderait l'affichage.
             <img
               src={theme.logoUrl}
               alt={organization.name}
+              width={48}
+              height={48}
+              decoding="async"
               className="h-12 w-12 rounded-lg object-contain"
               style={{ backgroundColor: "var(--n-surface)", padding: "6px" }}
             />

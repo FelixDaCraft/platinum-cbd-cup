@@ -1,15 +1,34 @@
 // Platinum CBD Cup Service Worker
 // Bump this name à chaque changement de politique de cache : l'activation
-// purge tous les caches qui ne portent pas ce nom.
-const CACHE_NAME = 'platinum-cbd-cup-v2';
+// purge tous les caches qui ne portent pas ce nom. Passage en v3 : les
+// certificats d'analyse (/uploads/lab-analyses) pouvaient jusqu'ici finir
+// dans le cache, et un simple renommage est le seul moyen de vider ceux
+// qui y sont déjà chez les visiteurs.
+const CACHE_NAME = 'platinum-cbd-cup-v3';
 
 /**
  * Espaces authentifiés : leur HTML ne doit JAMAIS entrer dans le cache.
  * Le cache est partagé par tout le profil du navigateur, sans notion de
  * session : une page de tableau de bord mise en cache reste lisible après
  * déconnexion, et sur un poste partagé par l'utilisateur suivant.
+ *
+ * `/uploads/lab-analyses` est le seul sous-arbre de téléversements que la
+ * route /uploads/[...path] réserve aux organisateurs. Elle le sert malgré
+ * tout avec `Cache-Control: public, max-age=31536000, immutable` comme
+ * n'importe quel fichier : sans cette entrée, le certificat d'analyse d'un
+ * producteur restait lisible hors ligne, et après déconnexion, par toute
+ * personne utilisant le même navigateur.
+ *
+ * `/account` n'existe pas encore comme route : il est conservé pour que la
+ * page soit déjà couverte le jour où elle est ajoutée.
  */
-const PRIVATE_PREFIXES = ['/dashboard', '/producer', '/jury', '/account'];
+const PRIVATE_PREFIXES = [
+  '/dashboard',
+  '/producer',
+  '/jury',
+  '/account',
+  '/uploads/lab-analyses',
+];
 
 function isPrivatePath(pathname) {
   return PRIVATE_PREFIXES.some(

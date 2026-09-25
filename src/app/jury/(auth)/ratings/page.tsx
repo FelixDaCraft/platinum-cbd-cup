@@ -119,12 +119,16 @@ export default function JuryRatingsPage() {
                 {cup.assignedCategories.length > 0 ? (
                   <div style={{ overflowX: "auto" }}>
                     <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                      {/* scope="col" : le rattachement d'une cellule à son en-tête ne se
+                          déduit pas du seul <thead>. Sans lui, un lecteur d'écran annonce
+                          les catégories et les liens de notation à la file, sans jamais
+                          rappeler ce que chaque colonne contient. */}
                       <thead>
                         <tr style={{ borderBottom: "1px solid var(--n-border-visible)" }}>
-                          <th style={{ padding: "10px 20px", textAlign: "left" }}>
+                          <th scope="col" style={{ padding: "10px 20px", textAlign: "left" }}>
                             <span className="n-label" style={{ color: "var(--n-text-secondary)" }}>CATÉGORIE</span>
                           </th>
-                          <th style={{ padding: "10px 20px", textAlign: "right" }}>
+                          <th scope="col" style={{ padding: "10px 20px", textAlign: "right" }}>
                             <span className="n-label" style={{ color: "var(--n-text-secondary)" }}>ACTION</span>
                           </th>
                         </tr>

@@ -20,6 +20,7 @@ import { eq, and, isNotNull, sql } from "drizzle-orm";
 import * as schema from "~/server/db/schema";
 import { formatScoreForScale, getMaxScoreForScale } from "~/lib/validations/labels";
 import { formatTerpeneAroma } from "~/lib/lab-analysis/terpene-sensory";
+import { weightedAverageOrNull } from "./weighted-score";
 import path from "path";
 import { existsSync } from "fs";
 
@@ -1368,17 +1369,19 @@ function createSynthesisDocument(data: SynthesisPdfData) {
 }
 
 /**
- * Compute weighted average score for a product from its criteriaScores array.
- * Returns null if no scored criteria exist.
+ * Moyenne pondérée d'un produit à partir de ses scores par critère.
+ * `null` si aucun critère n'est noté.
+ *
+ * Simple adaptation de nommage : la pondération elle-même est celle de
+ * `weightedAverageOrNull`, pour que la synthèse producteur et le classement
+ * officiel ne puissent pas répondre différemment sur les mêmes notes.
  */
 function computeWeightedAvg(
   criteriaScores: Array<{ productScore: number | null; coefficient: number }>
 ): number | null {
-  const scored = criteriaScores.filter((c) => c.productScore !== null);
-  if (scored.length === 0) return null;
-  const totalCoeff = scored.reduce((sum, c) => sum + c.coefficient, 0);
-  if (totalCoeff === 0) return null;
-  return scored.reduce((sum, c) => sum + c.productScore! * c.coefficient, 0) / totalCoeff;
+  return weightedAverageOrNull(
+    criteriaScores.map((c) => ({ score: c.productScore, coefficient: c.coefficient }))
+  );
 }
 
 /**

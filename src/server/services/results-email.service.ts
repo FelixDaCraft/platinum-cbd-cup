@@ -255,24 +255,33 @@ export async function sendBulkResultsEmails(
     registrations,
     EMAIL_SEND_CONCURRENCY,
     async (registration) => {
-      const producerName = registration.producer.companyName ?? "N/A";
-
-      // Skip if no products with results
-      const hasResults = registration.products.some((p) => p.finalScore !== null);
-      if (!hasResults) {
-        return {
-          registrationId: registration.id,
-          producerName,
-          success: false,
-          error: "Aucun produit avec resultats",
-          skipped: true,
-        };
-      }
-
       // Le lot ne doit jamais tomber en entier sur une inscription : un rejet
       // remonterait à `mapWithConcurrency` et annulerait le compte rendu des
       // envois déjà partis, que l'organisateur relancerait en double.
+      //
+      // La lecture du producteur et des produits est donc DANS le try. Elle
+      // était au-dessus, et c'était le seul endroit du lot qui pouvait encore
+      // lever : une inscription dont la relation producteur est vide (compte
+      // producteur supprimé entre-temps) faisait échouer la déréférence, le
+      // rejet remontait à `Promise.all` et `sendBulkResultsEmails` ne rendait
+      // plus rien du tout — pas même la liste des soixante envois déjà partis.
+      let producerName = "N/A";
+
       try {
+        producerName = registration.producer.companyName ?? "N/A";
+
+        // Skip if no products with results
+        const hasResults = registration.products.some((p) => p.finalScore !== null);
+        if (!hasResults) {
+          return {
+            registrationId: registration.id,
+            producerName,
+            success: false,
+            error: "Aucun produit avec resultats",
+            skipped: true,
+          };
+        }
+
         const result = await sendResultsEmail({
           registrationId: registration.id,
           customMessage,

@@ -365,7 +365,25 @@ async function main() {
     }
     console.log(`  ✓ all LINK references resolve to existing producers\n`);
 
+    // Amorcé avec les producteurs DÉJÀ en base, indexés par nom normalisé.
+    // Sans cet amorçage, la carte ne contenait que les stubs créés pendant le
+    // run courant : dès qu'une nouvelle cup du plan mentionnait une société
+    // déjà importée lors d'un run précédent, `resolveProducer` recréait un
+    // stub, l'INSERT INTO users (sans ON CONFLICT) violait l'unicité de
+    // `historic-<slug>@platinum-cbd-cup.local` et TOUTE la transaction partait
+    // en ROLLBACK. Le comportement réel était donc « abandon », pas
+    // « réutilisation » — l'inverse de ce que promettait REVIEW.md.
     const resolver: ProducerResolver = { byNormalizedName: new Map() };
+    for (const producteur of existingProducers.values()) {
+      if (!producteur.companyName) continue;
+      const norm = normalizeName(producteur.companyName);
+      // Premier arrivé, premier servi : deux sociétés dont les noms se
+      // normalisent pareil sont déjà un problème de données, pas un cas à
+      // arbitrer ici.
+      if (!resolver.byNormalizedName.has(norm)) {
+        resolver.byNormalizedName.set(norm, producteur.id);
+      }
+    }
 
     for (const cup of HISTORICAL_IMPORT_PLAN) {
       await importCup(cup, resolver, client, APPLY);

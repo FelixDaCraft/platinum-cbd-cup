@@ -36,6 +36,12 @@ export async function logActivity(params: LogActivityParams): Promise<void> {
  * Get human-readable label for an action
  */
 export function getActionLabel(action: ActivityAction): string {
+  // `Record` et non `Partial` : les huit valeurs héritées de CupMetrics ont
+  // été retirées de l'enum (migration 0005), donc le dictionnaire couvre à
+  // nouveau exactement le type. L'exhaustivité est ce qui compte ici : elle
+  // fait échouer le typecheck le jour où une action est ajoutée à l'enum sans
+  // son libellé, au lieu de laisser le repli `?? action` afficher une clé
+  // technique à l'organisateur.
   const labels: Record<ActivityAction, string> = {
     // Auth
     user_login: "Connexion utilisateur",
@@ -45,17 +51,7 @@ export function getActionLabel(action: ActivityAction): string {
     email_change: "Changement d'email",
     // Admin actions
     admin_create_organizer: "Création compte organisateur (admin)",
-    admin_suspend_organization: "Suspension organisation (admin)",
-    admin_reactivate_organization: "Réactivation organisation (admin)",
     admin_toggle_admin: "Modification droits admin",
-    admin_update_plan_config: "Modification config plans",
-    // Organization actions
-    organization_created: "Organisation créée",
-    organization_updated: "Organisation mise à jour",
-    // Subscription actions
-    subscription_created: "Abonnement créé",
-    subscription_updated: "Abonnement mis à jour",
-    subscription_cancelled: "Abonnement annulé",
     // Cup actions
     cup_created: "Cup créée",
     cup_updated: "Cup mise à jour",
@@ -94,12 +90,9 @@ export function getActionCategory(action: ActivityAction): string {
   if (action.startsWith("admin_")) {
     return "Administration";
   }
-  if (action.startsWith("organization_")) {
-    return "Organisation";
-  }
-  if (action.startsWith("subscription_")) {
-    return "Abonnement";
-  }
+  // Les regroupements « Organisation » et « Abonnement » sont tombés avec les
+  // valeurs d'enum correspondantes : les garder laissait croire au lecteur que
+  // le journal pouvait encore classer des événements multi-tenant.
   if (action.startsWith("cup_")) {
     return "Cup";
   }

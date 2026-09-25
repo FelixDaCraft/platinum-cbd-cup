@@ -17,6 +17,7 @@ import { products } from "~/server/db/schema/products";
 import { cups } from "~/server/db/schema/cups";
 import { cupLabels } from "~/server/db/schema/cup-labels";
 import { categories } from "~/server/db/schema/categories";
+import { getPortalBaseUrl } from "~/server/services/app-url";
 
 export const widgetRouter = createTRPCRouter({
   /**
@@ -212,8 +213,11 @@ export const widgetRouter = createTRPCRouter({
     // code d'erreur.
     const { producer } = ctx;
 
-    // Generate base URL for widget
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://platinumcbdcup.eu";
+    // Source unique de l'URL publique. Le repli en dur sur le domaine de
+    // production faisait générer, depuis une préproduction, un code d'intégration
+    // qui pointait vers la prod : le producteur le collait sur son site et
+    // affichait les médailles du mauvais déploiement.
+    const baseUrl = getPortalBaseUrl();
     const widgetUrl = `${baseUrl}/widget/producer/${producer.id}`;
 
     // Generate iframe code

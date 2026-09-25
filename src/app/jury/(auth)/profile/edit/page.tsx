@@ -516,9 +516,16 @@ export default function JuryProfileEditPage() {
                 aria-label="Changer l'avatar"
               >
                 {avatarPreview ? (
+                  // 80x80 : la taille du bouton qui l'encadre. L'aperçu est
+                  // haut de page et remplace l'avatar juste après un
+                  // téléversement : le décodage asynchrone évite de figer
+                  // l'interface, mais pas de chargement paresseux ici.
                   <img
                     src={avatarPreview}
                     alt="Avatar"
+                    width={80}
+                    height={80}
+                    decoding="async"
                     style={{ width: "100%", height: "100%", objectFit: "cover" }}
                   />
                 ) : (

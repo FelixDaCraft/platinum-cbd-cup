@@ -19,6 +19,7 @@ import { eq, and, inArray, isNotNull } from "drizzle-orm";
 import * as schema from "~/server/db/schema";
 import { formatScoreForScale, getMaxScoreForScale } from "~/lib/validations/labels";
 import type { RatingScale } from "~/server/db/schema/cups";
+import { weightedAverageOrNull } from "./weighted-score";
 import { TRPCError } from "@trpc/server";
 import path from "path";
 import { existsSync } from "fs";
@@ -790,17 +791,15 @@ export async function generateJurySynthesisPdf(
     const productScores = scoresByProduct.get(product.productId);
     if (!productScores) continue;
     const categoryCriteria = criteriaByCategory.get(product.categoryId) ?? [];
-    let weightedSum = 0;
-    let coeffSum = 0;
-    for (const c of categoryCriteria) {
-      const score = productScores.get(c.id);
-      if (score !== undefined) {
-        weightedSum += score * c.coefficient;
-        coeffSum += c.coefficient;
-      }
-    }
-    if (coeffSum > 0) {
-      juryScoreByProduct.set(product.productId, weightedSum / coeffSum);
+    // Les critères non notés par ce juré sortent de la moyenne (et non à zéro).
+    const juryScore = weightedAverageOrNull(
+      categoryCriteria.map((c) => ({
+        score: productScores.get(c.id),
+        coefficient: c.coefficient,
+      }))
+    );
+    if (juryScore !== null) {
+      juryScoreByProduct.set(product.productId, juryScore);
     }
   }
 
@@ -1525,12 +1524,9 @@ export async function generateJuryProductDetailPdf(
     };
   });
 
-  const scoredCriteria = criteriaDetails.filter((c) => c.juryScore !== null);
-  const totalCoeff = scoredCriteria.reduce((sum, c) => sum + c.coefficient, 0);
-  const juryWeightedAverage =
-    totalCoeff > 0
-      ? scoredCriteria.reduce((sum, c) => sum + c.juryScore! * c.coefficient, 0) / totalCoeff
-      : null;
+  const juryWeightedAverage = weightedAverageOrNull(
+    criteriaDetails.map((c) => ({ score: c.juryScore, coefficient: c.coefficient }))
+  );
 
   // Logo (single-tenant: only cup-specific PDF logo)
   const logoUrl = resolveLogoForPdf(cup.pdfLogoUrl);
@@ -1774,12 +1770,9 @@ export async function generateJuryAllDetailsPdf(
       };
     });
 
-    const scoredCriteria = criteriaDetails.filter((c) => c.juryScore !== null);
-    const totalCoeff = scoredCriteria.reduce((sum, c) => sum + c.coefficient, 0);
-    const juryWeightedAverage =
-      totalCoeff > 0
-        ? scoredCriteria.reduce((sum, c) => sum + c.juryScore! * c.coefficient, 0) / totalCoeff
-        : null;
+    const juryWeightedAverage = weightedAverageOrNull(
+      criteriaDetails.map((c) => ({ score: c.juryScore, coefficient: c.coefficient }))
+    );
 
     const juryRating = ratingByProduct.get(prod.productId);
 

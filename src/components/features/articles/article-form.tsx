@@ -37,6 +37,7 @@ import { ImageUpload } from "~/components/ui/image-upload";
 import { RichTextEditor } from "~/components/ui/rich-text-editor-lazy";
 import { api } from "~/trpc/react";
 import type { Article } from "~/server/db/schema";
+import type { TipTapDocument } from "~/server/api/schemas/tiptap";
 
 const articleSchema = z.object({
   title: z.string().min(1, "Le titre est requis"),
@@ -55,6 +56,47 @@ interface ArticleFormProps {
     author: { id: string; name: string | null; image: string | null };
     sponsor: { id: string; name: string; logo: string | null } | null;
   };
+}
+
+/**
+ * Document vide servi en repli. Un article enregistré avec un contenu
+ * illisible vaut mieux qu'une mutation refusée : l'auteur garde sa page et
+ * peut ressaisir le texte.
+ */
+const EMPTY_TIPTAP_DOCUMENT: TipTapDocument = { type: "doc", content: [] };
+
+/**
+ * Le contenu voyage en chaîne dans le formulaire et n'était que `JSON.parse`é
+ * avant d'être envoyé. Depuis que la mutation exige un vrai document TipTap
+ * (`{ type: "doc" }`), n'importe quelle autre forme — un tableau, un objet
+ * d'une ancienne version de l'éditeur — partait quand même au serveur et
+ * revenait en erreur de validation que l'auteur ne pouvait pas interpréter.
+ * On la reconnaît donc ici, avant l'envoi.
+ *
+ * Renvoie `null` quand la forme n'est pas reconnue, et SURTOUT PAS un document
+ * vide : la mutation d'édition écrase le contenu stocké par ce qu'on lui
+ * envoie. Retomber sur le document vide effaçait donc l'article, en affichant
+ * « Article mis à jour » — l'auteur n'avait aucun moyen de savoir que son
+ * texte venait de disparaître. Un contenu réellement vide (nouvel article pas
+ * encore rédigé) reste, lui, légitime.
+ */
+function parseTipTapDocument(raw: string): TipTapDocument | null {
+  const brut = raw.trim();
+  if (brut === "") return EMPTY_TIPTAP_DOCUMENT;
+
+  try {
+    const parsed: unknown = JSON.parse(brut);
+    if (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      (parsed as { type?: unknown }).type === "doc"
+    ) {
+      return parsed as TipTapDocument;
+    }
+  } catch {
+    // JSON tronqué : traité comme une forme non reconnue, pas comme du vide.
+  }
+  return null;
 }
 
 // Slug generation helper
@@ -150,13 +192,16 @@ export function ArticleForm({ article }: ArticleFormProps) {
       .map((t) => t.trim())
       .filter(Boolean) ?? [];
 
-    // Parse TipTap JSON content
-    let contentJson: Record<string, unknown>;
-    try {
-      contentJson = JSON.parse(values.content) as Record<string, unknown>;
-    } catch {
-      // Fallback for empty or invalid content
-      contentJson = { type: "doc", content: [] };
+    const contentJson = parseTipTapDocument(values.content);
+    if (contentJson === null) {
+      // On interrompt : envoyer quoi que ce soit ici remplacerait le contenu
+      // enregistré. Mieux vaut que l'auteur reste sur sa page avec son texte
+      // à l'écran qu'un « mis à jour » sur un article vidé.
+      toast.error(
+        "Le contenu de l'article n'a pas pu être lu et n'a donc pas été enregistré. " +
+          "Recopiez votre texte, rechargez la page, puis collez-le à nouveau."
+      );
+      return;
     }
 
     // Auto-generate slug from title

@@ -14,6 +14,18 @@
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "checkJs": true,
+    // CM-27 — "noUnusedLocals" et "noUnusedParameters" restent DÉSACTIVÉS,
+    // volontairement. Les activer fait sortir 58 erreurs TS6133/TS6196, toutes
+    // dans src/** : imports d'icônes laissés derrière un composant retiré,
+    // `const cup = await …` chargés puis jamais lus dans les gardes de
+    // src/server/api/routers/jury.ts, `maxScale`/`maxScore` calculés avant le
+    // passage à convertScoreToScale. Aucune n'est dans les fichiers d'outillage.
+    // Or `pnpm typecheck` est la première étape du workflow de déploiement :
+    // activer ces deux options sans corriger les 58 sites d'un coup rendrait la
+    // CI rouge et bloquerait le déploiement jusqu'à la dernière correction.
+    // Le nettoyage se fait donc fichier par fichier, dans les lots qui possèdent
+    // src/**, et ces deux lignes s'ajoutent une fois la liste vidée — la liste
+    // complète est dans le compte rendu du lot outillage.
 
     /* Bundled projects */
     "lib": ["dom", "dom.iterable", "ES2022"],

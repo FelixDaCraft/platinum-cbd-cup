@@ -1,12 +1,9 @@
 import type { MetadataRoute } from "next";
 
-/**
- * Base URL for the single-tenant Platinum CBD Cup app.
- * Falls back to localhost in dev.
- */
-function getBaseUrl(): string {
-  return process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-}
+// L'URL de base était recopiée ici, dans sitemap.ts et dans les pages du
+// portail. Le jour où le domaine change, une copie oubliée annonce aux
+// robots un plan de site hébergé ailleurs : on passe par le point unique.
+import { baseUrl, canonical } from "./(portal)/_lib/seo";
 
 /**
  * Static robots.txt for the single-tenant app.
@@ -15,8 +12,6 @@ function getBaseUrl(): string {
  * (dashboard, producer, jury — except /jury/public) and internal routes.
  */
 export default function robots(): MetadataRoute.Robots {
-  const baseUrl = getBaseUrl();
-
   return {
     rules: [
       {
@@ -44,7 +39,7 @@ export default function robots(): MetadataRoute.Robots {
         ],
       },
     ],
-    sitemap: `${baseUrl}/sitemap.xml`,
-    host: baseUrl,
+    sitemap: canonical("/sitemap.xml"),
+    host: baseUrl(),
   };
 }

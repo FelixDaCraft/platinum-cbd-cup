@@ -143,9 +143,19 @@ export default function ArticlesPage() {
                   <div className="flex flex-col sm:flex-row gap-6">
                     {/* Cover image */}
                     {article.coverImage ? (
+                      // Dimensions explicites (= les 96x144 px imposés par
+                      // h-24 w-36) : sans elles la vignette occupe 0 px tant
+                      // qu'elle n'est pas chargée, et toute la liste sautait
+                      // d'un cran à chaque couverture qui arrivait. Le reste
+                      // de la liste est sous la ligne de flottaison, d'où le
+                      // chargement paresseux.
                       <img
                         src={article.coverImage}
                         alt={article.title}
+                        width={144}
+                        height={96}
+                        loading="lazy"
+                        decoding="async"
                         className="h-24 w-36 rounded object-cover flex-shrink-0"
                         style={{ border: "1px solid var(--n-border)" }}
                       />

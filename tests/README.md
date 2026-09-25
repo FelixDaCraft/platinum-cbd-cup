@@ -102,6 +102,27 @@ polling hors navigateur.
 `RatingScale` et `Currency` de `~/server/db/schema/cups` : une évolution du
 schéma casse le typecheck des tests au lieu de les laisser mentir.
 
+**Ce que `support/` couvre réellement : rien.** Les quatre specs
+(`accessibility`, `auth`, `home`, `public-pages`) importent toutes `test` et
+`expect` directement depuis `@playwright/test`. Aucune n'importe
+`support/fixtures/auth.fixture.ts`, seul consommateur de `user.factory.ts` :
+la fixture `testUser`, `user.factory.ts`, `cup.factory.ts` et
+`helpers/wait-for.ts` sont donc **tous inertes**. Ils attendent les specs
+authentifiées qui viendront quand la CI aura une base. C'est écrit ici pour
+qu'on ne lise pas leur présence comme une couverture existante — y compris
+pour la fixture, qu'une version précédente de ce paragraphe donnait à tort
+comme utilisée.
+
+**Assertions négatives sur des tournures inventées.** Vérifier l'absence d'un
+texte n'atteste rien si ce texte n'existe nulle part : l'assertion ne peut pas
+échouer et ferme le point à tort. Le cas rencontré : la non-énumération des
+comptes au login cherchait l'absence de « compte introuvable » / « utilisateur
+inconnu », deux tournures absentes du dépôt. La bonne forme est positive — on
+affirme le message générique réellement rendu, et toute branche qui
+distinguerait « compte inexistant » de « mot de passe faux » fait tomber le
+test. Même logique pour le focus clavier : assertion sur l'appartenance au
+`<form>`, pas sur le nom de balise de l'élément focalisé.
+
 ## Tests de routeur tRPC
 
 Un routeur se teste par `createCaller`, pas en recopiant sa règle métier dans

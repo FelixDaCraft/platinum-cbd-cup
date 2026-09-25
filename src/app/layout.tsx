@@ -1,7 +1,14 @@
 import "~/styles/globals.css";
 
-import { type Metadata } from "next";
+import { type Metadata, type Viewport } from "next";
+import { headers } from "next/headers";
 import { Geist, Geist_Mono, Inter } from "next/font/google";
+
+// L'URL de base était recopiée ici aussi (metadataBase, openGraph.url et les
+// deux images de partage en dur sur platinumcbdcup.eu) : sur un
+// environnement de préproduction, les cartes de partage pointaient vers la
+// production. Même point unique que robots.ts, sitemap.ts et les pages.
+import { baseUrl, canonical, OG_IMAGE_PAR_DEFAUT } from "./(portal)/_lib/seo";
 
 import { Providers } from "~/components/providers";
 
@@ -93,7 +100,7 @@ const PORTAL_CONTEXT: PortalContextValue = {
 export const metadata: Metadata = {
   // Sans elle, Next résout toute image Open Graph relative contre
   // http://localhost:3000 (avertissement au build, carte de partage cassée).
-  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"),
+  metadataBase: new URL(baseUrl()),
   title: {
     default: ORGANIZATION_NAME,
     template: `%s | ${ORGANIZATION_NAME}`,
@@ -113,7 +120,30 @@ export const metadata: Metadata = {
   authors: [{ name: ORGANIZATION_NAME }],
   creator: ORGANIZATION_NAME,
   publisher: ORGANIZATION_NAME,
-  icons: [{ rel: "icon", url: "/favicon.png" }],
+  // Manifeste et icône iOS : ils étaient injectés depuis un effet client
+  // (PWAProvider), donc absents du HTML initial — et ce composant n'est
+  // monté que dans les coquilles authentifiées (jury, producteur,
+  // organisateur). Le portail public n'a donc jamais déclaré de manifeste :
+  // aucune proposition « ajouter à l'écran d'accueil », et iOS retombait sur
+  // une capture d'écran en guise d'icône. Déclarés ici, ils partent avec le
+  // document, pour toutes les pages.
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Platinum Cup",
+  },
+  // C'est l'inverse de ce qu'on croit : `appleWebApp.capable` fait poser à Next
+  // la forme STANDARD `mobile-web-app-capable` (AppleWebAppMeta dans
+  // next/dist/lib/metadata/generate/basic.js), pas la préfixée. La redéclarer
+  // ici produisait une seconde balise identique — `MetaFilter` ne dédoublonne
+  // pas. La seule que Next n'émette par aucun chemin est la variante Apple,
+  // dépréciée mais toujours lue par iOS : c'est donc elle qui va ici.
+  other: { "apple-mobile-web-app-capable": "yes" },
+  icons: {
+    icon: [{ url: "/favicon.png" }],
+    apple: [{ url: "/brand/platinum-cbd-cup-logo.png" }],
+  },
   robots: {
     index: true,
     follow: true,
@@ -132,23 +162,31 @@ export const metadata: Metadata = {
     title: ORGANIZATION_NAME,
     description:
       "Le concours de référence dédié aux meilleurs CBD de France.",
-    url: "https://platinumcbdcup.eu",
-    images: [
-      {
-        url: "https://platinumcbdcup.eu/og.png?v=1",
-        width: 1200,
-        height: 630,
-        alt: "Platinum CBD Cup — le concours de référence des meilleurs CBD de France",
-      },
-    ],
+    url: canonical(),
+    images: [OG_IMAGE_PAR_DEFAUT],
   },
   twitter: {
     card: "summary_large_image",
     title: ORGANIZATION_NAME,
     description:
       "Le concours de référence dédié aux meilleurs CBD de France.",
-    images: ["https://platinumcbdcup.eu/og.png?v=1"],
+    images: [OG_IMAGE_PAR_DEFAUT.url],
   },
+};
+
+/**
+ * Couleur de barre d'adresse, déclarée pour tout le site.
+ *
+ * Elle était posée par un effet client : sur mobile, la barre s'affichait
+ * d'abord en couleur système puis basculait en doré une fois le JS exécuté.
+ * `width` / `initialScale` sont repris explicitement — et toujours sans
+ * `maximumScale` ni `userScalable: false`, le pinch-zoom devant rester
+ * possible (WCAG 1.4.4).
+ */
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: PORTAL_THEME.primaryColor,
 };
 
 const geist = Geist({
@@ -205,9 +243,28 @@ function generateStyleString(cssVariables: Record<string, string>): string {
     .join("; ");
 }
 
-export default function RootLayout({
+/**
+ * Le nonce est relu dans l'en-tête de requête que le middleware a posé — le
+ * même que Next consulte pour nonce-er ses propres balises. Il n'existe que
+ * pour next-themes, dont le script d'initialisation du thème est injecté par
+ * la bibliothèque et échappe donc à Next : sans lui, ce script serait le seul
+ * de l'application à ne pas porter le nonce, il apparaîtrait dans chaque
+ * signalement de la CSP Report-Only, et il serait bloqué au basculement — le
+ * site s'afficherait alors en thème clair le temps de l'hydratation.
+ *
+ * Coût mesuré de ce `headers()` : la seule page qui perd son rendu statique
+ * est /_not-found. Le portail est déjà dynamique sur 96 routes sur 99, ses
+ * données venant de la base.
+ */
+async function lireNonce(): Promise<string | undefined> {
+  const csp = (await headers()).get("content-security-policy");
+  return csp?.match(/'nonce-([^']+)'/)?.[1];
+}
+
+export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  const nonce = await lireNonce();
   const styleString = generateStyleString(PORTAL_THEME.cssVariables);
 
   // CSS variables only. Heading + body fonts are owned by the Platinum
@@ -255,7 +312,7 @@ ${PORTAL_THEME.customCss ? sanitizeCustomCss(PORTAL_THEME.customCss) : ""}
         {/* Dot matrix decorative background */}
         <div className="matrix" aria-hidden="true" />
 
-        <Providers>
+        <Providers nonce={nonce}>
           <div
             id="portal-root"
             lang="fr"
