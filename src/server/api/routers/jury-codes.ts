@@ -17,6 +17,7 @@ import {
   rateLimitMiddleware,
 } from "~/server/api/trpc";
 import * as schema from "~/server/db/schema";
+import { assertProducerMayJudge } from "~/server/api/helpers/jury";
 
 /**
  * Generate a short readable code like "FLR-7X9-KM2"
@@ -366,30 +367,10 @@ export const juryCodesRouter = createTRPCRouter({
         });
       }
 
-      // Conflit d'intérêts : un producteur inscrit à cette cup ne peut pas
-      // devenir juré de la cup où ses propres produits sont notés.
-      const producer = await ctx.db.query.producers.findFirst({
-        where: eq(schema.producers.userId, ctx.userId),
-        columns: { id: true },
-      });
-
-      if (producer) {
-        const ownRegistration = await ctx.db.query.registrations.findFirst({
-          where: and(
-            eq(schema.registrations.cupId, invitationCode.cupId),
-            eq(schema.registrations.producerId, producer.id)
-          ),
-          columns: { id: true },
-        });
-
-        if (ownRegistration) {
-          throw new TRPCError({
-            code: "FORBIDDEN",
-            message:
-              "Vous êtes inscrit à cette cup en tant que producteur : vous ne pouvez pas en devenir juré",
-          });
-        }
-      }
+      // Conflit d'intérêts, par le garde-fou partagé : la règle dépend du type
+      // d'édition, et cette copie en ligne ne la connaissait pas — elle
+      // bloquait les jurys pro autant que les publics.
+      await assertProducerMayJudge(ctx.db, ctx.userId, invitationCode.cupId);
 
       const existingCupJury = await ctx.db.query.cupJuries.findFirst({
         where: and(

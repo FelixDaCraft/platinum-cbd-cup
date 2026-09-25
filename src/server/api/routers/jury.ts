@@ -16,6 +16,7 @@ import {
   juryProcedure,
 } from "~/server/api/trpc";
 import { getCupOrThrow } from "~/server/api/helpers/cup";
+import { assertProducerMayJudge } from "~/server/api/helpers/jury";
 import * as schema from "~/server/db/schema";
 import { generateId } from "~/server/db/schema/id";
 import { hashPassword } from "better-auth/crypto";
@@ -129,34 +130,6 @@ async function alignUserRoleToJury(db: DbClient, userId: string) {
  * jure, ses propres produits y sont notes. Meme regle sur les trois portes
  * d'entree (invitation, code, jeton public).
  */
-async function assertNotRegisteredProducer(
-  db: DbClient,
-  userId: string,
-  cupId: string
-) {
-  const producer = await db.query.producers.findFirst({
-    where: eq(schema.producers.userId, userId),
-    columns: { id: true },
-  });
-
-  if (!producer) return;
-
-  const ownRegistration = await db.query.registrations.findFirst({
-    where: and(
-      eq(schema.registrations.cupId, cupId),
-      eq(schema.registrations.producerId, producer.id)
-    ),
-    columns: { id: true },
-  });
-
-  if (ownRegistration) {
-    throw new TRPCError({
-      code: "FORBIDDEN",
-      message:
-        "Vous etes inscrit a cette cup en tant que producteur : vous ne pouvez pas en devenir jure",
-    });
-  }
-}
 
 export const juryRouter = createTRPCRouter({
   /**
@@ -580,7 +553,7 @@ export const juryRouter = createTRPCRouter({
         });
       }
 
-      await assertNotRegisteredProducer(ctx.db, ctx.userId, invitation.cupId);
+      await assertProducerMayJudge(ctx.db, ctx.userId, invitation.cupId);
 
       // Check if user is already a jury for this cup
       const existingJury = await ctx.db.query.cupJuries.findFirst({
@@ -2549,7 +2522,7 @@ export const juryRouter = createTRPCRouter({
       // Le meme controle existe sur `juryCodes.activate` et `acceptInvitation` ;
       // ce chemin-ci est la troisieme porte d'entree et doit l'appliquer aussi,
       // sinon la garde se contourne en demandant un jeton public.
-      await assertNotRegisteredProducer(ctx.db, ctx.userId, tokenRecord.cupId);
+      await assertProducerMayJudge(ctx.db, ctx.userId, tokenRecord.cupId);
 
       const now = new Date();
 
