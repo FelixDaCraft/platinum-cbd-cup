@@ -14,4 +14,7 @@
 --
 -- DESTRUCTIF ET IRRÉVERSIBLE, mais sans perte de sens : la valeur était 'A'
 -- partout, et rien ne s'en servait.
+-- Rejouée le 25/09/2026 sur une copie restaurée de la production, dans la même
+-- chaîne que 0005. Contrôle préalable : la colonne valait 'A' sur les 9 cups,
+-- sans exception — aucune information perdue.
 ALTER TABLE "cups" DROP COLUMN "anonymization_prefix";

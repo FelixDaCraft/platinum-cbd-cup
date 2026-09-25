@@ -21,6 +21,13 @@
 -- Les valeurs retirées : admin_suspend_organization, admin_reactivate_organization,
 -- admin_update_plan_config, organization_created, organization_updated,
 -- subscription_created, subscription_updated, subscription_cancelled.
+-- Rejouée le 25/09/2026 sur une base restaurée depuis le dump de production
+-- du 24/09 : chaîne 0000 -> 0006 appliquée en 3 s, second passage idempotent,
+-- effectifs inchangés (140 users, 285 produits, 1237 notations, 7366 scores,
+-- 185 inscriptions). Contrôles préalables : gallery_urls NULL sur les 9 cups,
+-- zéro ligne de journal portant une des huit valeurs retirées. Après coup :
+-- écriture jsonb acceptée et relue comme tableau, « subscription_created »
+-- bien refusée par le nouveau type.
 ALTER TABLE "activity_logs" ALTER COLUMN "action" SET DATA TYPE text;--> statement-breakpoint
 DROP TYPE "public"."activity_action";--> statement-breakpoint
 CREATE TYPE "public"."activity_action" AS ENUM('user_login', 'user_logout', 'user_signup', 'password_reset', 'email_change', 'admin_create_organizer', 'admin_toggle_admin', 'cup_created', 'cup_updated', 'cup_published', 'cup_completed', 'cup_deleted', 'registration_created', 'registration_confirmed', 'registration_cancelled', 'product_created', 'product_updated', 'product_received', 'rating_submitted', 'results_published', 'results_sent', 'jury_invited', 'jury_joined', 'jury_removed', 'other');--> statement-breakpoint
