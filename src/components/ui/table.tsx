@@ -50,6 +50,10 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
 function TableHead({ className, ...props }: React.ComponentProps<"th">) {
   return (
     <th
+      // Les en-têtes de colonne doivent porter scope pour que les lecteurs
+      // d'écran rattachent chaque cellule à sa colonne. Surchargeable par
+      // scope="row" via props pour les rares en-têtes de ligne.
+      scope="col"
       className={cn(
         "h-10 px-2 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
         className

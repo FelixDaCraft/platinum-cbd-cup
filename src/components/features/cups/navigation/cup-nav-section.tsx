@@ -15,7 +15,7 @@ export interface NavItem {
   badgeVariant?: "default" | "secondary" | "destructive" | "outline";
 }
 
-export interface CupNavSectionProps {
+interface CupNavSectionProps {
   title: string;
   icon: LucideIcon;
   items: NavItem[];

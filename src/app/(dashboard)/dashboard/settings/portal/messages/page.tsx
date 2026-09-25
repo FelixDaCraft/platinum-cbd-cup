@@ -1,4 +1,4 @@
-"use client";
+import type { Metadata } from "next";
 
 import { MessagesInbox } from "~/components/features/portal/messages-inbox";
 
@@ -9,6 +9,10 @@ const titleStyle: React.CSSProperties = {
   letterSpacing: "0.04em",
   fontWeight: 700,
   color: "var(--n-text-display)",
+};
+
+export const metadata: Metadata = {
+  title: "Messages",
 };
 
 export default function MessagesPage() {

@@ -1,10 +1,11 @@
-import { pgTable, text, timestamp, integer, boolean, real } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, integer, boolean, real, index } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
+import { generateId } from "./id";
 import { cups } from "./cups";
 
 /**
  * Cup Labels table - 100% CUSTOMIZABLE labels for cups
- * Multi-tenant: each label belongs to a cup (which belongs to an organization)
+ * Chaque label appartient à une cup.
  *
  * ⚠️ IMPORTANT: Labels are NOT predefined (Bronze/Argent/Or).
  * Each organizer defines their own labels with custom names, icons, and conditions.
@@ -19,22 +20,31 @@ import { cups } from "./cups";
  * - "Argent": 14.0-16.9 (scores from 14.0 to 16.9 inclusive)
  * - "Or": 17.0-null (scores 17.0 and above)
  */
-export const cupLabels = pgTable("cup_labels", {
-  id: text("id").primaryKey(), // nanoid generated
-  cupId: text("cup_id")
-    .notNull()
-    .references(() => cups.id, { onDelete: "cascade" }),
-  name: text("name").notNull(), // Custom name: "Excellence", "Coup de Cœur", etc.
-  minScore: real("min_score").notNull(), // Decimal score (e.g., 3.0, 10.5)
-  maxScore: real("max_score"), // null = no upper limit (e.g., "17+")
-  sortOrder: integer("sort_order").notNull().default(0),
-  color: text("color"), // Hex color like "#FFD700" for badge display
-  icon: text("icon"), // URL to icon image or emoji (e.g., "🏆", "/icons/gold.svg")
-  condition: text("condition"), // Human-readable condition text (e.g., "Score ≥ 17/20")
-  isPublic: boolean("is_public").notNull().default(true), // Visible on public portal
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-  updatedAt: timestamp("updated_at").notNull().defaultNow(),
-});
+export const cupLabels = pgTable(
+  "cup_labels",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => generateId()),
+    cupId: text("cup_id")
+      .notNull()
+      .references(() => cups.id, { onDelete: "cascade" }),
+    name: text("name").notNull(), // Custom name: "Excellence", "Coup de Cœur", etc.
+    minScore: real("min_score").notNull(), // Decimal score (e.g., 3.0, 10.5)
+    maxScore: real("max_score"), // null = no upper limit (e.g., "17+")
+    sortOrder: integer("sort_order").notNull().default(0),
+    color: text("color"), // Hex color like "#FFD700" for badge display
+    icon: text("icon"), // URL to icon image or emoji (e.g., "🏆", "/icons/gold.svg")
+    condition: text("condition"), // Human-readable condition text (e.g., "Score ≥ 17/20")
+    isPublic: boolean("is_public").notNull().default(true), // Visible on public portal
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // L'attribution des labels et le palmarès chargent les labels d'une cup.
+    index("cup_labels_cup_id_idx").on(table.cupId),
+  ]
+);
 
 /**
  * Cup Labels relations for Drizzle query builder

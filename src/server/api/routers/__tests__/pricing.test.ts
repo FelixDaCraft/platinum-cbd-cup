@@ -1,4 +1,5 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { TRPCError } from "@trpc/server";
 
 import {
   updateCupPricingSchema,
@@ -10,7 +11,6 @@ import {
   parsePriceInput,
 } from "~/lib/validations/pricing";
 
-// Mock auth
 vi.mock("~/lib/auth", () => ({
   auth: {
     api: {
@@ -18,6 +18,35 @@ vi.mock("~/lib/auth", () => ({
     },
   },
 }));
+
+/** État de la base simulée (voir category.test.ts pour le détail du montage). */
+const dbState = vi.hoisted(() => ({
+  updates: [] as Record<string, unknown>[],
+}));
+
+const { updates } = dbState;
+
+vi.mock("~/server/db", () => ({
+  db: {
+    query: {
+      users: { findFirst: vi.fn() },
+      cups: { findFirst: vi.fn() },
+      categories: { findFirst: vi.fn(), findMany: vi.fn() },
+    },
+    update: () => ({
+      set: (values: Record<string, unknown>) => {
+        dbState.updates.push(values);
+        return {
+          where: () => ({ returning: () => Promise.resolve([values]) }),
+        };
+      },
+    }),
+  },
+}));
+
+beforeEach(() => {
+  updates.length = 0;
+});
 
 describe("Pricing Router", () => {
   describe("Input Validation - updateCupPricingSchema", () => {
@@ -280,117 +309,266 @@ describe("Pricing Router", () => {
     });
   });
 
-  describe("Authorization Checks", () => {
-    it("identifies when no session exists", async () => {
+  // ---------------------------------------------------------------------
+  // Procédures du routeur
+  //
+  // Les blocs « Business Logic » et « Multi-tenancy Validation » d'origine
+  // recopiaient la règle dans le test (`expect("org-1").toBe("org-1")`) sans
+  // jamais importer pricing.ts. Le verrou réel est le triptyque
+  // organizerProcedure / assertPricingEditable / verrou de devise hors
+  // brouillon : c'est ce qu'on exerce ici.
+  // ---------------------------------------------------------------------
+  describe("Procédures", () => {
+    async function signIn(row: { isAdmin?: boolean; role?: string } | null) {
       const { auth } = await import("~/lib/auth");
-      vi.mocked(auth.api.getSession).mockResolvedValueOnce(null);
+      const { db } = await import("~/server/db");
 
-      const session = await auth.api.getSession({ headers: new Headers() });
+      if (row === null) {
+        vi.mocked(auth.api.getSession).mockResolvedValue(null);
+        return;
+      }
 
-      expect(session).toBeNull();
-      // Router would throw UNAUTHORIZED
-    });
-  });
+      vi.mocked(auth.api.getSession).mockResolvedValue({
+        user: { id: "user-1", email: "test@example.com" },
+        session: { id: "session-1" },
+      } as never);
+      vi.mocked(db.query.users.findFirst).mockResolvedValue(row as never);
+    }
 
-  describe("Business Logic - Currency Change After Publication", () => {
-    it("should block currency change when cup is published", () => {
-      const cupStatus: string = "published";
-      const inputCurrency: string | undefined = "USD";
+    const asOrganizer = () => signIn({ isAdmin: false, role: "organizer" });
+    const asProducer = () => signIn({ isAdmin: false, role: "producer" });
+    const asAnonymous = () => signIn(null);
 
-      const shouldBlock =
-        inputCurrency !== undefined && cupStatus !== "draft";
+    async function withCup(
+      overrides: { status?: string; currency?: string | null } = {}
+    ) {
+      const { db } = await import("~/server/db");
+      vi.mocked(db.query.cups.findFirst).mockResolvedValue({
+        id: "cup-1",
+        name: "Test Cup",
+        status: overrides.status ?? "draft",
+        currency: overrides.currency === undefined ? "EUR" : overrides.currency,
+        defaultPricePerProduct: 2500,
+      } as never);
+    }
 
-      expect(shouldBlock).toBe(true);
-    });
+    async function createCaller() {
+      const { pricingRouter } = await import("../pricing");
+      const { db } = await import("~/server/db");
 
-    it("should allow currency change when cup is draft", () => {
-      const cupStatus: string = "draft";
-      const inputCurrency: string | undefined = "USD";
+      return pricingRouter.createCaller({ headers: new Headers(), db } as never);
+    }
 
-      const shouldBlock =
-        inputCurrency !== undefined && cupStatus !== "draft";
+    async function codeOf(fn: () => Promise<unknown>) {
+      try {
+        await fn();
+      } catch (error) {
+        expect(error).toBeInstanceOf(TRPCError);
+        return (error as TRPCError).code;
+      }
+      throw new Error("La procédure aurait dû lever une erreur");
+    }
 
-      expect(shouldBlock).toBe(false);
-    });
-
-    it("should allow price change regardless of status", () => {
-      // Price can be changed at any time
-      // Only currency is locked after publication
-      const cupStatus = "published";
-      const inputPrice = 2000;
-
-      // No restriction on price changes
-      expect(inputPrice).toBe(2000);
-    });
-  });
-
-  describe("Business Logic - Multi-tenancy Validation", () => {
-    it("validates cup belongs to user organization", () => {
-      const cupOrganizationId = "org-1";
-      const memberOrganizationId = "org-1";
-
-      expect(cupOrganizationId).toBe(memberOrganizationId);
-    });
-
-    it("detects cross-tenant access attempt", () => {
-      const cupOrganizationId: string = "org-1";
-      const attackerOrganizationId: string = "org-2";
-
-      expect(cupOrganizationId).not.toBe(attackerOrganizationId);
-      // Router would throw NOT_FOUND or FORBIDDEN
+    beforeEach(() => {
+      vi.clearAllMocks();
     });
 
-    it("validates category belongs to user organization via cup", () => {
-      const categoryCupOrganizationId = "org-1";
-      const memberOrganizationId = "org-1";
+    it("refuse un appelant anonyme sur chaque procédure", async () => {
+      await asAnonymous();
+      const caller = await createCaller();
 
-      expect(categoryCupOrganizationId).toBe(memberOrganizationId);
+      expect(await codeOf(() => caller.getCupPricing({ cupId: "cup-1" }))).toBe(
+        "UNAUTHORIZED"
+      );
+      expect(
+        await codeOf(() =>
+          caller.updateCupPricing({ cupId: "cup-1", defaultPricePerProduct: 100 })
+        )
+      ).toBe("UNAUTHORIZED");
+      expect(
+        await codeOf(() =>
+          caller.updateCategoryPrice({ categoryId: "cat-1", priceOverride: 100 })
+        )
+      ).toBe("UNAUTHORIZED");
     });
 
-    it("detects category cross-tenant access", () => {
-      const categoryCupOrganizationId: string = "org-1";
-      const attackerOrganizationId: string = "org-2";
+    // Le tarif d'engagement est ce que le producteur paie : un producteur ne
+    // doit pas pouvoir le lire ni le changer.
+    it("refuse un producteur authentifié sur chaque procédure", async () => {
+      await asProducer();
+      const caller = await createCaller();
 
-      expect(categoryCupOrganizationId).not.toBe(attackerOrganizationId);
-      // Router would throw FORBIDDEN
-    });
-  });
-
-  describe("Business Logic - Price Resolution", () => {
-    it("uses category override when set", () => {
-      const defaultPrice = 1500;
-      const categoryOverride: number | null = 2000;
-
-      const effectivePrice = categoryOverride ?? defaultPrice;
-
-      expect(effectivePrice).toBe(2000);
-    });
-
-    it("falls back to default when category override is null", () => {
-      const defaultPrice = 1500;
-      const categoryOverride: number | null = null;
-
-      const effectivePrice = categoryOverride ?? defaultPrice;
-
-      expect(effectivePrice).toBe(1500);
+      expect(await codeOf(() => caller.getCupPricing({ cupId: "cup-1" }))).toBe(
+        "FORBIDDEN"
+      );
+      expect(
+        await codeOf(() =>
+          caller.updateCupPricing({ cupId: "cup-1", defaultPricePerProduct: 100 })
+        )
+      ).toBe("FORBIDDEN");
+      expect(
+        await codeOf(() =>
+          caller.updateCategoryPrice({ categoryId: "cat-1", priceOverride: 0 })
+        )
+      ).toBe("FORBIDDEN");
+      expect(updates).toHaveLength(0);
     });
 
-    it("handles free (null default) with category override", () => {
-      const defaultPrice: number | null = null;
-      const categoryOverride: number | null = 2000;
+    it("renvoie NOT_FOUND quand la cup n'existe pas", async () => {
+      await asOrganizer();
+      const { db } = await import("~/server/db");
+      vi.mocked(db.query.cups.findFirst).mockResolvedValue(undefined as never);
 
-      const effectivePrice = categoryOverride ?? defaultPrice;
-
-      expect(effectivePrice).toBe(2000);
+      const caller = await createCaller();
+      expect(await codeOf(() => caller.getCupPricing({ cupId: "inconnue" }))).toBe(
+        "NOT_FOUND"
+      );
     });
 
-    it("handles both null (free)", () => {
-      const defaultPrice: number | null = null;
-      const categoryOverride: number | null = null;
+    it("expose le prix par défaut et les surcharges par catégorie", async () => {
+      await asOrganizer();
+      await withCup({ status: "published" });
 
-      const effectivePrice = categoryOverride ?? defaultPrice;
+      const { db } = await import("~/server/db");
+      vi.mocked(db.query.categories.findMany).mockResolvedValue([
+        { id: "cat-1", name: "Indoor", priceOverride: 5000 },
+        { id: "cat-2", name: "Outdoor", priceOverride: null },
+      ] as never);
 
-      expect(effectivePrice).toBeNull();
+      const caller = await createCaller();
+      const result = await caller.getCupPricing({ cupId: "cup-1" });
+
+      expect(result.defaultPricePerProduct).toBe(2500);
+      expect(result.currency).toBe("EUR");
+      expect(result.canEdit).toBe(true);
+      expect(result.categoryPrices).toEqual([
+        { categoryId: "cat-1", name: "Indoor", priceOverride: 5000 },
+        { categoryId: "cat-2", name: "Outdoor", priceOverride: null },
+      ]);
+    });
+
+    it("replie une devise NULL sur EUR", async () => {
+      await asOrganizer();
+      await withCup({ currency: null });
+
+      const { db } = await import("~/server/db");
+      vi.mocked(db.query.categories.findMany).mockResolvedValue([] as never);
+
+      const caller = await createCaller();
+      await expect(caller.getCupPricing({ cupId: "cup-1" })).resolves.toMatchObject({
+        currency: "EUR",
+      });
+    });
+
+    it("interdit toute modification tarifaire sur une cup terminée", async () => {
+      await asOrganizer();
+      await withCup({ status: "completed" });
+
+      const { db } = await import("~/server/db");
+      vi.mocked(db.query.categories.findFirst).mockResolvedValue({
+        id: "cat-1",
+        cupId: "cup-1",
+      } as never);
+
+      const caller = await createCaller();
+
+      expect(
+        await codeOf(() =>
+          caller.updateCupPricing({ cupId: "cup-1", defaultPricePerProduct: 100 })
+        )
+      ).toBe("BAD_REQUEST");
+      expect(
+        await codeOf(() =>
+          caller.updateCategoryPrice({ categoryId: "cat-1", priceOverride: 100 })
+        )
+      ).toBe("BAD_REQUEST");
+      expect(updates).toHaveLength(0);
+
+      // canEdit doit refléter le même verrou côté lecture.
+      vi.mocked(db.query.categories.findMany).mockResolvedValue([] as never);
+      await expect(caller.getCupPricing({ cupId: "cup-1" })).resolves.toMatchObject({
+        canEdit: false,
+      });
+    });
+
+    // Les montants déjà encaissés ne portent pas leur devise : la changer
+    // après publication rendrait factures et totaux incohérents.
+    it.each(["published", "registration_closed", "rating"])(
+      "refuse un changement de devise quand la cup est en %s",
+      async (status) => {
+        await asOrganizer();
+        await withCup({ status, currency: "EUR" });
+
+        const caller = await createCaller();
+        expect(
+          await codeOf(() => caller.updateCupPricing({ cupId: "cup-1", currency: "USD" }))
+        ).toBe("BAD_REQUEST");
+        expect(updates).toHaveLength(0);
+      }
+    );
+
+    it("laisse changer la devise tant que la cup est en brouillon", async () => {
+      await asOrganizer();
+      await withCup({ status: "draft", currency: "EUR" });
+
+      const caller = await createCaller();
+      await caller.updateCupPricing({ cupId: "cup-1", currency: "CHF" });
+
+      expect(updates[0]).toMatchObject({ currency: "CHF" });
+    });
+
+    it("accepte la devise identique sur une cup publiée (ce n'est pas un changement)", async () => {
+      await asOrganizer();
+      await withCup({ status: "published", currency: "EUR" });
+
+      const caller = await createCaller();
+      await caller.updateCupPricing({
+        cupId: "cup-1",
+        currency: "EUR",
+        defaultPricePerProduct: 3000,
+      });
+
+      expect(updates[0]).toMatchObject({ defaultPricePerProduct: 3000 });
+      expect(updates[0]).not.toHaveProperty("currency");
+    });
+
+    it("normalise une devise NULL même sur une cup publiée", async () => {
+      await asOrganizer();
+      await withCup({ status: "published", currency: null });
+
+      const caller = await createCaller();
+      await caller.updateCupPricing({ cupId: "cup-1", currency: "EUR" });
+
+      expect(updates[0]).toMatchObject({ currency: "EUR" });
+    });
+
+    it("remet une catégorie sur le prix par défaut avec priceOverride null", async () => {
+      await asOrganizer();
+      await withCup({ status: "published" });
+
+      const { db } = await import("~/server/db");
+      vi.mocked(db.query.categories.findFirst).mockResolvedValue({
+        id: "cat-1",
+        cupId: "cup-1",
+      } as never);
+
+      const caller = await createCaller();
+      await caller.updateCategoryPrice({ categoryId: "cat-1", priceOverride: null });
+
+      expect(updates[0]).toMatchObject({ priceOverride: null });
+    });
+
+    it("renvoie NOT_FOUND pour une catégorie inconnue", async () => {
+      await asOrganizer();
+      const { db } = await import("~/server/db");
+      vi.mocked(db.query.categories.findFirst).mockResolvedValue(undefined as never);
+
+      const caller = await createCaller();
+      expect(
+        await codeOf(() =>
+          caller.updateCategoryPrice({ categoryId: "inconnue", priceOverride: 100 })
+        )
+      ).toBe("NOT_FOUND");
     });
   });
 });

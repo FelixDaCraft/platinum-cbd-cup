@@ -8,11 +8,24 @@ export default function ProducerDashboardPage() {
   const organization = useOrganization();
   const theme = usePortalTheme();
 
-  const { data: profile, isLoading: isProfileLoading } = api.producer.getProfile.useQuery();
-  const { data: stats, isLoading: isStatsLoading } = api.producer.getDashboardStats.useQuery();
+  const {
+    data: profile,
+    isLoading: isProfileLoading,
+    isError: isProfileError,
+  } = api.producer.getProfile.useQuery();
+  const {
+    data: stats,
+    isLoading: isStatsLoading,
+    isError: isStatsError,
+    refetch: refetchStats,
+  } = api.producer.getDashboardStats.useQuery();
 
-  const { data: registrations, isLoading: isRegistrationsLoading } =
-    api.producer.getMyRegistrations.useQuery({ limit: 5 });
+  const {
+    data: registrations,
+    isLoading: isRegistrationsLoading,
+    isError: isRegistrationsError,
+    refetch: refetchRegistrations,
+  } = api.producer.getMyRegistrations.useQuery({ limit: 5 });
 
   const { data: labels, isLoading: isLabelsLoading } =
     api.producer.getMyLabels.useQuery({ limit: 6 });
@@ -26,6 +39,24 @@ export default function ProducerDashboardPage() {
         style={{ color: "var(--n-text-disabled)" }}
       >
         <span className="n-font-data text-sm tracking-widest">[LOADING...]</span>
+      </div>
+    );
+  }
+
+  // Sans ce garde-fou, le tableau de bord se rendait avec toutes les stats à 0
+  // et un profil vide : un producteur pouvait croire ses inscriptions perdues.
+  if (isProfileError || isStatsError) {
+    return (
+      <div
+        className="flex flex-col items-center justify-center min-h-[400px] gap-4 text-center"
+        style={{ color: "var(--n-text-secondary)" }}
+      >
+        <span role="alert" className="n-font-data text-sm tracking-widest">
+          [ERREUR] VOTRE TABLEAU DE BORD N&apos;A PAS PU ÊTRE CHARGÉ
+        </span>
+        <button type="button" className="n-btn-secondary text-xs" onClick={() => void refetchStats()}>
+          RÉESSAYER
+        </button>
       </div>
     );
   }
@@ -78,8 +109,8 @@ export default function ProducerDashboardPage() {
           </div>
         </div>
 
-        <Link href="/producer/registrations">
-          <button className="n-btn-secondary text-sm">VOIR MES INSCRIPTIONS</button>
+        <Link href="/producer/registrations" className="n-btn-secondary text-sm">
+          VOIR MES INSCRIPTIONS
         </Link>
       </div>
 
@@ -155,9 +186,7 @@ export default function ProducerDashboardPage() {
                   Activite recente
                 </h2>
               </div>
-              <Link href="/producer/registrations">
-                <button className="n-btn-ghost text-xs">TOUT VOIR</button>
-              </Link>
+              <Link href="/producer/registrations" className="n-btn-ghost text-xs">TOUT VOIR</Link>
             </div>
 
             {isRegistrationsLoading ? (
@@ -168,6 +197,27 @@ export default function ProducerDashboardPage() {
                 >
                   [LOADING...]
                 </span>
+              </div>
+            ) : isRegistrationsError ? (
+              // « Aucune inscription » sur une erreur ferait croire à une perte
+              // de données : on nomme l'incident.
+              <div className="py-8 text-center space-y-3">
+                <span
+                  role="alert"
+                  className="n-font-data text-sm"
+                  style={{ color: "var(--n-text-secondary)" }}
+                >
+                  [ERREUR] VOS INSCRIPTIONS N&apos;ONT PAS PU ÊTRE CHARGÉES
+                </span>
+                <div>
+                  <button
+                    type="button"
+                    className="n-btn-secondary text-xs"
+                    onClick={() => void refetchRegistrations()}
+                  >
+                    RÉESSAYER
+                  </button>
+                </div>
               </div>
             ) : registrations && registrations.length > 0 ? (
               <div className="space-y-0 divide-y" style={{ borderColor: "var(--n-border)" }}>
@@ -261,9 +311,7 @@ export default function ProducerDashboardPage() {
                     Mes distinctions
                   </h2>
                 </div>
-                <Link href="/producer/labels">
-                  <button className="n-btn-ghost text-xs">TOUT VOIR</button>
-                </Link>
+                <Link href="/producer/labels" className="n-btn-ghost text-xs">TOUT VOIR</Link>
               </div>
 
               {isLabelsLoading ? (
@@ -354,8 +402,8 @@ export default function ProducerDashboardPage() {
                 ))}
               </div>
 
-              <Link href="/producer/profile" className="block">
-                <button className="n-btn-secondary w-full text-xs">COMPLETER MON PROFIL</button>
+              <Link href="/producer/profile" className="n-btn-secondary w-full text-xs block">
+                COMPLETER MON PROFIL
               </Link>
             </div>
           )}
@@ -374,8 +422,8 @@ export default function ProducerDashboardPage() {
             <p className="text-sm mb-4" style={{ color: "var(--n-text-secondary)" }}>
               Affichez vos recompenses sur votre site web.
             </p>
-            <Link href="/producer/widget" className="block">
-              <button className="n-btn-secondary w-full text-xs">CONFIGURER LE WIDGET</button>
+            <Link href="/producer/widget" className="n-btn-secondary w-full text-xs block">
+              CONFIGURER LE WIDGET
             </Link>
           </div>
 
@@ -385,15 +433,11 @@ export default function ProducerDashboardPage() {
               ACTIONS RAPIDES
             </div>
             <div className="space-y-2">
-              <Link href="/producer/results" className="block">
-                <button className="n-btn-ghost w-full justify-start text-xs">
-                  VOIR MES RESULTATS
-                </button>
+              <Link href="/producer/results" className="n-btn-ghost w-full justify-start text-xs block">
+                VOIR MES RESULTATS
               </Link>
-              <Link href="/producer/profile" className="block">
-                <button className="n-btn-ghost w-full justify-start text-xs">
-                  MON PROFIL
-                </button>
+              <Link href="/producer/profile" className="n-btn-ghost w-full justify-start text-xs block">
+                MON PROFIL
               </Link>
             </div>
           </div>

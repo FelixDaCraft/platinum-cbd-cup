@@ -41,8 +41,8 @@ export function MobileHomeHero({
   secondaryCta,
 }: MobileHomeHeroProps) {
   const sectionRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
   const [emblemSize, setEmblemSize] = useState(360);
-  const [scrollY, setScrollY] = useState(0);
   const [inView, setInView] = useState(true);
   const [reducedMotion, setReducedMotion] = useState(false);
 
@@ -73,15 +73,6 @@ export function MobileHomeHero({
     return () => mql.removeEventListener("change", handler);
   }, []);
 
-  // Track scroll position to drive the opacity fade.
-  useEffect(() => {
-    if (reducedMotion) return;
-    const handler = () => setScrollY(window.scrollY);
-    handler();
-    window.addEventListener("scroll", handler, { passive: true });
-    return () => window.removeEventListener("scroll", handler);
-  }, [reducedMotion]);
-
   // Unmount the canvas once the hero section is fully out of view to free
   // up the WebGL context for the rest of the page.
   useEffect(() => {
@@ -97,13 +88,46 @@ export function MobileHomeHero({
     return () => obs.disconnect();
   }, []);
 
-  // Map scroll [0, 480px] → opacity [1, 0.22]. The 480px window
-  // approximates one full viewport scroll on a 14 Pro. The emblem keeps
-  // its size — only opacity fades — so it stays a constant presence
-  // behind the page content. The 0.22 floor guarantees the logo remains
-  // visibly transparent through subsequent sections rather than vanishing.
-  const progress = reducedMotion ? 0 : Math.min(1, scrollY / 480);
-  const opacity = Math.max(0.22, 1 - progress * 0.78);
+  // Le fondu du canvas est écrit directement sur le DOM, cadencé par
+  // requestAnimationFrame. Passer par un state React re-rendrait la section
+  // entière — donc le sous-arbre GeometricEmblem/Canvas — à chaque événement
+  // scroll, soit des dizaines de re-rendus par seconde concurrents de la
+  // boucle WebGL, pour ne changer qu'une opacité.
+  useEffect(() => {
+    const node = canvasRef.current;
+    if (!node) return;
+    if (reducedMotion) {
+      node.style.opacity = "1";
+      return;
+    }
+
+    let frame = 0;
+    const apply = () => {
+      frame = 0;
+      const target = canvasRef.current;
+      if (!target) return;
+      // Map scroll [0, 480px] → opacity [1, 0.22]. The 480px window
+      // approximates one full viewport scroll on a 14 Pro. The emblem keeps
+      // its size — only opacity fades — so it stays a constant presence
+      // behind the page content. The 0.22 floor guarantees the logo remains
+      // visibly transparent through subsequent sections rather than vanishing.
+      const progress = Math.min(1, window.scrollY / 480);
+      target.style.opacity = Math.max(0.22, 1 - progress * 0.78).toFixed(3);
+    };
+
+    apply();
+    const onScroll = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(apply);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      if (frame) window.cancelAnimationFrame(frame);
+    };
+    // `inView` démonte et remonte le canvas : l'effet doit se réaccrocher au
+    // nouveau nœud.
+  }, [reducedMotion, inView]);
 
   return (
     <section
@@ -117,10 +141,10 @@ export function MobileHomeHero({
           on every overlay. */}
       {inView && (
         <div
+          ref={canvasRef}
           className="mobile-home-hero__canvas"
-          style={{
-            opacity: opacity.toFixed(3),
-          }}
+          // Valeur initiale ; l'effet ci-dessus prend la main dès le montage.
+          style={{ opacity: 1 }}
         >
           <GeometricEmblem
             size={emblemSize}

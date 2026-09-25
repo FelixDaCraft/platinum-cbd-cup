@@ -1,9 +1,31 @@
+import type { Metadata } from "next";
+import { unstable_cache } from "next/cache";
 import Link from "next/link";
 import { count, inArray } from "drizzle-orm";
 import { db } from "~/server/db";
 import * as schema from "~/server/db/schema";
 import { Eyebrow, Pill, Countdown } from "~/components/portal/platinum";
 import type { Cup } from "~/server/db/schema/cups";
+import {
+  PORTAL_CACHE_TAGS,
+  PORTAL_REVALIDATE,
+  reviveCupDates,
+} from "../_lib/cache";
+import { baseUrl, OG_IMAGE_PAR_DEFAUT } from "../_lib/seo";
+
+export const metadata: Metadata = {
+  title: "Les éditions",
+  description:
+    "Toutes les éditions de la Platinum CBD Cup : calendrier des inscriptions, catégories en compétition et résultats publiés.",
+  alternates: { canonical: `${baseUrl()}/cups` },
+  openGraph: {
+    title: "Les éditions | Platinum CBD Cup",
+    description:
+      "Toutes les éditions de la Platinum CBD Cup : calendrier, catégories et résultats.",
+    url: `${baseUrl()}/cups`,
+    images: [OG_IMAGE_PAR_DEFAUT],
+  },
+};
 
 // ---------------------------------------------------------------------------
 // DB queries
@@ -16,9 +38,20 @@ async function getPublicCups() {
   });
 }
 
-async function getCategoryCounts(cupIds: string[]): Promise<Map<string, number>> {
-  if (cupIds.length === 0) return new Map();
-  const rows = await db
+/**
+ * La liste des éditions ne bouge qu'à la création ou à la publication d'une
+ * cup : la relire à chaque affichage de /cups n'apportait rien.
+ */
+const getCachedPublicCups = unstable_cache(getPublicCups, ["portal-public-cups"], {
+  revalidate: PORTAL_REVALIDATE,
+  tags: [PORTAL_CACHE_TAGS.cups],
+});
+
+/** Une Map ne survit pas à la sérialisation JSON du cache : on stocke les
+ *  lignes brutes et la Map est reconstruite à la lecture. */
+async function getCategoryCountRows(cupIds: string[]) {
+  if (cupIds.length === 0) return [];
+  return db
     .select({
       cupId: schema.categories.cupId,
       total: count(),
@@ -26,6 +59,16 @@ async function getCategoryCounts(cupIds: string[]): Promise<Map<string, number>>
     .from(schema.categories)
     .where(inArray(schema.categories.cupId, cupIds))
     .groupBy(schema.categories.cupId);
+}
+
+const getCachedCategoryCountRows = unstable_cache(
+  getCategoryCountRows,
+  ["portal-cups-category-counts"],
+  { revalidate: PORTAL_REVALIDATE, tags: [PORTAL_CACHE_TAGS.cups] },
+);
+
+async function getCategoryCounts(cupIds: string[]): Promise<Map<string, number>> {
+  const rows = await getCachedCategoryCountRows(cupIds);
   return new Map(rows.map((r) => [r.cupId, r.total]));
 }
 
@@ -297,7 +340,7 @@ function InstrumentCard({
 // ---------------------------------------------------------------------------
 
 export default async function CupsPage() {
-  const cups = await getPublicCups();
+  const cups = (await getCachedPublicCups()).map(reviveCupDates);
   const categoryCounts = await getCategoryCounts(cups.map((c) => c.id));
 
   const activeCups = cups.filter((c) => c.status !== "completed");

@@ -17,7 +17,7 @@ const phases = [
   { key: "registration", label: "Inscriptions" },
   { key: "closed", label: "Cloturees" },
   { key: "rating", label: "Notation" },
-  { key: "completed", label: "Terminee" },
+  { key: "completed", label: "Terminée" },
 ] as const;
 
 const phaseOrder: Record<PhaseStatus, number> = {

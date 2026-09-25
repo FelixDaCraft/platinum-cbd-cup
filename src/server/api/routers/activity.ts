@@ -1,11 +1,12 @@
 import { z } from "zod";
-import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
+import { createTRPCRouter, organizerProcedure } from "~/server/api/trpc";
 
 export const activityRouter = createTRPCRouter({
   /**
    * Get recent activities (single-tenant: all activities).
+   * Le journal expose les actions internes et leurs métadonnées : organisateur seul.
    */
-  getRecent: protectedProcedure
+  getRecent: organizerProcedure
     .input(
       z.object({
         limit: z.number().min(1).max(50).default(10),

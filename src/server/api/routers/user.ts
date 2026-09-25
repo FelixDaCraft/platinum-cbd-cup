@@ -4,8 +4,12 @@
  */
 
 import { eq, and, count, isNotNull, ne, inArray } from "drizzle-orm";
-import { TRPCError } from "@trpc/server";
-import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
+import {
+  createTRPCRouter,
+  isOrganizerUser,
+  protectedProcedure,
+  publicProcedure,
+} from "~/server/api/trpc";
 import { auth } from "~/lib/auth";
 import * as schema from "~/server/db/schema";
 
@@ -29,7 +33,7 @@ export const userRouter = createTRPCRouter({
       columns: { isAdmin: true, role: true },
     });
 
-    if (user?.isAdmin || user?.role === "organizer") {
+    if (isOrganizerUser(user)) {
       return { path: "/dashboard", role: "organizer" };
     }
 
@@ -48,19 +52,8 @@ export const userRouter = createTRPCRouter({
    * Get all roles for the current user with stats.
    * Returns roles: organizer, jury, producer with relevant statistics.
    */
-  getMyRoles: publicProcedure.query(async ({ ctx }) => {
-    const session = await auth.api.getSession({
-      headers: ctx.headers,
-    });
-
-    if (!session?.user) {
-      throw new TRPCError({
-        code: "UNAUTHORIZED",
-        message: "Vous devez être connecté",
-      });
-    }
-
-    const userId = session.user.id;
+  getMyRoles: protectedProcedure.query(async ({ ctx }) => {
+    const userId = ctx.userId;
 
     // Organizer role — based on user.role / user.isAdmin
     const user = await ctx.db.query.users.findFirst({
@@ -69,8 +62,7 @@ export const userRouter = createTRPCRouter({
     });
 
     let organizerRole = null;
-    const isOrganizer = user?.isAdmin === true || user?.role === "organizer";
-    if (isOrganizer) {
+    if (isOrganizerUser(user)) {
       const activeCupsResult = await ctx.db
         .select({ count: count() })
         .from(schema.cups)
@@ -186,8 +178,8 @@ export const userRouter = createTRPCRouter({
     return {
       user: {
         id: userId,
-        name: session.user.name,
-        email: session.user.email,
+        name: ctx.session.user.name,
+        email: ctx.session.user.email,
       },
       roles: {
         organizer: organizerRole,

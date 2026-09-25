@@ -1,30 +1,35 @@
-import { pgTable, text, timestamp, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, integer, index } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
+import { generateId } from "./id";
 import { cups } from "./cups";
 import { ratingCriteria } from "./rating-criteria";
 
 /**
  * Categories table - Product categories for cups
- * Multi-tenant: each category belongs to a cup (which belongs to an organization)
+ * Chaque catégorie appartient à une cup.
  */
-export const categories = pgTable("categories", {
-  id: text("id").primaryKey(), // nanoid generated
-  cupId: text("cup_id")
-    .notNull()
-    .references(() => cups.id, { onDelete: "cascade" }),
-  name: text("name").notNull(),
-  description: text("description"),
-  sortOrder: integer("sort_order").notNull().default(0),
-  // Pricing override (null = use cup's default price)
-  priceOverride: integer("price_override"), // Price in cents, nullable
-  // [DEPRECATED] Rating scale is now configured at Cup level (cups.ratingScale)
-  // These fields are kept for backwards compatibility but are NOT used
-  // See: src/server/db/schema/cups.ts → ratingScale field
-  ratingScaleMin: integer("rating_scale_min").notNull().default(1),
-  ratingScaleMax: integer("rating_scale_max").notNull().default(10),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-  updatedAt: timestamp("updated_at").notNull().defaultNow(),
-});
+export const categories = pgTable(
+  "categories",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => generateId()),
+    cupId: text("cup_id")
+      .notNull()
+      .references(() => cups.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    description: text("description"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    // Pricing override (null = use cup's default price)
+    priceOverride: integer("price_override"), // Price in cents, nullable
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // Toutes les listes de catégories filtrent par cup.
+    index("categories_cup_id_idx").on(table.cupId),
+  ]
+);
 
 /**
  * Categories relations for Drizzle query builder

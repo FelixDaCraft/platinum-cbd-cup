@@ -28,14 +28,16 @@ export interface BatchQRCodesDialogProps {
 
 const TYPE_LABELS = {
   reception: {
-    title: "QR Codes Reception",
-    description: "Generez et telechargez les QR codes pour tous les produits inscrits. Les producteurs colleront ces QR codes sur leurs colis.",
-    button: "QR Codes Reception",
+    title: "QR Codes Réception",
+    description:
+      "Générez et téléchargez les QR codes pour tous les produits inscrits. Les producteurs colleront ces QR codes sur leurs colis.",
+    button: "QR Codes Réception",
     downloadPrefix: "reception",
   },
   notation: {
     title: "QR Codes Notation",
-    description: "Generez les QR codes de notation pour les jurys. Chaque QR code permet au jury d'acceder directement a l'interface de notation du produit.",
+    description:
+      "Générez les QR codes de notation pour les jurys. Chaque QR code permet au jury d'accéder directement à l'interface de notation du produit.",
     button: "QR Codes Notation",
     downloadPrefix: "notation",
   },
@@ -192,7 +194,7 @@ export function BatchQRCodesDialog({
           <div className="flex flex-col items-center justify-center py-12">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             <p className="mt-4 text-sm text-muted-foreground">
-              Generation de {totalProducts} QR codes...
+              Génération de {totalProducts} QR codes...
             </p>
           </div>
         )}
@@ -209,7 +211,7 @@ export function BatchQRCodesDialog({
             <div className="flex gap-2">
               <Button onClick={handleDownloadAll} className="gap-2">
                 <FileArchive className="h-4 w-4" />
-                Telecharger tout ({data.totalProducts})
+                Télécharger tout ({data.totalProducts})
               </Button>
               <Button onClick={handlePrint} variant="outline" className="gap-2">
                 <Printer className="h-4 w-4" />
@@ -239,6 +241,10 @@ export function BatchQRCodesDialog({
                         <img
                           src={qr.dataUrl}
                           alt={`QR ${qr.anonymousCode}`}
+                          width={96}
+                          height={96}
+                          loading="lazy"
+                          decoding="async"
                           className="h-24 w-24 rounded border bg-white p-1"
                         />
                         <p className="mt-2 font-mono text-sm font-bold">

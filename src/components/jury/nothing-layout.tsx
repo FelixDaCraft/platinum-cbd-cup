@@ -35,7 +35,11 @@ const nothingCss = `
   --n-surface-raised: #1A1A1A;
   --n-border: #222222;
   --n-border-visible: #333333;
-  --n-text-disabled: #666666;
+  /* #666666 ne donnait que 3.66:1 sur --n-black, sous le seuil WCAG AA (4.5:1),
+     alors que ce token porte de l'information (libellés de stats, en-têtes de
+     tableau, "[LOADING...]") et pas seulement des éléments désactivés.
+     #858585 = 5.70:1 sur #000, 5.12:1 sur --n-surface, 4.72:1 sur --n-surface-raised. */
+  --n-text-disabled: #858585;
   --n-text-secondary: #999999;
   --n-text-primary: #E8E8E8;
   --n-text-display: #FFFFFF;
@@ -270,6 +274,25 @@ const nothingCss = `
 }
 .nothing-jury .n-textarea:focus { border-color: var(--n-text-secondary); }
 .nothing-jury .n-textarea::placeholder { color: var(--n-text-disabled); }
+
+/* Lien d'évitement : hors écran tant qu'il n'a pas le focus. */
+.nothing-jury .n-skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 100;
+  padding: 10px 16px;
+  font-family: 'Space Mono', monospace;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  background-color: var(--n-surface-raised);
+  color: var(--n-text-display);
+  border: 1px solid var(--n-border-visible);
+}
+.nothing-jury .n-skip-link:focus {
+  left: 8px;
+  top: 8px;
+}
 `;
 
 // ─── Navigation Config ─────────────────────────────────────────────────────
@@ -283,7 +306,7 @@ interface NavItem {
 const juryNavItems: NavItem[] = [
   { href: "/jury", label: "ACCUEIL", icon: Home },
   { href: "/jury/assignments", label: "NOTER", icon: ClipboardList },
-  { href: "/jury/results", label: "RESULTATS", icon: Trophy },
+  { href: "/jury/results", label: "RÉSULTATS", icon: Trophy },
   { href: "/jury/profile", label: "PROFIL", icon: User },
 ];
 
@@ -353,6 +376,9 @@ function NothingSidebar() {
           <img
             src={theme.logoUrl}
             alt={organization.name}
+            width={40}
+            height={40}
+            decoding="async"
             className="h-10 w-10 rounded-lg object-contain p-1"
             style={{ backgroundColor: "var(--n-surface)" }}
           />
@@ -383,7 +409,7 @@ function NothingSidebar() {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto p-3 space-y-1">
+      <nav aria-label="Navigation jury" className="flex-1 overflow-y-auto p-3 space-y-1">
         {!isCollapsed && (
           <p className="n-label px-3 mb-3" style={{ color: "var(--n-text-disabled)" }}>
             NAVIGATION
@@ -397,6 +423,7 @@ function NothingSidebar() {
             <Link
               key={item.href}
               href={item.href}
+              aria-current={active ? "page" : undefined}
               className={cn(
                 "flex items-center gap-3 px-3 py-2.5 rounded-none text-sm transition-all duration-200 relative",
                 isCollapsed && "justify-center px-2"
@@ -478,7 +505,7 @@ function NothingSidebar() {
                 onClick={handleLogout}
                 className="p-2 transition-colors duration-200"
                 style={{ color: "var(--n-text-disabled)" }}
-                title="Deconnexion"
+                title="Déconnexion"
               >
                 <LogOut className="h-4 w-4" strokeWidth={1.5} />
               </button>
@@ -488,7 +515,7 @@ function NothingSidebar() {
               onClick={handleLogout}
               className="w-full flex justify-center p-2 transition-colors duration-200"
               style={{ color: "var(--n-text-disabled)" }}
-              title="Deconnexion"
+              title="Déconnexion"
             >
               <LogOut className="h-5 w-5" strokeWidth={1.5} />
             </button>
@@ -535,6 +562,7 @@ function NothingBottomNav() {
 
   return (
     <nav
+      aria-label="Navigation jury (mobile)"
       className="lg:hidden fixed bottom-0 left-0 right-0 z-50 border-t safe-area-bottom"
       style={{
         backgroundColor: "var(--n-black)",
@@ -550,6 +578,7 @@ function NothingBottomNav() {
             <Link
               key={item.href}
               href={item.href}
+              aria-current={active ? "page" : undefined}
               className="flex flex-col items-center justify-center min-w-[64px] py-2 px-3"
             >
               <div className="relative flex items-center justify-center w-10 h-7">
@@ -595,12 +624,17 @@ interface NothingJuryLayoutProps {
 
 export function NothingJuryLayout({ children }: NothingJuryLayoutProps) {
   return (
-    <PWAWrapper portal="jury">
+    <PWAWrapper>
       <style dangerouslySetInnerHTML={{ __html: nothingCss }} />
       <div className="nothing-jury min-h-screen">
+        {/* Premier élément focusable : permet de sauter la barre latérale,
+            répétée à l'identique sur chaque écran. */}
+        <a href="#contenu-principal" className="n-skip-link">
+          Aller au contenu
+        </a>
         <NothingSidebar />
         <div className="lg:pl-64 transition-all duration-200">
-          <main className="min-h-screen">
+          <main id="contenu-principal" tabIndex={-1} className="min-h-screen">
             <div className="container mx-auto px-4 lg:px-8 py-8 pb-24 lg:pb-8">
               {children}
             </div>

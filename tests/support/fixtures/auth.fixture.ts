@@ -1,76 +1,67 @@
 import { test as base, expect, type Page } from "@playwright/test";
-import { createTestUser, createTestOrganizer, type TestUser } from "../factories/user.factory";
+import { createTestUser, type TestUser } from "../factories/user.factory";
 
 /**
- * Auth fixtures for Playwright tests
- * Provides authenticated user contexts
+ * Helpers d'authentification pour Playwright.
+ *
+ * Les sélecteurs `[data-testid="email-input"]` de la version précédente
+ * n'existaient nulle part : `grep -rn data-testid src` ne renvoie rien. Ce
+ * fichier cible désormais les identifiants réellement rendus par
+ * src/app/(portal)/login et /register (`input[id="email"]`, etc.) et les
+ * rôles ARIA, conformément aux recommandations Playwright.
+ *
+ * Il n'y a volontairement pas de fixture « authenticatedPage » : créer un
+ * compte demande un accès base et un email vérifié. Tant que la CI n'a pas
+ * de service Postgres, une telle fixture ne pourrait que mentir — l'ancienne
+ * se contentait de renvoyer la page telle quelle.
  */
 
 export interface AuthFixtures {
-  /**
-   * Authenticated page with a logged-in user
-   */
-  authenticatedPage: Page;
-  /**
-   * The test user data
-   */
+  /** Jeu de données utilisateur unique par test. */
   testUser: TestUser;
 }
 
-/**
- * Login helper - performs login via UI
- */
-export async function loginUser(page: Page, email: string, password: string): Promise<void> {
-  await page.goto("/login");
-  await page.fill('[data-testid="email-input"]', email);
-  await page.fill('[data-testid="password-input"]', password);
-  await page.click('[data-testid="login-button"]');
-
-  // Wait for redirect to dashboard or home
-  await expect(page).toHaveURL(/\/(dashboard|cups)/);
-}
-
-/**
- * Register a new user via UI
- */
-export async function registerUser(
+/** Connexion via l'interface. Échoue si la redirection n'a pas lieu. */
+export async function loginUser(
   page: Page,
   email: string,
-  password: string,
-  confirmPassword?: string
+  password: string
+): Promise<void> {
+  await page.goto("/login");
+  await page.locator('input[id="email"]').fill(email);
+  await page.locator('input[id="password"]').fill(password);
+  await page.getByRole("button", { name: /se connecter/i }).click();
+
+  // getRedirectPathForRole (login/page.tsx) : organisateur → /dashboard,
+  // producteur → /producer/dashboard, juré → /jury/dashboard.
+  await expect(page).toHaveURL(/\/(dashboard|producer\/dashboard|jury\/dashboard)/);
+}
+
+/** Création de compte producteur via l'interface. */
+export async function registerUser(
+  page: Page,
+  user: Pick<TestUser, "email" | "password" | "name">
 ): Promise<void> {
   await page.goto("/register");
-  await page.fill('[data-testid="email-input"]', email);
-  await page.fill('[data-testid="password-input"]', password);
-  await page.fill('[data-testid="confirm-password-input"]', confirmPassword ?? password);
-  await page.click('[data-testid="register-button"]');
+  await page.locator('input[id="email"]').fill(user.email);
+  await page.locator('input[id="name"]').fill(user.name);
+  await page.locator('input[id="password"]').fill(user.password);
+  await page.locator('input[id="confirmPassword"]').fill(user.password);
+  await page.getByRole("button", { name: /créer mon compte/i }).click();
 }
 
 /**
- * Logout helper
+ * Déconnexion : pas de bouton dans le shell public, on passe par l'espace
+ * authentifié qui en expose un.
  */
 export async function logoutUser(page: Page): Promise<void> {
-  // Click user menu and logout
-  await page.click('[data-testid="user-menu"]');
-  await page.click('[data-testid="logout-button"]');
-  await expect(page).toHaveURL("/login");
+  await page.getByRole("button", { name: /déconnexion|se déconnecter/i }).click();
+  await expect(page).toHaveURL(/\/login/);
 }
 
-/**
- * Extended test with auth fixtures
- */
 export const test = base.extend<AuthFixtures>({
   testUser: async ({}, use) => {
-    const user = createTestUser();
-    await use(user);
-  },
-
-  authenticatedPage: async ({ page, testUser }, use) => {
-    // Note: In a real implementation, you would:
-    // 1. Create user via API or database seeding
-    // 2. Login and store session
-    // For now, we just pass the page for manual login in tests
-    await use(page);
+    await use(createTestUser());
   },
 });
 

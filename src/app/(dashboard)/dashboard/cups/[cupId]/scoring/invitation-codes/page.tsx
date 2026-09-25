@@ -2,6 +2,7 @@
 
 import { useState, useRef, useMemo } from "react";
 import { useParams } from "next/navigation";
+import Link from "next/link";
 import {
   QrCode,
   Plus,
@@ -12,6 +13,7 @@ import {
   Printer,
   Layers,
   Filter,
+  Link2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { QRCodeSVG } from "qrcode.react";
@@ -89,8 +91,18 @@ export default function InvitationCodesPage() {
   const utils = api.useUtils();
 
   // Queries
-  const { data: cup, isLoading: cupLoading } = api.cup.getById.useQuery({ id: cupId });
-  const { data: allCodes, isLoading: codesLoading } = api.juryCodes.list.useQuery({ cupId });
+  const {
+    data: cup,
+    isLoading: cupLoading,
+    isError: cupError,
+    refetch: refetchCup,
+  } = api.cup.getById.useQuery({ id: cupId });
+  const {
+    data: allCodes,
+    isLoading: codesLoading,
+    isError: codesError,
+    refetch: refetchCodes,
+  } = api.juryCodes.list.useQuery({ cupId });
   const { data: stats } = api.juryCodes.getStats.useQuery({ cupId });
   const { data: categories } = api.category.list.useQuery({ cupId });
 
@@ -327,6 +339,21 @@ export default function InvitationCodesPage() {
     );
   }
 
+  // Une requête en échec ne doit pas se confondre avec une page vide :
+  // un écran « aucune donnée » masquerait l'incident.
+  if (cupError || codesError) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4 text-center">
+        <span role="alert" className="n-label" style={{ color: "var(--n-text-secondary)" }}>
+          [ERREUR] LES CODES D&apos;INVITATION N&apos;ONT PAS PU ÊTRE CHARGÉS
+        </span>
+        <button type="button" className="n-btn-secondary text-xs" onClick={() => { void refetchCup(); void refetchCodes(); }}>
+          RÉESSAYER
+        </button>
+      </div>
+    );
+  }
+
   if (!cup) {
     return null;
   }
@@ -361,6 +388,12 @@ export default function InvitationCodesPage() {
           </p>
         </div>
         <div className="flex gap-2">
+          <Button asChild size="sm" variant="outline" className="n-label">
+            <Link href={`/dashboard/cups/${cupId}/scoring/public-tokens`}>
+              <Link2 className="mr-2 h-4 w-4" />
+              Jetons jury publics
+            </Link>
+          </Button>
           <Dialog open={isGenerateDialogOpen} onOpenChange={setIsGenerateDialogOpen}>
             <DialogTrigger asChild>
               <Button size="sm" className="n-label">

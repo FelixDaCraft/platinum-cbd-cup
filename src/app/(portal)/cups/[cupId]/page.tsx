@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { eq, count } from "drizzle-orm";
@@ -6,6 +7,7 @@ import * as schema from "~/server/db/schema";
 import { Eyebrow, Pill } from "~/components/portal/platinum";
 import { CupStatsBar } from "./_components/cup-stats-bar";
 import { CupTabs } from "./_components/cup-tabs";
+import { baseUrl, imagePartage } from "../../_lib/seo";
 
 // ---------------------------------------------------------------------------
 // Page params
@@ -180,6 +182,46 @@ function getStatusInfo(status: string): {
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
+
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const { cupId } = await params;
+
+  const cup = await db.query.cups.findFirst({
+    where: eq(schema.cups.id, cupId),
+    columns: {
+      name: true,
+      status: true,
+      description: true,
+      publicPageDescription: true,
+      bannerUrl: true,
+    },
+  });
+
+  // Une cup inexistante ou en brouillon ne doit pas être indexée ; la page
+  // elle-même renvoie un 404.
+  if (!cup || cup.status === "draft") {
+    return { title: "Cup introuvable", robots: { index: false, follow: false } };
+  }
+
+  const url = `${baseUrl()}/cups/${cupId}`;
+  const description =
+    cup.publicPageDescription ??
+    cup.description ??
+    `Catégories, calendrier et résultats de ${cup.name}.`;
+
+  return {
+    title: cup.name,
+    description,
+    alternates: { canonical: url },
+    openGraph: {
+      type: "website",
+      title: cup.name,
+      description,
+      url,
+      images: imagePartage(cup.bannerUrl, cup.name),
+    },
+  };
+}
 
 export default async function CupDetailPage({ params }: PageProps) {
   const { cupId } = await params;

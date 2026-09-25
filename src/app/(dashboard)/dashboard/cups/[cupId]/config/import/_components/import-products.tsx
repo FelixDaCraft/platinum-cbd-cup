@@ -37,10 +37,18 @@ export function ImportProducts({ cupId }: ImportProductsProps) {
   const utils = api.useUtils();
 
   // Get categories for validation info
-  const { data: categories } = api.cupImport.getCategoriesForCup.useQuery({ cupId });
+  const {
+    data: categories,
+    isError: categoriesError,
+    refetch: refetchCategories,
+  } = api.cupImport.getCategoriesForCup.useQuery({ cupId });
 
   // Get producers for validation info
-  const { data: producers } = api.cupImport.getProducersForCup.useQuery({ cupId });
+  const {
+    data: producers,
+    isError: producersError,
+    refetch: refetchProducers,
+  } = api.cupImport.getProducersForCup.useQuery({ cupId });
 
   const parseCSV = api.cupImport.parseProductsCSV.useMutation({
     onSuccess: (data) => {
@@ -128,8 +136,33 @@ export function ImportProducts({ cupId }: ImportProductsProps) {
         </CardHeader>
       </Card>
 
+      {/* Prérequis indisponibles : « aucune catégorie » sur une erreur
+          pousserait l'organisateur à recréer des catégories existantes. */}
+      {(categoriesError || producersError) && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription className="ml-2">
+            <strong>Prérequis non vérifiables :</strong> les catégories et
+            producteurs de la cup n&apos;ont pas pu être chargés. L&apos;import
+            est bloqué tant que la liste n&apos;est pas connue.
+            <div className="mt-2">
+              <button
+                type="button"
+                className="n-btn-secondary text-xs"
+                onClick={() => {
+                  void refetchCategories();
+                  void refetchProducers();
+                }}
+              >
+                RÉESSAYER
+              </button>
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Prerequisites Check */}
-      {(!hasCategories || !hasProducers) && (
+      {!categoriesError && !producersError && (!hasCategories || !hasProducers) && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription className="ml-2">

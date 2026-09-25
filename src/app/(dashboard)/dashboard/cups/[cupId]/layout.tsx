@@ -9,9 +9,9 @@ import {
   Users,
   Package,
   UserCheck,
-  Euro,
   Award,
   Calendar,
+  Euro,
   Trophy,
   FileText,
   Upload,
@@ -49,7 +49,7 @@ export default function CupLayout({ children }: { children: React.ReactNode }) {
   const cupId = params.cupId as string;
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const { data: cup, isLoading } = api.cup.getById.useQuery({ id: cupId });
+  const { data: cup, isLoading, isError, refetch } = api.cup.getById.useQuery({ id: cupId });
 
   const navSections: NavSection[] = [
     {
@@ -184,6 +184,20 @@ export default function CupLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
+  // Une erreur réseau/serveur était présentée comme « cup introuvable ».
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4 text-center">
+        <span role="alert" style={{ fontFamily: '"Space Mono", monospace', fontSize: "12px", letterSpacing: "0.08em", color: "var(--n-text-secondary)" }}>
+          [ERREUR] CETTE CUP N&apos;A PAS PU ÊTRE CHARGÉE
+        </span>
+        <button type="button" className="n-btn-secondary" onClick={() => void refetch()}>
+          RÉESSAYER
+        </button>
+      </div>
+    );
+  }
+
   if (!cup) {
     return (
       <div
@@ -231,10 +245,8 @@ export default function CupLayout({ children }: { children: React.ReactNode }) {
           >
             Cette cup n&apos;existe pas ou vous n&apos;avez pas accès.
           </p>
-          <Link href="/dashboard">
-            <button className="n-btn-secondary" style={{ marginTop: "8px" }}>
-              RETOUR AU DASHBOARD
-            </button>
+          <Link href="/dashboard" className="n-btn-secondary" style={{ marginTop: "8px" }}>
+            RETOUR AU DASHBOARD
           </Link>
         </div>
       </div>

@@ -1,4 +1,4 @@
-"use client";
+import type { Metadata } from "next";
 
 import { User, Mail, Shield } from "lucide-react";
 
@@ -32,6 +32,10 @@ function SettingsCard({ icon, title, description, children, className = "" }: Se
     </div>
   );
 }
+
+export const metadata: Metadata = {
+  title: "Paramètres",
+};
 
 export default function SettingsPage() {
   return (

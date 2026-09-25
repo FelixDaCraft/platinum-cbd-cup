@@ -31,7 +31,7 @@ export default function JuriesPage() {
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const utils = api.useUtils();
-  const { data: juries, isLoading } = api.jury.listByOrganization.useQuery();
+  const { data: juries, isLoading, isError, refetch } = api.jury.listByOrganization.useQuery();
 
   const deleteMutation = api.jury.deleteByOrganization.useMutation({
     onSuccess: () => {
@@ -68,6 +68,20 @@ export default function JuriesPage() {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <span style={{ fontFamily: "'Space Mono', monospace", color: "var(--n-text-secondary)" }}>[LOADING...]</span>
+      </div>
+    );
+  }
+
+  // Une requête en échec ne doit pas se confondre avec une liste vide.
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4 text-center">
+        <span role="alert" className="n-font-data" style={{ color: "var(--n-text-secondary)", fontSize: "13px", letterSpacing: "0.08em" }}>
+          [ERREUR] LA LISTE DES JURYS N&apos;A PAS PU ÊTRE CHARGÉE
+        </span>
+        <button type="button" className="n-btn-secondary text-xs" onClick={() => void refetch()}>
+          RÉESSAYER
+        </button>
       </div>
     );
   }

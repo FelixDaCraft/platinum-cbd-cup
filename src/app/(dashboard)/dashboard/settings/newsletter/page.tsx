@@ -89,8 +89,17 @@ export default function NewsletterPage() {
 
   const utils = api.useUtils();
 
-  const { data: stats, isLoading: statsLoading } = api.newsletter.getStats.useQuery();
-  const { data: subscriberData, isLoading: listLoading } = api.newsletter.list.useQuery({
+  const {
+    data: stats,
+    isLoading: statsLoading,
+    isError: statsError,
+  } = api.newsletter.getStats.useQuery();
+  const {
+    data: subscriberData,
+    isLoading: listLoading,
+    isError: listError,
+    refetch: refetchList,
+  } = api.newsletter.list.useQuery({
     status,
     search: searchQuery,
     page,
@@ -179,25 +188,25 @@ export default function NewsletterPage() {
         <div className="n-card p-4">
           <p className="n-label" style={{ fontSize: "10px", color: "var(--n-text-secondary)" }}>TOTAL ABONNES</p>
           <p className="n-font-data text-2xl font-bold mt-1" style={{ color: "var(--n-text-primary)" }}>
-            {statsLoading ? "[...]" : (stats?.total ?? 0)}
+            {statsLoading ? "[...]" : statsError ? "—" : (stats?.total ?? 0)}
           </p>
         </div>
         <div className="n-card p-4">
           <p className="n-label" style={{ fontSize: "10px", color: "var(--n-text-secondary)" }}>ACTIFS</p>
           <p className="n-font-data text-2xl font-bold mt-1" style={{ color: "var(--n-success)" }}>
-            {statsLoading ? "[...]" : (stats?.active ?? 0)}
+            {statsLoading ? "[...]" : statsError ? "—" : (stats?.active ?? 0)}
           </p>
         </div>
         <div className="n-card p-4">
           <p className="n-label" style={{ fontSize: "10px", color: "var(--n-text-secondary)" }}>EN ATTENTE</p>
           <p className="n-font-data text-2xl font-bold mt-1" style={{ color: "var(--n-warning)" }}>
-            {statsLoading ? "[...]" : (stats?.pending ?? 0)}
+            {statsLoading ? "[...]" : statsError ? "—" : (stats?.pending ?? 0)}
           </p>
         </div>
         <div className="n-card p-4">
           <p className="n-label" style={{ fontSize: "10px", color: "var(--n-text-secondary)" }}>DESINSCRITS</p>
           <p className="n-font-data text-2xl font-bold mt-1" style={{ color: "var(--n-text-secondary)" }}>
-            {statsLoading ? "[...]" : (stats?.unsubscribed ?? 0)}
+            {statsLoading ? "[...]" : statsError ? "—" : (stats?.unsubscribed ?? 0)}
           </p>
         </div>
       </div>
@@ -332,6 +341,16 @@ export default function NewsletterPage() {
           {listLoading ? (
             <div className="flex items-center justify-center py-12">
               <p className="n-font-data" style={{ color: "var(--n-text-secondary)", fontFamily: "'Space Mono', monospace" }}>[LOADING...]</p>
+            </div>
+          ) : listError ? (
+            // Sans ce cas, une 500 se lit « aucun abonné » et l'incident passe inaperçu.
+            <div className="flex flex-col items-center justify-center gap-4 py-12">
+              <p role="alert" className="n-font-data" style={{ color: "var(--n-text-secondary)", fontFamily: "'Space Mono', monospace" }}>
+                [ERREUR] LA LISTE DES ABONNÉS N&apos;A PAS PU ÊTRE CHARGÉE
+              </p>
+              <button type="button" className="n-btn-secondary text-xs" onClick={() => void refetchList()}>
+                RÉESSAYER
+              </button>
             </div>
           ) : subscriberData && subscriberData.subscribers.length > 0 ? (
             <>

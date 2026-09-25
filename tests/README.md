@@ -1,110 +1,155 @@
-# CupMetrics Tests
+# Tests — Platinum CBD Cup
 
-## Vue d'ensemble
+Deux suites, deux rôles distincts :
 
-Ce projet utilise deux frameworks de tests :
+| Suite | Outil | Ce qu'elle couvre | Base de données |
+|---|---|---|---|
+| Unitaire / intégration | Vitest | schémas Zod, services, routeurs tRPC | aucune (`~/server/db` est mocké) |
+| Bout en bout | Playwright | parcours publics rendus par un serveur réel | base peuplée, lecture seule |
 
-- **Vitest** - Tests unitaires et API (736 tests)
-- **Playwright** - Tests E2E (20+ tests)
+Les chiffres de couverture ne sont volontairement pas recopiés ici : ils
+dérivent à chaque commit. `pnpm test` affiche le compte réel.
 
-## Structure des Tests
+## Où vivent les tests
 
 ```
-tests/
-├── e2e/                     # Tests E2E (Playwright)
-│   ├── auth.spec.ts         # Tests d'authentification
-│   ├── home.spec.ts         # Tests page d'accueil
-│   ├── portal.spec.ts       # Tests portal public
-│   └── accessibility.spec.ts # Tests accessibilité
-└── support/
-    ├── fixtures/            # Fixtures Playwright
-    ├── factories/           # Factories de données
-    └── helpers/             # Utilitaires
-
 src/
-├── lib/validations/*.test.ts    # Tests de validation
-├── server/api/routers/*.test.ts # Tests API tRPC
-└── server/services/*.test.ts    # Tests services
+├── lib/validations/*.test.ts        # schémas Zod (auth, publish)
+├── server/services/**/*.test.ts     # services (facture, anonymisation, emails…)
+├── app/api/**/*.test.ts             # handlers de route (webhook Viva, upload)
+└── server/api/routers/**/*.test.ts  # routeurs tRPC
+
+tests/
+├── e2e/
+│   ├── home.spec.ts           # page d'accueil
+│   ├── public-pages.spec.ts   # routes publiques du groupe (portal)
+│   ├── auth.spec.ts           # login / register / mot de passe oublié / gardes
+│   └── accessibility.spec.ts  # structure du document, labels, alternatives
+└── support/
+    ├── fixtures/auth.fixture.ts   # helpers loginUser / registerUser / logoutUser
+    ├── factories/                 # jeux de données déterministes
+    └── helpers/wait-for.ts        # polling / retry
 ```
+
+Vitest ne ramasse que `src/**/*.test.ts` (`vitest.config.ts`) : un test placé
+sous `tests/` avec l'extension `.test.ts` ne serait jamais exécuté. Playwright
+ne lit que `tests/e2e` (`playwright.config.ts`).
 
 ## Commandes
 
-### Tests Unitaires (Vitest)
-
 ```bash
-# Exécuter tous les tests unitaires
-pnpm test
-
-# Exécuter en mode watch
-pnpm test:watch
+pnpm test          # Vitest, une passe
+pnpm test:watch    # Vitest en mode watch
+pnpm test:e2e      # Playwright, tous les tests
+pnpm test:e2e:ui   # Playwright, interface interactive
+pnpm test:e2e:p0   # uniquement les cas critiques (--grep '@P0')
+pnpm test:e2e:p1   # critiques + hauts (--grep '@P0|@P1')
+pnpm test:all      # Vitest puis Playwright
 ```
 
-### Tests E2E (Playwright)
+Premier lancement Playwright sur un poste neuf :
 
 ```bash
-# Exécuter tous les tests E2E
-pnpm test:e2e
-
-# Exécuter avec interface UI
-pnpm test:e2e:ui
-
-# Exécuter en mode visible (headed)
-pnpm test:e2e:headed
-
-# Exécuter uniquement les tests P0 (critiques)
-pnpm test:e2e:p0
-
-# Exécuter les tests P0 et P1
-pnpm test:e2e:p1
+pnpm exec playwright install --with-deps chromium
 ```
 
-### Tous les Tests
+Par défaut Playwright démarre `pnpm dev` et attaque `http://localhost:3000`.
+Pour viser une instance déjà lancée (conteneur, préprod), poser `E2E_BASE_URL` :
+aucun serveur n'est alors démarré.
 
 ```bash
-pnpm test:all
+E2E_BASE_URL=http://127.0.0.1:3017 pnpm test:e2e
 ```
 
-## Priorités des Tests
+## Priorités
 
-Les tests sont tagués par priorité :
+Le tag fait partie du **titre** du test, au format `@P0` — c'est ce que
+`--grep` filtre. L'ancienne convention `[P0]` ne correspondait à rien : les
+scripts `test:e2e:p0`/`p1` ne sélectionnaient aucun test et sortaient en
+succès.
 
-- **[P0]** - Critiques : Doivent toujours passer (login, inscription, pages principales)
-- **[P1]** - Haute : Fonctionnalités importantes (navigation, formulaires)
-- **[P2]** - Moyenne : Fonctionnalités secondaires (pages moins utilisées)
-- **[P3]** - Basse : Nice-to-have (edge cases rares)
+- `@P0` — le lancement est bloqué si ça casse : accueil, liste des concours,
+  formulaire de connexion, redirection des espaces authentifiés.
+- `@P1` — fonctionnel important : validation des formulaires, pages légales,
+  accessibilité des champs.
+- `@P2` — secondaire : pages de contenu, pied de page, routes supprimées du
+  fork qui doivent rester en 404.
 
-## Factories
+## Conventions
 
-Les factories génèrent des données de test déterministes :
+**Sélecteurs.** Il n'y a *aucun* `data-testid` dans `src/` et ce n'est pas un
+oubli : on cible par rôle ARIA (`getByRole`), par label, ou par l'`id` que le
+formulaire rend réellement (`input[id="email"]`). Un test qui passe parce
+qu'il vise un attribut ajouté pour lui ne dit rien de ce que l'utilisateur
+perçoit.
+
+**Assertions qui peuvent échouer.** `expect(await page.title()).toBeTruthy()`
+ou `expect(page.locator("body")).toBeVisible()` passent sur un 404 comme sur
+la bonne page. On vérifie le statut HTTP (`response?.status()`), l'URL finale
+et un repère structurel (`main`, `h1`).
+
+**Pas d'écriture depuis les E2E.** Les specs supposent une base peuplée et ne
+créent, ne modifient ni ne suppriment aucune donnée. Il n'existe
+volontairement pas de fixture « page authentifiée » : il faudrait un accès
+base et un email vérifié. `auth.fixture.ts` fournit les helpers de parcours,
+pas de la donnée persistée.
+
+**Pas d'attente fixe.** `expect(...).toBeVisible()` plutôt que
+`waitForTimeout`. `tests/support/helpers/wait-for.ts` couvre les cas de
+polling hors navigateur.
+
+**Factories typées depuis le schéma.** `cup.factory.ts` importe `CupType`,
+`RatingScale` et `Currency` de `~/server/db/schema/cups` : une évolution du
+schéma casse le typecheck des tests au lieu de les laisser mentir.
+
+## Tests de routeur tRPC
+
+Un routeur se teste par `createCaller`, pas en recopiant sa règle métier dans
+l'assertion. Le motif utilisé dans `src/server/api/routers/**/*.test.ts` :
 
 ```typescript
-import { createTestUser } from "../support/factories/user.factory";
-import { createTestCup } from "../support/factories/cup.factory";
+vi.mock("~/lib/auth", () => ({ auth: { api: { getSession: vi.fn() } } }));
+vi.mock("~/server/db", () => ({ db: /* … query builders mockés … */ }));
 
-const user = createTestUser();
-const cup = createTestCup({ type: "pro" });
+const { categoryRouter } = await import("../category");
+const caller = categoryRouter.createCaller({ headers: new Headers(), db } as never);
+
+await expect(caller.create({ /* … */ })).rejects.toThrow(TRPCError);
 ```
 
-## Bonnes Pratiques
+`vi.mock` est remonté au-dessus des imports par Vitest : les valeurs de retour
+doivent passer par `vi.hoisted` ou être posées dans un `beforeEach`, jamais
+capturées dans une variable de module.
 
-1. **Structure Given-When-Then**
-   ```typescript
-   test("[P0] should login successfully", async ({ page }) => {
-     // GIVEN: User is on login page
-     await page.goto("/login");
+**Chaque routeur commence par son garde de rôle.** Avant toute assertion
+métier, on vérifie que l'anonyme reçoit `UNAUTHORIZED` et qu'un producteur ou
+un juré reçoit `FORBIDDEN` sur *chacune* des procédures réservées — puis que
+rien n'a été écrit (`inserted`/`updates`/`deleted` vides). Un garde posé sur
+huit procédures sur neuf ne se voit pas autrement.
 
-     // WHEN: User enters valid credentials
-     await page.fill('[data-testid="email"]', "user@example.com");
+**Procédures limitées en débit.** Les seaux de `makeRateLimitMiddleware` sont
+des `Map` de module, partagées par tous les tests du processus. Un test qui
+exerce la limite doit donc :
 
-     // THEN: User is redirected to dashboard
-     await expect(page).toHaveURL("/dashboard");
-   });
-   ```
+1. poser un en-tête `cf-connecting-ip` dans le contexte du caller — sans IP,
+   le middleware laisse passer (voir le commentaire de `clientKey`) ;
+2. utiliser une IP qui n'appartient qu'à lui, sinon les appels d'un autre test
+   consomment son quota et le résultat dépend de l'ordre d'exécution.
 
-2. **Sélecteurs stables** - Préférer `data-testid` aux sélecteurs CSS
+Le motif est en place dans `newsletter.test.ts` et `contact-messages.test.ts`
+(`nextIp()` pour les tests ordinaires, une IP littérale pour celui qui pousse
+jusqu'au `TOO_MANY_REQUESTS`).
 
-3. **Pas de hard waits** - Utiliser `expect().toBeVisible()` au lieu de `waitForTimeout()`
+Ce qu'il ne faut pas réintroduire : les blocs « Business Logic » et
+« Multi-tenancy Validation » de l'ancienne suite CupMetrics comparaient deux
+littéraux définis dans le test lui-même (`expect("org-1").toBe("org-1")`) et
+n'importaient jamais le routeur. Le modèle multi-tenant n'existe plus dans ce
+fork : aucun test ne doit parler d'`organizationId`.
 
-4. **Tests atomiques** - Une assertion principale par test
+## Intégration continue
 
-5. **Auto-cleanup** - Les fixtures nettoient automatiquement les données
+Le workflow de déploiement enchaîne `pnpm typecheck` puis `pnpm test`
+(Vitest). **Playwright n'y est pas lancé** : un job E2E demande un service
+Postgres, une base peuplée et `playwright install`. Tant que ce job n'existe
+pas, les specs E2E sont un outil de vérification manuelle avant lancement — à
+passer soi-même sur la préprod via `E2E_BASE_URL`.

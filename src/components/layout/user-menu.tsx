@@ -43,11 +43,16 @@ export function UserMenu({
   const utils = api.useUtils();
 
   // Story 1.11.1: Get user roles for dashboard navigation
-  // Force fresh data to avoid stale cache after user switch
+  //
+  // `staleTime: 0` + `refetchOnMount: "always"` relançaient les 6 à 10 requêtes
+  // SQL de getMyRoles à chaque montage du menu — donc à chaque navigation dans
+  // le dashboard — uniquement pour décider quels liens afficher. Le cache est
+  // déjà vidé explicitement à la déconnexion (utils.user.invalidate() dans
+  // handleLogout), ce qui couvre le cas du changement d'utilisateur. On aligne
+  // donc sur les 30 s utilisées par nothing-layout et nothing-producer-layout.
   const { data: rolesData } = api.user.getMyRoles.useQuery(undefined, {
     enabled: !!session?.user,
-    staleTime: 0,
-    refetchOnMount: "always",
+    staleTime: 30_000,
   });
 
   const user = session?.user;

@@ -12,9 +12,38 @@ import * as schema from "~/server/db/schema";
 type DbClient = typeof defaultDb;
 
 /**
+ * Espace de noms des verrous consultatifs d'attribution de code anonyme.
+ * Le second argument du verrou est le hachage de la catégorie : deux
+ * catégories différentes ne se bloquent pas l'une l'autre.
+ */
+const ANONYMIZATION_LOCK_NAMESPACE = 4120252;
+
+/**
+ * Sérialise l'attribution des codes d'une catégorie pour la durée de la
+ * transaction en cours.
+ *
+ * Sans lui, la séquence « lire les codes pris, tirer un nombre, écrire » est
+ * une lecture-puis-écriture non atomique : deux confirmations de paiement
+ * simultanées dans la même catégorie peuvent tirer le même nombre, et la
+ * contrainte d'unicité (category_id, anonymous_code) fait alors échouer la
+ * confirmation entière.
+ *
+ * Hors transaction, `pg_advisory_xact_lock` est relâché immédiatement : la
+ * protection ne vaut que pour les appelants transactionnels, ce qui est le
+ * cas de la confirmation de paiement.
+ */
+async function lockCategoryNumbering(db: DbClient, categoryId: string): Promise<void> {
+  // Espace de noms en dur dans le SQL : un paramètre non typé laisserait
+  // Postgres hésiter entre les surcharges (bigint) et (int, int).
+  await db.execute(
+    sql`SELECT pg_advisory_xact_lock(${sql.raw(String(ANONYMIZATION_LOCK_NAMESPACE))}, hashtext(${categoryId}))`
+  );
+}
+
+/**
  * Generate unique anonymous code for a product within a category
  * Format: [INITIALS][NUMBER] where INITIALS = first letter of each word in category name (uppercase)
- * and NUMBER is a random number between 1 and 100, unique within the category
+ * and NUMBER is a random number, unique within the category
  *
  * @param db - Database client
  * @param cupId - The cup ID (unused, kept for API compatibility)
@@ -26,6 +55,8 @@ export async function generateAnonymousCode(
   cupId: string,
   categoryId: string
 ): Promise<string> {
+  await lockCategoryNumbering(db, categoryId);
+
   // Get category name for prefix
   const category = await db.query.categories.findFirst({
     where: (cat, { eq: eqFn }) => eqFn(cat.id, categoryId),
@@ -59,22 +90,22 @@ export async function generateAnonymousCode(
 
   const usedCodes = new Set(existingCodes.map((r) => r.code));
 
-  // Try random numbers 1-100 until we find an unused one
-  const maxAttempts = 100;
-  for (let i = 0; i < maxAttempts; i++) {
-    const num = Math.floor(Math.random() * 100) + 1; // 1 to 100
-    const code = `${prefix}${num}`;
-    if (!usedCodes.has(code)) {
-      return code;
+  // Plage de tirage élargie dès que la catégorie se remplit. L'ancien repli
+  // au-delà de 100 produits incrémentait un compteur (101, 102, …), ce qui
+  // révélait l'ordre de confirmation des inscriptions ; le tirage reste
+  // uniforme quelle que soit la taille de la catégorie.
+  const range = Math.max(100, (usedCodes.size + 1) * 2);
+
+  const freeNumbers: number[] = [];
+  for (let num = 1; num <= range; num++) {
+    if (!usedCodes.has(`${prefix}${num}`)) {
+      freeNumbers.push(num);
     }
   }
 
-  // Fallback: all 1-100 taken, extend range
-  let fallback = 101;
-  while (usedCodes.has(`${prefix}${fallback}`)) {
-    fallback++;
-  }
-  return `${prefix}${fallback}`;
+  // `range` vaut au moins 2 × (codes pris + 1) : la liste n'est jamais vide.
+  const picked = freeNumbers[Math.floor(Math.random() * freeNumbers.length)]!;
+  return `${prefix}${picked}`;
 }
 
 /**

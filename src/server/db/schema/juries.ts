@@ -1,5 +1,6 @@
-import { pgTable, text, timestamp, unique, boolean } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { pgTable, text, timestamp, unique, boolean, integer, index, check } from "drizzle-orm/pg-core";
+import { relations, sql } from "drizzle-orm";
+import { generateId } from "./id";
 import { cups } from "./cups";
 import { users } from "./auth";
 import { categories } from "./categories";
@@ -22,7 +23,9 @@ export type JuryType = (typeof juryTypeEnum)[number];
 export const juryProfiles = pgTable(
   "jury_profiles",
   {
-    id: text("id").primaryKey(), // nanoid generated
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => generateId()),
     userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
@@ -47,12 +50,13 @@ export const juryProfiles = pgTable(
     notifyOnReminder: boolean("notify_on_reminder")
       .notNull()
       .default(true),
-    createdAt: timestamp("created_at").notNull().defaultNow(),
-    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     // A user can only have ONE jury profile
     unique("jury_profile_user_unique").on(table.userId),
+    check("jury_profiles_jury_type_check", sql`${table.juryType} in ('pro', 'public')`),
   ]
 );
 
@@ -93,7 +97,9 @@ export type JuryInvitationStatus = (typeof juryInvitationStatusEnum)[number];
 export const juryInvitations = pgTable(
   "jury_invitations",
   {
-    id: text("id").primaryKey(), // nanoid generated
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => generateId()),
     cupId: text("cup_id")
       .notNull()
       .references(() => cups.id, { onDelete: "cascade" }),
@@ -109,18 +115,22 @@ export const juryInvitations = pgTable(
     // If the user already exists in the system
     userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
     // Tracking
-    sentAt: timestamp("sent_at"),
-    lastReminderAt: timestamp("last_reminder_at"),
-    reminderCount: text("reminder_count").default("0"),
-    acceptedAt: timestamp("accepted_at"),
-    declinedAt: timestamp("declined_at"),
-    expiresAt: timestamp("expires_at").notNull(),
-    createdAt: timestamp("created_at").notNull().defaultNow(),
-    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    lastReminderAt: timestamp("last_reminder_at", { withTimezone: true }),
+    // Compteur entier : le stocker en texte imposait un aller-retour
+    // parseInt/toString à chaque relance et interdisait toute agrégation SQL.
+    reminderCount: integer("reminder_count").default(0),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+    declinedAt: timestamp("declined_at", { withTimezone: true }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     // A user can only be invited once per cup (by email)
     unique("jury_invitation_cup_email_unique").on(table.cupId, table.email),
+    index("jury_invitations_user_id_idx").on(table.userId),
+    check("jury_invitations_status_check", sql`${table.status} in ('pending', 'accepted', 'declined', 'expired')`),
   ]
 );
 
@@ -128,19 +138,21 @@ export const juryInvitations = pgTable(
  * Cup Juries table
  * Links accepted juries to cups
  * Created when a jury accepts an invitation or claims a public token
- * References the organization-scoped juryProfile
+ * References the juryProfile
  */
 export const cupJuries = pgTable(
   "cup_juries",
   {
-    id: text("id").primaryKey(), // nanoid generated
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => generateId()),
     cupId: text("cup_id")
       .notNull()
       .references(() => cups.id, { onDelete: "cascade" }),
     userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    // Link to the organization-scoped jury profile
+    // Profil de juré associé
     juryProfileId: text("jury_profile_id")
       .references(() => juryProfiles.id, { onDelete: "set null" }),
     invitationId: text("invitation_id").references(() => juryInvitations.id, {
@@ -152,21 +164,26 @@ export const cupJuries = pgTable(
     notifyOnAssignment: boolean("notify_on_assignment").notNull().default(true),
     notifyOnReminder: boolean("notify_on_reminder").notNull().default(true),
     // Reminder tracking
-    lastReminderAt: timestamp("last_reminder_at"),
-    reminderCount: text("reminder_count").default("0"),
+    lastReminderAt: timestamp("last_reminder_at", { withTimezone: true }),
+    // Voir juryInvitations.reminderCount.
+    reminderCount: integer("reminder_count").default(0),
     // Rating sheet tracking
-    ratingSheetSentAt: timestamp("rating_sheet_sent_at"),
+    ratingSheetSentAt: timestamp("rating_sheet_sent_at", { withTimezone: true }),
     // Samples reception confirmation
-    samplesReceivedAt: timestamp("samples_received_at"),
+    samplesReceivedAt: timestamp("samples_received_at", { withTimezone: true }),
     // Tracking
-    joinedAt: timestamp("joined_at").notNull().defaultNow(),
-    lastActivityAt: timestamp("last_activity_at"),
-    createdAt: timestamp("created_at").notNull().defaultNow(),
-    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+    joinedAt: timestamp("joined_at", { withTimezone: true }).notNull().defaultNow(),
+    lastActivityAt: timestamp("last_activity_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     // A user can only be a jury once per cup
     unique("cup_jury_cup_user_unique").on(table.cupId, table.userId),
+    // L'unique ci-dessus ne couvre que cup_id : « mes cups » et la cascade de
+    // suppression d'un utilisateur filtrent par user_id.
+    index("cup_juries_user_id_idx").on(table.userId),
+    index("cup_juries_jury_profile_id_idx").on(table.juryProfileId),
   ]
 );
 
@@ -177,22 +194,25 @@ export const cupJuries = pgTable(
 export const juryCategoryAssignments = pgTable(
   "jury_category_assignments",
   {
-    id: text("id").primaryKey(), // nanoid generated
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => generateId()),
     cupJuryId: text("cup_jury_id")
       .notNull()
       .references(() => cupJuries.id, { onDelete: "cascade" }),
     categoryId: text("category_id")
       .notNull()
       .references(() => categories.id, { onDelete: "cascade" }),
-    assignedAt: timestamp("assigned_at").notNull().defaultNow(),
+    assignedAt: timestamp("assigned_at", { withTimezone: true }).notNull().defaultNow(),
     assignedBy: text("assigned_by").references(() => users.id, {
       onDelete: "set null",
     }),
-    createdAt: timestamp("created_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     // A jury can only be assigned to a category once
     unique("jury_category_assignment_unique").on(table.cupJuryId, table.categoryId),
+    index("jury_category_assignments_category_id_idx").on(table.categoryId),
   ]
 );
 
@@ -262,7 +282,9 @@ export type PublicJuryTokenStatus = (typeof publicJuryTokenStatusEnum)[number];
 export const publicJuryTokens = pgTable(
   "public_jury_tokens",
   {
-    id: text("id").primaryKey(), // nanoid generated
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => generateId()),
     cupId: text("cup_id")
       .notNull()
       .references(() => cups.id, { onDelete: "cascade" }),
@@ -281,13 +303,23 @@ export const publicJuryTokens = pgTable(
     cupJuryId: text("cup_jury_id").references(() => cupJuries.id, {
       onDelete: "set null",
     }),
-    claimedAt: timestamp("claimed_at"),
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
     // Metadata
     batchId: text("batch_id"), // To group tokens generated together
-    expiresAt: timestamp("expires_at").notNull(),
-    createdAt: timestamp("created_at").notNull().defaultNow(),
-    updatedAt: timestamp("updated_at").notNull().defaultNow(),
-  }
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // Les écrans organisateur listent les tokens par cup, par catégorie et par
+    // statut ; les cascades passent par les deux FK nullables.
+    index("public_jury_tokens_cup_id_idx").on(table.cupId),
+    index("public_jury_tokens_category_id_idx").on(table.categoryId),
+    index("public_jury_tokens_status_idx").on(table.status),
+    index("public_jury_tokens_claimed_by_user_id_idx").on(table.claimedByUserId),
+    index("public_jury_tokens_cup_jury_id_idx").on(table.cupJuryId),
+    check("public_jury_tokens_status_check", sql`${table.status} in ('available', 'claimed', 'expired')`),
+  ]
 );
 
 export const publicJuryTokensRelations = relations(publicJuryTokens, ({ one }) => ({

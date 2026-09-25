@@ -8,7 +8,6 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Eye, EyeOff, Check, X, Loader2, ArrowRight, Building2, User, Mail, Lock } from "lucide-react";
 import { toast } from "sonner";
-import { motion } from "framer-motion";
 
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -29,7 +28,13 @@ import { useOrganization, usePortalTheme } from "~/lib/portal/context";
  */
 export default function PortalRegisterPage() {
   return (
-    <Suspense fallback={null}>
+    <Suspense
+      fallback={
+        <div className="min-h-screen w-full flex items-center justify-center p-4">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      }
+    >
       <RegisterInner />
     </Suspense>
   );
@@ -168,12 +173,11 @@ function RegisterInner() {
         style={{ backgroundColor: theme.primaryColor }}
       />
 
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, ease: "easeOut" }}
-        className="w-full max-w-lg relative z-10"
-      >
+      {/* Animation d'apparition en CSS (tw-animate-css) plutôt qu'en JS :
+      framer-motion pesait ~70 Ko compressés dans le premier chargement des
+      quatre pages d'authentification — celles que les jurés et producteurs
+      ouvrent en premier — pour une simple apparition. */}
+      <div className="w-full max-w-lg relative z-10 animate-in fade-in slide-in-from-bottom-5 duration-500 ease-out">
         {/* Premium Card */}
         <div className="bg-card/80 backdrop-blur-xl rounded-2xl border border-border/50 shadow-2xl shadow-black/5 overflow-hidden">
           {/* Accent line at top */}
@@ -222,7 +226,12 @@ function RegisterInner() {
             </div>
 
             {/* Form */}
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+            <form
+              onSubmit={handleSubmit(onSubmit)}
+              className="space-y-5"
+              noValidate
+              aria-busy={isSubmittingForm}
+            >
               {/* Email Field */}
               <div className="space-y-2">
                 <Label
@@ -474,7 +483,7 @@ function RegisterInner() {
           </div>
         </div>
 
-      </motion.div>
+      </div>
     </div>
   );
 }

@@ -1,5 +1,5 @@
-import { pgTable, text, timestamp, index, integer } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { pgTable, text, timestamp, index, integer, boolean, check } from "drizzle-orm/pg-core";
+import { relations, sql } from "drizzle-orm";
 import { users } from "./auth";
 
 /**
@@ -29,17 +29,19 @@ export const pressReleases = pgTable(
 
     // Publishing
     status: text("status").$type<PressReleaseStatus>().notNull().default("draft"),
-    publishedAt: timestamp("published_at"),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
 
     // Ordering
     displayOrder: integer("display_order").notNull().default(0),
 
     // Timestamps
-    createdAt: timestamp("created_at").notNull().defaultNow(),
-    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     index("idx_press_releases_status").on(table.status),
+    index("press_releases_author_id_idx").on(table.authorId),
+    check("press_releases_status_check", sql`${table.status} in ('draft', 'published')`),
   ]
 );
 
@@ -82,9 +84,12 @@ export const galleryImages = pgTable(
     displayOrder: integer("display_order").notNull().default(0),
 
     // Timestamps
-    createdAt: timestamp("created_at").notNull().defaultNow(),
-    updatedAt: timestamp("updated_at").notNull().defaultNow(),
-  }
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("gallery_images_uploaded_by_idx").on(table.uploadedBy),
+  ]
 );
 
 /**
@@ -117,14 +122,16 @@ export const pressSettings = pgTable(
     pressPhone: text("press_phone"), // Optional phone number
 
     // Page Settings
-    showPressReleases: text("show_press_releases").notNull().default("true"),
-    showGallery: text("show_gallery").notNull().default("true"),
-    showMediaKit: text("show_media_kit").notNull().default("true"),
-    showContact: text("show_contact").notNull().default("true"),
+    // En `text`, la chaîne "false" est truthy : la page publique affichait les
+    // sections que l'organisateur avait désactivées.
+    showPressReleases: boolean("show_press_releases").notNull().default(true),
+    showGallery: boolean("show_gallery").notNull().default(true),
+    showMediaKit: boolean("show_media_kit").notNull().default(true),
+    showContact: boolean("show_contact").notNull().default(true),
 
     // Timestamps
-    createdAt: timestamp("created_at").notNull().defaultNow(),
-    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   }
 );
 

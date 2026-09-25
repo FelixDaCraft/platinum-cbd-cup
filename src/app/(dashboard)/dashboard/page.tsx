@@ -16,26 +16,35 @@ import {
  * Shows key metrics, cups overview, and quick access to main features
  */
 export default function DashboardOverviewPage() {
-  const { data: sponsors } = api.sponsors.list.useQuery();
-  const { data: newsletterStats } = api.newsletter.getStats.useQuery();
-  const { data: unreadMessages } = api.contactMessages.getUnreadCount.useQuery();
+  const sponsorsQuery = api.sponsors.list.useQuery();
+  const newsletterQuery = api.newsletter.getStats.useQuery();
+  const messagesQuery = api.contactMessages.getUnreadCount.useQuery();
 
+  const { data: sponsors } = sponsorsQuery;
+  const { data: newsletterStats } = newsletterQuery;
+  const { data: unreadMessages } = messagesQuery;
+
+  const hasStatsError =
+    sponsorsQuery.isError || newsletterQuery.isError || messagesQuery.isError;
+
+  // Une requête en échec ne doit pas afficher « 0 » : un compteur à zéro est
+  // plausible et masquerait l'incident. On affiche « — » à la place.
   const miniStats = [
     {
       label: "SPONSORS",
-      value: sponsors?.length ?? 0,
+      value: sponsorsQuery.isError ? "—" : (sponsors?.length ?? 0),
       href: "/dashboard/settings/sponsors",
     },
     {
       label: "ABONNÉS",
-      value: newsletterStats?.active ?? 0,
+      value: newsletterQuery.isError ? "—" : (newsletterStats?.active ?? 0),
       href: "/dashboard/settings/newsletter",
     },
     {
       label: "MESSAGES",
-      value: unreadMessages?.count ?? 0,
+      value: messagesQuery.isError ? "—" : (unreadMessages?.count ?? 0),
       href: "/dashboard/settings/portal/messages",
-      highlight: (unreadMessages?.count ?? 0) > 0,
+      highlight: !messagesQuery.isError && (unreadMessages?.count ?? 0) > 0,
     },
   ];
 
@@ -46,9 +55,9 @@ export default function DashboardOverviewPage() {
       description: "Lancer une nouvelle compétition",
     },
     {
-      label: "Personnaliser le portail",
-      href: "/dashboard/settings/portal/appearance",
-      description: "Modifier l'apparence",
+      label: "Publier un communiqué",
+      href: "/dashboard/settings/portal/press",
+      description: "Espace presse du portail",
     },
     {
       label: "Gérer le contenu",
@@ -162,6 +171,21 @@ export default function DashboardOverviewPage() {
             ))}
           </div>
         </div>
+
+        {hasStatsError && (
+          <div
+            role="alert"
+            className="n-label"
+            style={{
+              padding: "10px 14px",
+              border: "1px solid var(--n-accent)",
+              borderRadius: "8px",
+              color: "var(--n-accent)",
+            }}
+          >
+            CERTAINS INDICATEURS N&apos;ONT PAS PU ÊTRE CHARGÉS — RAFRAÎCHISSEZ LA PAGE
+          </div>
+        )}
 
         {/* Quick Actions */}
         <div>

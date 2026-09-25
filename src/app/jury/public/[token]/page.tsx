@@ -75,6 +75,7 @@ const btnPrimaryStyle: React.CSSProperties = {
   cursor: "pointer",
   textAlign: "center",
   letterSpacing: "0.02em",
+  textDecoration: "none",
 };
 
 const btnSecondaryStyle: React.CSSProperties = {
@@ -90,6 +91,7 @@ const btnSecondaryStyle: React.CSSProperties = {
   fontWeight: 500,
   cursor: "pointer",
   textAlign: "center",
+  textDecoration: "none",
 };
 
 export default function PublicJuryTokenPage() {
@@ -157,11 +159,7 @@ export default function PublicJuryTokenPage() {
               {error.message}
             </p>
           </div>
-          <Link href="/">
-            <button style={btnSecondaryStyle}>
-              Retour à l&apos;accueil
-            </button>
-          </Link>
+          <Link href="/" style={btnSecondaryStyle}>Retour à l&apos;accueil</Link>
         </div>
       </div>
     );
@@ -200,17 +198,11 @@ export default function PublicJuryTokenPage() {
           </div>
 
           {session?.user ? (
-            <Link href={`/jury/cups/${data.cup?.id}`}>
-              <button style={btnPrimaryStyle}>
-                Accéder à ma notation
-              </button>
+            <Link href={`/jury/cups/${data.cup?.id}`} style={btnPrimaryStyle}>
+              Accéder à ma notation
             </Link>
           ) : (
-            <Link href="/login">
-              <button style={btnPrimaryStyle}>
-                Se connecter
-              </button>
-            </Link>
+            <Link href="/login" style={btnPrimaryStyle}>Se connecter</Link>
           )}
         </div>
       </div>
@@ -306,15 +298,11 @@ export default function PublicJuryTokenPage() {
               Connectez-vous ou créez un compte pour continuer.
             </p>
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-              <Link href={`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`}>
-                <button style={btnSecondaryStyle}>
-                  Se connecter
-                </button>
+              <Link href={`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`} style={btnSecondaryStyle}>
+                Se connecter
               </Link>
-              <Link href={`/register?callbackUrl=${encodeURIComponent(callbackUrl)}`}>
-                <button style={btnPrimaryStyle}>
-                  Créer un compte
-                </button>
+              <Link href={`/register?callbackUrl=${encodeURIComponent(callbackUrl)}`} style={btnPrimaryStyle}>
+                Créer un compte
               </Link>
             </div>
           </div>

@@ -23,20 +23,17 @@ import {
 } from "~/components/ui/card";
 import { cn } from "~/lib/utils";
 import { signUp } from "~/lib/auth-client";
-import { PASSWORD_CRITERIA } from "~/lib/validations/auth";
+import { PASSWORD_CRITERIA, passwordSchema } from "~/lib/validations/auth";
 import { useOrganization, usePortalTheme } from "~/lib/portal/context";
 import { api } from "~/trpc/react";
 
-// Jury registration schema (simpler than producer)
+// Le mot de passe reprend `passwordSchema`, la règle appliquée côté serveur
+// par Better Auth : les valider différemment ferait échouer l'inscription
+// après la saisie, avec un message technique en anglais.
 const juryRegisterSchema = z
   .object({
     email: z.string().email("Email invalide"),
-    password: z
-      .string()
-      .min(8, "Le mot de passe doit contenir au moins 8 caractères")
-      .regex(/[A-Z]/, "Le mot de passe doit contenir au moins une majuscule")
-      .regex(/[a-z]/, "Le mot de passe doit contenir au moins une minuscule")
-      .regex(/[0-9]/, "Le mot de passe doit contenir au moins un chiffre"),
+    password: passwordSchema,
     confirmPassword: z.string(),
     name: z.string().min(2, "Le nom doit contenir au moins 2 caractères"),
   })
@@ -262,7 +259,16 @@ function JuryRegisterContent() {
         </CardHeader>
 
         <CardContent>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          {/* `noValidate` : sans lui, les bulles de validation natives du
+              navigateur (en anglais, hors charte) se superposent aux messages
+              zod en français. `aria-busy` annonce l'envoi aux lecteurs
+              d'écran, comme sur /login et /register. */}
+          <form
+            onSubmit={handleSubmit(onSubmit)}
+            className="space-y-4"
+            noValidate
+            aria-busy={isSubmitting}
+          >
             {/* Email Field */}
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
@@ -397,8 +403,10 @@ function JuryRegisterContent() {
         <CardFooter className="flex justify-center">
           <p className="text-sm text-muted-foreground">
             Déjà un compte ?{" "}
+            {/* La page /login lit `callbackUrl`, pas `redirect` : le lien
+                renvoyait l'utilisateur au tableau de bord au lieu du code. */}
             <Link
-              href={`/login?redirect=/jury&code=${invitationCode}`}
+              href={`/login?callbackUrl=${encodeURIComponent(`/activate?code=${invitationCode}`)}`}
               className="text-primary hover:underline"
             >
               Se connecter

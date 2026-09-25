@@ -82,8 +82,8 @@ export const portalAboutSettings = pgTable(
     statsCustomValue2: text("stats_custom_value_2"),
 
     // Timestamps
-    createdAt: timestamp("created_at").notNull().defaultNow(),
-    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   }
 );
 

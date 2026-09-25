@@ -18,6 +18,24 @@ import {
 const optionalUrlSchema = z.union([z.string().url(), z.literal("")]).optional();
 const nullableUrlSchema = z.union([z.string().url(), z.literal("")]).nullable().optional();
 
+/**
+ * Images du sponsor (logo, galerie) : uniquement des fichiers televerses via
+ * /api/upload. L'optimiseur d'images ne sert plus que nos propres domaines
+ * (next.config.js), une image hebergee ailleurs renverrait une 400 a
+ * l'affichage. Le chemin est aussi verifie contre la traversee, parce qu'il
+ * est resolu sur le disque a la generation des PDF.
+ */
+const UPLOAD_PATH_PATTERN = /^\/uploads\/[A-Za-z0-9._\/-]+$/;
+const uploadImageSchema = z
+  .string()
+  .refine(
+    (val) =>
+      val === "" || (UPLOAD_PATH_PATTERN.test(val) && !val.includes("..")),
+    { message: "L'image doit etre televersee sur le site (chemin /uploads/...)" }
+  );
+const optionalUploadImageSchema = uploadImageSchema.optional();
+const nullableUploadImageSchema = uploadImageSchema.nullable().optional();
+
 const socialLinksSchema = z.object({
   facebook: optionalUrlSchema,
   twitter: optionalUrlSchema,
@@ -65,11 +83,11 @@ export const sponsorsRouter = createTRPCRouter({
     .input(
       z.object({
         name: z.string().min(1, "Le nom est requis"),
-        logo: optionalUrlSchema,
+        logo: optionalUploadImageSchema,
         description: z.string().optional(),
         website: optionalUrlSchema,
         socialLinks: socialLinksSchema,
-        gallery: z.array(z.string().url()).optional(),
+        gallery: z.array(uploadImageSchema).optional(),
         testimonials: z.array(testimonialSchema).optional(),
       })
     )
@@ -99,11 +117,11 @@ export const sponsorsRouter = createTRPCRouter({
       z.object({
         id: z.string(),
         name: z.string().min(1, "Le nom est requis").optional(),
-        logo: nullableUrlSchema,
+        logo: nullableUploadImageSchema,
         description: z.string().optional().nullable(),
         website: nullableUrlSchema,
         socialLinks: socialLinksSchema,
-        gallery: z.array(z.string().url()).optional(),
+        gallery: z.array(uploadImageSchema).optional(),
         testimonials: z.array(testimonialSchema).optional(),
       })
     )
@@ -256,7 +274,7 @@ export const sponsorsRouter = createTRPCRouter({
       });
 
       const maxOrder = existingSponsors.length > 0
-        ? Math.max(...existingSponsors.map((s) => parseInt(s.displayOrder, 10) || 0))
+        ? Math.max(...existingSponsors.map((s) => s.displayOrder))
         : -1;
 
       const [newAssociation] = await ctx.db
@@ -266,7 +284,7 @@ export const sponsorsRouter = createTRPCRouter({
           cupId: input.cupId,
           sponsorId: input.sponsorId,
           tier: input.tier as SponsorTier,
-          displayOrder: String(maxOrder + 1),
+          displayOrder: maxOrder + 1,
         })
         .returning();
 
@@ -281,7 +299,7 @@ export const sponsorsRouter = createTRPCRouter({
       z.object({
         id: z.string(),
         tier: z.enum(["bronze", "silver", "gold", "platinum"]).optional(),
-        displayOrder: z.string().optional(),
+        displayOrder: z.number().int().min(0).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -356,7 +374,7 @@ export const sponsorsRouter = createTRPCRouter({
       for (let i = 0; i < input.sponsorIds.length; i++) {
         await ctx.db
           .update(cupSponsors)
-          .set({ displayOrder: String(i) })
+          .set({ displayOrder: i })
           .where(
             and(
               eq(cupSponsors.id, input.sponsorIds[i]!),

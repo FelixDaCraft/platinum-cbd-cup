@@ -5,6 +5,7 @@ import { eq, asc, count } from "drizzle-orm";
 
 import { createTRPCRouter, organizerProcedure } from "~/server/api/trpc";
 import { Errors } from "~/lib/errors";
+import { getCupOrThrow } from "~/server/api/helpers/cup";
 import * as schema from "~/server/db/schema";
 import type { CupStatus } from "~/server/db/schema";
 import {
@@ -28,13 +29,7 @@ function assertLabelsEditable(cupStatus: CupStatus): void {
 
 type Ctx = { db: typeof import("~/server/db").db };
 
-const requireCup = async (ctx: Ctx, cupId: string) => {
-  const cup = await ctx.db.query.cups.findFirst({
-    where: (cups, { eq: eqFn }) => eqFn(cups.id, cupId),
-  });
-  if (!cup) Errors.cupNotFound();
-  return cup!;
-};
+const requireCup = (ctx: Ctx, cupId: string) => getCupOrThrow(ctx.db, cupId);
 
 const requireLabelWithCup = async (ctx: Ctx, labelId: string) => {
   const label = await ctx.db.query.cupLabels.findFirst({

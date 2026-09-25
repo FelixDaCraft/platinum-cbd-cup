@@ -1,5 +1,12 @@
-// Re-export createTable from separate file to avoid circular dependencies
-export { createTable } from "./table-creator";
+/**
+ * Schéma Drizzle — point d'entrée unique (lu par drizzle.config.ts).
+ *
+ * Le déploiement applique les migrations versionnées du dossier `drizzle/`
+ * (`drizzle-kit migrate`). Toute modification ici doit donc s'accompagner d'un
+ * fichier de migration généré par `pnpm db:generate` PUIS relu à la main :
+ * drizzle-kit n'écrit pas les clauses `USING` des changements de type, et voit
+ * un renommage comme un DROP + CREATE.
+ */
 
 // Auth schema (Better Auth)
 export * from "./auth";

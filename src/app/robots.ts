@@ -32,6 +32,15 @@ export default function robots(): MetadataRoute.Robots {
           "/producer/",
           "/jury",
           "/jury/",
+          // Pages de compte : sans valeur pour un moteur, et les indexer
+          // dilue le référencement des pages éditoriales. Chacune porte en
+          // plus `robots: { index: false }` via son layout de segment.
+          "/login",
+          "/register",
+          "/activate",
+          "/forgot-password",
+          "/reset-password",
+          "/jury-invite",
         ],
       },
     ],

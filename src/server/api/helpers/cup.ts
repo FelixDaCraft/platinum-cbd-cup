@@ -15,6 +15,13 @@ type DB = typeof dbType;
 // ============================================
 
 export type Cup = typeof schema.cups.$inferSelect;
+/**
+ * Conservé comme point d'ancrage : la colonne `payment_config_encrypted`
+ * (vestige multi-tenant CupMetrics) a été supprimée du schéma, une cup chargée
+ * ne porte donc plus de secret. Le type reste distinct pour que réintroduire
+ * une colonne sensible n'exige qu'un `Omit` ici.
+ */
+export type CupWithoutSecrets = Cup;
 export type Category = typeof schema.categories.$inferSelect;
 export type Product = typeof schema.products.$inferSelect;
 export type Registration = typeof schema.registrations.$inferSelect;
@@ -25,9 +32,17 @@ export type Registration = typeof schema.registrations.$inferSelect;
 
 /**
  * Get cup by ID
+ *
+ * Point d'entrée unique pour « charger une cup ou échouer » : chaque routeur
+ * en avait sa propre copie, avec quatre messages d'erreur différents pour le
+ * même cas.
+ *
  * @throws NOT_FOUND if cup doesn't exist
  */
-export async function getCupOrThrow(db: DB, cupId: string): Promise<Cup> {
+export async function getCupOrThrow(
+  db: DB,
+  cupId: string
+): Promise<CupWithoutSecrets> {
   const cup = await db.query.cups.findFirst({
     where: (cups, { eq }) => eq(cups.id, cupId),
   });

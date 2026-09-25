@@ -4,10 +4,14 @@
  */
 
 import { z } from "zod";
-import { eq, and, sql, desc, asc, isNotNull } from "drizzle-orm";
+import { eq, and, sql, desc, asc, isNotNull, inArray } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
-import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
-import { db } from "~/server/db";
+import {
+  createTRPCRouter,
+  protectedProcedure,
+  organizerProcedure,
+  type AuthedContext,
+} from "~/server/api/trpc";
 import { products } from "~/server/db/schema/products";
 import { categories } from "~/server/db/schema/categories";
 import { cups } from "~/server/db/schema/cups";
@@ -16,186 +20,197 @@ import { productRatings, criterionScores } from "~/server/db/schema/ratings";
 import { ratingCriteria } from "~/server/db/schema/rating-criteria";
 import { registrations } from "~/server/db/schema/registrations";
 import { producers } from "~/server/db/schema/producers";
-import {
-  generateProductSynthesisPdf,
-  generateProducerSynthesisPdf,
-  getProductResultsForPdf,
-} from "~/server/services/results-pdf.service";
+import { generateProducerSynthesisPdf } from "~/server/services/results-pdf.service";
 import {
   sendResultsEmail,
   sendBulkResultsEmails,
 } from "~/server/services/results-email.service";
 import { getMaxScoreForScale } from "~/lib/validations/labels";
-
-type ProtectedContext = {
-  db: typeof db;
-  userId: string;
-};
+import { getCupOrThrow } from "~/server/api/helpers/cup";
 
 /**
- * Helper to verify cup access (single-tenant).
- * Ensures the current user is an organizer/admin and the cup exists.
- * `allowedRoles` is ignored in single-tenant mode — any organizer counts.
+ * Charge la cup d'une procédure organisateur.
+ * Le contrôle de rôle est porté par `organizerProcedure` : ce helper ne fait
+ * plus que résoudre la cup, via l'unique implémentation de helpers/cup.ts.
+ * (Les anciens tableaux de rôles « owner/admin/member » étaient des vestiges
+ * multi-tenant, ignorés depuis le passage single-tenant.)
  */
-async function verifyCupAccess(
-  ctx: ProtectedContext,
-  cupId: string,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  _allowedRoles: string[] = ["owner", "admin"]
-) {
-  const user = await ctx.db.query.users.findFirst({
-    where: (u, { eq: eqFn }) => eqFn(u.id, ctx.userId),
-    columns: { isAdmin: true, role: true },
-  });
-
-  const isOrganizer = user?.isAdmin === true || user?.role === "organizer";
-  if (!isOrganizer) {
-    throw new TRPCError({
-      code: "FORBIDDEN",
-      message: "Accès non autorisé",
-    });
-  }
-
-  const cup = await ctx.db.query.cups.findFirst({
-    where: (c, { eq: eqFn }) => eqFn(c.id, cupId),
-  });
-
-  if (!cup) {
-    throw new TRPCError({
-      code: "NOT_FOUND",
-      message: "Cup non trouvée",
-    });
-  }
-
-  return { cup };
+async function requireOrganizerAndCup(ctx: AuthedContext, cupId: string) {
+  return { cup: await getCupOrThrow(ctx.db, cupId) };
 }
 
 /**
  * Core calculation logic - computes final scores, ranks, and labels for all products in a cup.
  * Extracted as a helper so it can be called from both calculateResults and publishResults.
  * Exported so cup.publishResults can also use it.
+ *
+ * Toutes les lectures sont agrégées en amont (une poignée de requêtes pour
+ * toute la cup, au lieu d'une par note) et toutes les écritures sont commitées
+ * en une transaction : pendant le calcul, le palmarès public et le widget ne
+ * doivent jamais voir un classement à moitié réécrit.
  */
 export async function computeResults(
   db: typeof import("~/server/db").db,
   cupId: string,
-  cup: { ratingScale: string }
+  // Conservé pour les appelants (cup.publishResults) : les scores restent
+  // exprimés dans l'échelle d'origine, le calcul n'a pas besoin de la lire.
+  _cup: { ratingScale: string }
 ) {
   const cupCategories = await db.query.categories.findMany({
     where: eq(categories.cupId, cupId),
   });
+
+  if (cupCategories.length === 0) {
+    return { productsProcessed: 0, labelsAttributed: 0 };
+  }
+
+  const categoryIds = cupCategories.map((c) => c.id);
 
   const labels = await db.query.cupLabels.findMany({
     where: eq(cupLabels.cupId, cupId),
     orderBy: [desc(cupLabels.minScore)],
   });
 
-  const maxScale = getMaxScoreForScale(cup.ratingScale);
+  // Produits éligibles au classement de la cup, avec la date d'inscription
+  // qui sert de dernier départage.
+  const eligibleProducts = await db
+    .select({
+      id: products.id,
+      categoryId: products.categoryId,
+      registrationId: products.registrationId,
+      registeredAt: registrations.createdAt,
+      disqualified: products.disqualified,
+    })
+    .from(products)
+    .innerJoin(registrations, eq(products.registrationId, registrations.id))
+    .where(
+      and(
+        inArray(products.categoryId, categoryIds),
+        eq(registrations.cupId, cupId),
+        eq(registrations.status, "confirmed"),
+        // Les produits exclus disparaissent de tout affichage ; les
+        // disqualifiés restent notés (le palmarès les montre avec un badge
+        // « DISQUALIFIÉ ») mais sont sortis du classement plus bas.
+        eq(products.excludedFromResults, false)
+      )
+    );
 
+  // Somme pondérée et somme des coefficients par note déposée : la moyenne
+  // d'un produit est la moyenne des moyennes de ses jurés.
+  const ratingAggregates = await db
+    .select({
+      productId: productRatings.productId,
+      ratingId: productRatings.id,
+      weightedSum: sql<string>`sum(${criterionScores.score} * ${ratingCriteria.coefficient})`,
+      coefficientSum: sql<string>`sum(${ratingCriteria.coefficient})`,
+    })
+    .from(criterionScores)
+    .innerJoin(productRatings, eq(criterionScores.productRatingId, productRatings.id))
+    .innerJoin(ratingCriteria, eq(criterionScores.criterionId, ratingCriteria.id))
+    .innerJoin(products, eq(productRatings.productId, products.id))
+    .innerJoin(registrations, eq(products.registrationId, registrations.id))
+    .where(
+      and(
+        eq(registrations.cupId, cupId),
+        isNotNull(productRatings.submittedAt)
+      )
+    )
+    .groupBy(productRatings.productId, productRatings.id);
+
+  // Nombre de notes déposées par produit — y compris celles sans score, qui
+  // n'entrent pas dans la moyenne mais comptent dans le départage.
+  const ratingCounts = await db
+    .select({
+      productId: productRatings.productId,
+      juryCount: sql<string>`count(*)`,
+    })
+    .from(productRatings)
+    .innerJoin(products, eq(productRatings.productId, products.id))
+    .innerJoin(registrations, eq(products.registrationId, registrations.id))
+    .where(
+      and(
+        eq(registrations.cupId, cupId),
+        isNotNull(productRatings.submittedAt)
+      )
+    )
+    .groupBy(productRatings.productId);
+
+  const juryCountByProduct = new Map(
+    ratingCounts.map((r) => [r.productId, Number(r.juryCount)])
+  );
+
+  const averagesByProduct = new Map<string, number[]>();
+  for (const row of ratingAggregates) {
+    const coefficientSum = Number(row.coefficientSum);
+    if (coefficientSum <= 0) continue;
+
+    const averages = averagesByProduct.get(row.productId) ?? [];
+    averages.push(Number(row.weightedSum) / coefficientSum);
+    averagesByProduct.set(row.productId, averages);
+  }
+
+  type ProductUpdate = {
+    id: string;
+    finalScore: string | null;
+    labelId: string | null;
+    categoryRank: number | null;
+  };
+
+  const updates: ProductUpdate[] = [];
   let productsProcessed = 0;
   let labelsAttributed = 0;
 
   for (const category of cupCategories) {
-    const categoryProducts = await db
-      .select({
-        id: products.id,
-        registrationId: products.registrationId,
-      })
-      .from(products)
-      .innerJoin(registrations, eq(products.registrationId, registrations.id))
-      .where(
-        and(
-          eq(products.categoryId, category.id),
-          eq(registrations.cupId, cupId),
-          eq(registrations.status, "confirmed"),
-          eq(products.excludedFromResults, false)
-        )
-      );
-
-    const criteria = await db.query.ratingCriteria.findMany({
-      where: eq(ratingCriteria.categoryId, category.id),
-    });
-
-    const totalCoefficient = criteria.reduce((sum: number, c) => sum + c.coefficient, 0);
+    const categoryProducts = eligibleProducts.filter(
+      (p) => p.categoryId === category.id
+    );
 
     const productScores: {
       id: string;
       finalScore: number;
       juryCount: number;
-      registrationId: string;
+      registeredAt: Date;
     }[] = [];
 
     for (const product of categoryProducts) {
-      const ratings = await db
-        .select({
-          ratingId: productRatings.id,
-        })
-        .from(productRatings)
-        .where(
-          and(
-            eq(productRatings.productId, product.id),
-            isNotNull(productRatings.submittedAt)
-          )
-        );
+      const averages = averagesByProduct.get(product.id);
 
-      if (ratings.length === 0) {
-        await db
-          .update(products)
-          .set({
-            finalScore: null,
-            labelId: null,
-            categoryRank: null,
-            updatedAt: new Date(),
-          })
-          .where(eq(products.id, product.id));
+      // Aucune note exploitable : on efface un éventuel résultat antérieur
+      // plutôt que de laisser un rang ou un label périmé.
+      if (!averages || averages.length === 0) {
+        updates.push({
+          id: product.id,
+          finalScore: null,
+          labelId: null,
+          categoryRank: null,
+        });
         continue;
       }
 
-      const ratingAverages: number[] = [];
+      const finalScore = averages.reduce((a, b) => a + b, 0) / averages.length;
+      productsProcessed++;
 
-      for (const rating of ratings) {
-        const scores = await db
-          .select({
-            score: criterionScores.score,
-            coefficient: ratingCriteria.coefficient,
-          })
-          .from(criterionScores)
-          .innerJoin(ratingCriteria, eq(criterionScores.criterionId, ratingCriteria.id))
-          .where(eq(criterionScores.productRatingId, rating.ratingId));
-
-        if (scores.length === 0) continue;
-
-        let weightedSum = 0;
-        let coeffSum = 0;
-        for (const s of scores) {
-          weightedSum += s.score * s.coefficient;
-          coeffSum += s.coefficient;
-        }
-
-        if (coeffSum > 0) {
-          const avg = weightedSum / coeffSum;
-          ratingAverages.push(avg);
-        }
+      // Un disqualifié garde sa note — le palmarès public l'affiche au bas de
+      // sa catégorie avec un badge « DISQUALIFIÉ », et la requête de la page
+      // écarte les produits sans finalScore. Mais il ne prend ni rang ni
+      // label : sans cela il consommait une place de podium et le vrai premier
+      // s'affichait « 2e ».
+      if (product.disqualified) {
+        updates.push({
+          id: product.id,
+          finalScore: finalScore.toFixed(2),
+          labelId: null,
+          categoryRank: null,
+        });
+        continue;
       }
 
-      if (ratingAverages.length === 0) continue;
-
-      const finalScore = ratingAverages.reduce((a, b) => a + b, 0) / ratingAverages.length;
       productScores.push({
         id: product.id,
         finalScore,
-        juryCount: ratings.length,
-        registrationId: product.registrationId,
+        juryCount: juryCountByProduct.get(product.id) ?? averages.length,
+        registeredAt: product.registeredAt,
       });
-      productsProcessed++;
-    }
-
-    const regDates = new Map<string, Date>();
-    for (const ps of productScores) {
-      const reg = await db.query.registrations.findFirst({
-        where: eq(registrations.id, ps.registrationId),
-        columns: { createdAt: true },
-      });
-      if (reg) regDates.set(ps.registrationId, reg.createdAt);
     }
 
     productScores.sort((a, b) => {
@@ -205,14 +220,11 @@ export async function computeResults(
       if (b.juryCount !== a.juryCount) {
         return b.juryCount - a.juryCount;
       }
-      const dateA = regDates.get(a.registrationId) ?? new Date();
-      const dateB = regDates.get(b.registrationId) ?? new Date();
-      return dateA.getTime() - dateB.getTime();
+      return a.registeredAt.getTime() - b.registeredAt.getTime();
     });
 
     for (let i = 0; i < productScores.length; i++) {
       const { id, finalScore } = productScores[i]!;
-      const rank = i + 1;
 
       let matchedLabelId: string | null = null;
       for (const label of labels) {
@@ -225,583 +237,70 @@ export async function computeResults(
         }
       }
 
-      await db
-        .update(products)
-        .set({
-          finalScore: finalScore.toFixed(2),
-          labelId: matchedLabelId,
-          categoryRank: rank,
-          updatedAt: new Date(),
-        })
-        .where(eq(products.id, id));
+      updates.push({
+        id,
+        finalScore: finalScore.toFixed(2),
+        labelId: matchedLabelId,
+        categoryRank: i + 1,
+      });
     }
   }
+
+  // Produits exclus des résultats : ils ne doivent conserver ni note, ni rang,
+  // ni label d'un calcul antérieur. Résolus par identifiant et via la jointure
+  // sur l'inscription, pour que le recalcul d'une cup ne puisse jamais toucher
+  // un produit d'une autre cup.
+  const excludedProducts = await db
+    .select({ id: products.id })
+    .from(products)
+    .innerJoin(registrations, eq(products.registrationId, registrations.id))
+    .where(
+      and(
+        eq(registrations.cupId, cupId),
+        eq(products.excludedFromResults, true)
+      )
+    );
+
+  await db.transaction(async (tx) => {
+    if (excludedProducts.length > 0) {
+      await tx
+        .update(products)
+        .set({
+          finalScore: null,
+          labelId: null,
+          categoryRank: null,
+          updatedAt: new Date(),
+        })
+        .where(
+          inArray(
+            products.id,
+            excludedProducts.map((p) => p.id)
+          )
+        );
+    }
+
+    for (const update of updates) {
+      await tx
+        .update(products)
+        .set({
+          finalScore: update.finalScore,
+          labelId: update.labelId,
+          categoryRank: update.categoryRank,
+          updatedAt: new Date(),
+        })
+        .where(eq(products.id, update.id));
+    }
+  });
 
   return { productsProcessed, labelsAttributed };
 }
 
 export const resultsRouter = createTRPCRouter({
   /**
-   * Calculate final scores for all products in a cup
-   * Only available when cup status is "completed" or "rating"
-   * Story 8.1: FR42 - Attribution labels auto selon notes
-   */
-  calculateResults: protectedProcedure
-    .input(z.object({ cupId: z.string() }))
-    .mutation(async ({ ctx, input }) => {
-      const { cupId } = input;
-
-      // Verify cup access and status
-      const { cup } = await verifyCupAccess(ctx, cupId, ["owner", "admin"]);
-
-      if (!["rating", "completed"].includes(cup.status)) {
-        throw new TRPCError({
-          code: "PRECONDITION_FAILED",
-          message: "La cup doit être en phase de notation ou terminée pour calculer les résultats",
-        });
-      }
-
-      const { productsProcessed, labelsAttributed } = await computeResults(ctx.db, cupId, cup);
-
-      return {
-        success: true,
-        productsProcessed,
-        labelsAttributed,
-        message: `Résultats calculés: ${productsProcessed} produits traités, ${labelsAttributed} labels attribués`,
-      };
-    }),
-
-  /**
-   * Get results for a cup organized by category
-   * Story 8.1, 8.2
-   */
-  getCupResults: protectedProcedure
-    .input(z.object({ cupId: z.string() }))
-    .query(async ({ ctx, input }) => {
-      const { cupId } = input;
-
-      // Verify cup access
-      await verifyCupAccess(ctx, cupId, ["owner", "admin", "member"]);
-
-      // Get all categories with their products and results
-      const cupCategories = await ctx.db.query.categories.findMany({
-        where: eq(categories.cupId, cupId),
-        orderBy: [asc(categories.sortOrder)],
-      });
-
-      const results = [];
-
-      for (const category of cupCategories) {
-        // Get products with results for this category
-        const categoryProducts = await ctx.db
-          .select({
-            id: products.id,
-            name: products.name,
-            anonymousCode: products.anonymousCode,
-            finalScore: products.finalScore,
-            categoryRank: products.categoryRank,
-            labelId: products.labelId,
-            labelName: cupLabels.name,
-            labelColor: cupLabels.color,
-            producerName: producers.companyName,
-            producerBrand: producers.brandName,
-          })
-          .from(products)
-          .innerJoin(registrations, eq(products.registrationId, registrations.id))
-          .innerJoin(producers, eq(registrations.producerId, producers.id))
-          .leftJoin(cupLabels, eq(products.labelId, cupLabels.id))
-          .where(
-            and(
-              eq(products.categoryId, category.id),
-              eq(registrations.cupId, cupId),
-              eq(registrations.status, "confirmed")
-            )
-          )
-          .orderBy(asc(products.categoryRank));
-
-        // Count labels
-        const labelCounts: Record<string, number> = {};
-        for (const p of categoryProducts) {
-          if (p.labelName) {
-            labelCounts[p.labelName] = (labelCounts[p.labelName] || 0) + 1;
-          }
-        }
-
-        results.push({
-          category: {
-            id: category.id,
-            name: category.name,
-          },
-          products: categoryProducts.map((p) => ({
-            id: p.id,
-            name: p.name,
-            anonymousCode: p.anonymousCode,
-            finalScore: p.finalScore ? parseFloat(p.finalScore) : null,
-            rank: p.categoryRank,
-            label: p.labelName
-              ? {
-                  name: p.labelName,
-                  color: p.labelColor,
-                }
-              : null,
-            producer: {
-              name: p.producerName,
-              brand: p.producerBrand,
-            },
-          })),
-          podium: categoryProducts.slice(0, 3).map((p, i) => ({
-            position: i + 1,
-            id: p.id,
-            name: p.name,
-            anonymousCode: p.anonymousCode,
-            finalScore: p.finalScore ? parseFloat(p.finalScore) : null,
-            producer: {
-              name: p.producerName,
-              brand: p.producerBrand,
-            },
-            label: p.labelName
-              ? {
-                  name: p.labelName,
-                  color: p.labelColor,
-                }
-              : null,
-          })),
-          labelCounts,
-          totalProducts: categoryProducts.length,
-          ratedProducts: categoryProducts.filter((p) => p.finalScore !== null).length,
-        });
-      }
-
-      // Get overall label counts
-      const overallLabelCounts: Record<string, number> = {};
-      for (const r of results) {
-        for (const [label, count] of Object.entries(r.labelCounts)) {
-          overallLabelCounts[label] = (overallLabelCounts[label] || 0) + count;
-        }
-      }
-
-      return {
-        categories: results,
-        summary: {
-          totalCategories: results.length,
-          totalProducts: results.reduce((sum, r) => sum + r.totalProducts, 0),
-          ratedProducts: results.reduce((sum, r) => sum + r.ratedProducts, 0),
-          labelCounts: overallLabelCounts,
-        },
-      };
-    }),
-
-  /**
-   * Get detailed results for a single product
-   */
-  getProductResults: protectedProcedure
-    .input(z.object({ productId: z.string() }))
-    .query(async ({ ctx, input }) => {
-      const { productId } = input;
-
-      // Get product with related data
-      const product = await ctx.db.query.products.findFirst({
-        where: eq(products.id, productId),
-        with: {
-          category: true,
-          label: true,
-          registration: {
-            with: {
-              cup: true,
-              producer: true,
-            },
-          },
-        },
-      });
-
-      if (!product) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Produit non trouvé",
-        });
-      }
-
-      // Verify cup access
-      await verifyCupAccess(ctx, product.registration.cupId, ["owner", "admin", "member"]);
-
-      // Get criteria scores aggregated across all juries
-      const criteria = await ctx.db.query.ratingCriteria.findMany({
-        where: eq(ratingCriteria.categoryId, product.categoryId),
-        orderBy: [asc(ratingCriteria.sortOrder)],
-      });
-
-      const criteriaScores = [];
-      const maxScale = getMaxScoreForScale(product.registration.cup.ratingScale);
-
-      for (const criterion of criteria) {
-        // Get all submitted scores for this criterion on this product
-        const scores = await ctx.db
-          .select({
-            score: criterionScores.score,
-          })
-          .from(criterionScores)
-          .innerJoin(productRatings, eq(criterionScores.productRatingId, productRatings.id))
-          .where(
-            and(
-              eq(criterionScores.criterionId, criterion.id),
-              eq(productRatings.productId, productId),
-              isNotNull(productRatings.submittedAt)
-            )
-          );
-
-        if (scores.length === 0) {
-          criteriaScores.push({
-            criterion: {
-              id: criterion.id,
-              name: criterion.name,
-              coefficient: criterion.coefficient,
-            },
-            averageScore: null,
-            normalizedScore: null,
-            juryCount: 0,
-          });
-          continue;
-        }
-
-        const avg = scores.reduce((sum, s) => sum + s.score, 0) / scores.length;
-        const normalized = (avg / maxScale) * 100;
-
-        criteriaScores.push({
-          criterion: {
-            id: criterion.id,
-            name: criterion.name,
-            coefficient: criterion.coefficient,
-          },
-          averageScore: Math.round(avg * 100) / 100,
-          normalizedScore: Math.round(normalized * 100) / 100,
-          juryCount: scores.length,
-        });
-      }
-
-      // Get category average for comparison
-      const categoryAvg = await ctx.db
-        .select({
-          avgScore: sql<string>`AVG(${products.finalScore}::numeric)`,
-        })
-        .from(products)
-        .innerJoin(registrations, eq(products.registrationId, registrations.id))
-        .where(
-          and(
-            eq(products.categoryId, product.categoryId),
-            eq(registrations.cupId, product.registration.cupId),
-            isNotNull(products.finalScore)
-          )
-        );
-
-      const categoryAverageScore = categoryAvg[0]?.avgScore
-        ? parseFloat(categoryAvg[0].avgScore)
-        : null;
-
-      // Count products in category
-      const categoryCount = await ctx.db
-        .select({ count: sql<number>`count(*)` })
-        .from(products)
-        .innerJoin(registrations, eq(products.registrationId, registrations.id))
-        .where(
-          and(
-            eq(products.categoryId, product.categoryId),
-            eq(registrations.cupId, product.registration.cupId),
-            eq(registrations.status, "confirmed")
-          )
-        );
-
-      const totalInCategory = categoryCount[0]?.count ?? 0;
-
-      // Calculate percentile
-      let percentile: number | null = null;
-      if (product.categoryRank && totalInCategory > 0) {
-        percentile = Math.round(((totalInCategory - product.categoryRank) / totalInCategory) * 100);
-      }
-
-      return {
-        product: {
-          id: product.id,
-          name: product.name,
-          anonymousCode: product.anonymousCode,
-          finalScore: product.finalScore ? parseFloat(product.finalScore) : null,
-          rank: product.categoryRank,
-          percentile,
-          label: product.label
-            ? {
-                id: product.label.id,
-                name: product.label.name,
-                color: product.label.color,
-              }
-            : null,
-        },
-        category: {
-          id: product.category.id,
-          name: product.category.name,
-          averageScore: categoryAverageScore,
-          totalProducts: totalInCategory,
-        },
-        producer: {
-          id: product.registration.producer.id,
-          name: product.registration.producer.companyName,
-          brand: product.registration.producer.brandName,
-        },
-        criteriaScores,
-        cup: {
-          id: product.registration.cup.id,
-          name: product.registration.cup.name,
-          ratingScale: product.registration.cup.ratingScale,
-        },
-      };
-    }),
-
-  /**
-   * Get label statistics for a cup
-   */
-  getLabelStats: protectedProcedure
-    .input(z.object({ cupId: z.string() }))
-    .query(async ({ ctx, input }) => {
-      const { cupId } = input;
-
-      // Verify cup access
-      await verifyCupAccess(ctx, cupId, ["owner", "admin", "member"]);
-
-      // Get all labels for this cup
-      const labels = await ctx.db.query.cupLabels.findMany({
-        where: eq(cupLabels.cupId, cupId),
-        orderBy: [desc(cupLabels.minScore)],
-      });
-
-      // Count products per label
-      const stats = [];
-      for (const label of labels) {
-        const count = await ctx.db
-          .select({ count: sql<number>`count(*)` })
-          .from(products)
-          .innerJoin(registrations, eq(products.registrationId, registrations.id))
-          .where(
-            and(
-              eq(registrations.cupId, cupId),
-              eq(products.labelId, label.id)
-            )
-          );
-
-        stats.push({
-          label: {
-            id: label.id,
-            name: label.name,
-            color: label.color,
-            minScore: label.minScore,
-            maxScore: label.maxScore,
-          },
-          count: count[0]?.count ?? 0,
-        });
-      }
-
-      // Count products without label
-      const noLabelCount = await ctx.db
-        .select({ count: sql<number>`count(*)` })
-        .from(products)
-        .innerJoin(registrations, eq(products.registrationId, registrations.id))
-        .where(
-          and(
-            eq(registrations.cupId, cupId),
-            eq(registrations.status, "confirmed"),
-            sql`${products.labelId} IS NULL`,
-            isNotNull(products.finalScore)
-          )
-        );
-
-      return {
-        labels: stats,
-        noLabel: noLabelCount[0]?.count ?? 0,
-        total: stats.reduce((sum, s) => sum + s.count, 0) + (noLabelCount[0]?.count ?? 0),
-      };
-    }),
-
-  /**
-   * Export podium as CSV
-   * Story 8.2: FR43 - Classement podium auto
-   */
-  exportPodiumCsv: protectedProcedure
-    .input(z.object({ cupId: z.string() }))
-    .query(async ({ ctx, input }) => {
-      const { cupId } = input;
-
-      // Verify cup access
-      await verifyCupAccess(ctx, cupId, ["owner", "admin"]);
-
-      // Get cup info
-      const cup = await ctx.db.query.cups.findFirst({
-        where: eq(cups.id, cupId),
-      });
-
-      // Get all categories
-      const cupCategories = await ctx.db.query.categories.findMany({
-        where: eq(categories.cupId, cupId),
-        orderBy: [asc(categories.sortOrder)],
-      });
-
-      // Build CSV rows
-      const rows: string[][] = [];
-      rows.push([
-        "Catégorie",
-        "Position",
-        "Produit",
-        "Code Anonyme",
-        "Score Final",
-        "Producteur",
-        "Marque",
-        "Label",
-      ]);
-
-      for (const category of cupCategories) {
-        // Get top 3 products for this category
-        const podiumProducts = await ctx.db
-          .select({
-            id: products.id,
-            name: products.name,
-            anonymousCode: products.anonymousCode,
-            finalScore: products.finalScore,
-            categoryRank: products.categoryRank,
-            labelName: cupLabels.name,
-            producerName: producers.companyName,
-            producerBrand: producers.brandName,
-          })
-          .from(products)
-          .innerJoin(registrations, eq(products.registrationId, registrations.id))
-          .innerJoin(producers, eq(registrations.producerId, producers.id))
-          .leftJoin(cupLabels, eq(products.labelId, cupLabels.id))
-          .where(
-            and(
-              eq(products.categoryId, category.id),
-              eq(registrations.cupId, cupId),
-              eq(registrations.status, "confirmed"),
-              isNotNull(products.categoryRank)
-            )
-          )
-          .orderBy(asc(products.categoryRank))
-          .limit(3);
-
-        for (const p of podiumProducts) {
-          rows.push([
-            category.name,
-            String(p.categoryRank ?? ""),
-            p.name,
-            p.anonymousCode ?? "",
-            p.finalScore ?? "",
-            p.producerName ?? "",
-            p.producerBrand ?? "",
-            p.labelName ?? "",
-          ]);
-        }
-      }
-
-      // Convert to CSV string
-      const csvContent = rows
-        .map((row) =>
-          row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")
-        )
-        .join("\n");
-
-      return {
-        filename: `podium-${cup?.name ?? cupId}-${new Date().toISOString().split("T")[0]}.csv`,
-        content: csvContent,
-        mimeType: "text/csv",
-      };
-    }),
-
-  /**
-   * Get podium summary for a cup
-   * Story 8.2
-   */
-  getPodium: protectedProcedure
-    .input(z.object({ cupId: z.string() }))
-    .query(async ({ ctx, input }) => {
-      const { cupId } = input;
-
-      // Verify cup access
-      await verifyCupAccess(ctx, cupId, ["owner", "admin", "member"]);
-
-      // Get all categories
-      const cupCategories = await ctx.db.query.categories.findMany({
-        where: eq(categories.cupId, cupId),
-        orderBy: [asc(categories.sortOrder)],
-      });
-
-      const podiumByCategory = [];
-
-      for (const category of cupCategories) {
-        // Get top 3 products for this category
-        const podiumProducts = await ctx.db
-          .select({
-            id: products.id,
-            name: products.name,
-            anonymousCode: products.anonymousCode,
-            finalScore: products.finalScore,
-            categoryRank: products.categoryRank,
-            labelId: products.labelId,
-            labelName: cupLabels.name,
-            labelColor: cupLabels.color,
-            producerName: producers.companyName,
-            producerBrand: producers.brandName,
-            producerId: producers.id,
-          })
-          .from(products)
-          .innerJoin(registrations, eq(products.registrationId, registrations.id))
-          .innerJoin(producers, eq(registrations.producerId, producers.id))
-          .leftJoin(cupLabels, eq(products.labelId, cupLabels.id))
-          .where(
-            and(
-              eq(products.categoryId, category.id),
-              eq(registrations.cupId, cupId),
-              eq(registrations.status, "confirmed"),
-              isNotNull(products.categoryRank)
-            )
-          )
-          .orderBy(asc(products.categoryRank))
-          .limit(3);
-
-        podiumByCategory.push({
-          category: {
-            id: category.id,
-            name: category.name,
-          },
-          podium: podiumProducts.map((p, i) => ({
-            position: i + 1,
-            medal: i === 0 ? "gold" : i === 1 ? "silver" : "bronze",
-            product: {
-              id: p.id,
-              name: p.name,
-              anonymousCode: p.anonymousCode,
-              finalScore: p.finalScore ? parseFloat(p.finalScore) : null,
-            },
-            producer: {
-              id: p.producerId,
-              name: p.producerName,
-              brand: p.producerBrand,
-            },
-            label: p.labelName
-              ? {
-                  name: p.labelName,
-                  color: p.labelColor,
-                }
-              : null,
-          })),
-        });
-      }
-
-      return {
-        cupId,
-        categories: podiumByCategory,
-        totalCategories: podiumByCategory.length,
-      };
-    }),
-
-  /**
    * Update PDF customization settings
    * Story 8.3: Personnalisation Template PDF
    */
-  updatePdfSettings: protectedProcedure
+  updatePdfSettings: organizerProcedure
     .input(
       z.object({
         cupId: z.string(),
@@ -813,7 +312,7 @@ export const resultsRouter = createTRPCRouter({
       const { cupId, pdfLogoUrl, pdfIntroText } = input;
 
       // Verify cup access (owner/admin only)
-      await verifyCupAccess(ctx, cupId, ["owner", "admin"]);
+      await requireOrganizerAndCup(ctx, cupId);
 
       // Build update object with only provided fields
       const updateData: Record<string, unknown> = {
@@ -842,13 +341,13 @@ export const resultsRouter = createTRPCRouter({
    * Get PDF customization settings
    * Story 8.3
    */
-  getPdfSettings: protectedProcedure
+  getPdfSettings: organizerProcedure
     .input(z.object({ cupId: z.string() }))
     .query(async ({ ctx, input }) => {
       const { cupId } = input;
 
       // Verify cup access
-      const { cup } = await verifyCupAccess(ctx, cupId, ["owner", "admin", "member"]);
+      const { cup } = await requireOrganizerAndCup(ctx, cupId);
 
       return {
         cupId: cup.id,
@@ -859,130 +358,15 @@ export const resultsRouter = createTRPCRouter({
       };
     }),
 
-  /**
-   * Publish results - makes them visible to producers
-   * Story 9.4: Publication des résultats
-   */
-  publishResults: protectedProcedure
-    .input(z.object({ cupId: z.string() }))
-    .mutation(async ({ ctx, input }) => {
-      const { cupId } = input;
-
-      // Verify cup access (owner/admin only)
-      const { cup } = await verifyCupAccess(ctx, cupId, ["owner", "admin"]);
-
-      if (cup.resultsPublishedAt) {
-        throw new TRPCError({
-          code: "PRECONDITION_FAILED",
-          message: "Les résultats sont déjà publiés",
-        });
-      }
-
-      // Auto-calculate results before publishing to ensure scores are up to date
-      await computeResults(ctx.db, cupId, cup);
-
-      await ctx.db
-        .update(cups)
-        .set({
-          resultsPublishedAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .where(eq(cups.id, cupId));
-
-      return {
-        success: true,
-        publishedAt: new Date(),
-        message: "Résultats publiés avec succès",
-      };
-    }),
-
-  /**
-   * Unpublish results - revokes visibility from producers
-   * Story 9.4
-   */
-  unpublishResults: protectedProcedure
-    .input(z.object({ cupId: z.string() }))
-    .mutation(async ({ ctx, input }) => {
-      const { cupId } = input;
-
-      // Verify cup access (owner/admin only)
-      const { cup } = await verifyCupAccess(ctx, cupId, ["owner", "admin"]);
-
-      if (!cup.resultsPublishedAt) {
-        throw new TRPCError({
-          code: "PRECONDITION_FAILED",
-          message: "Les résultats ne sont pas publiés",
-        });
-      }
-
-      await ctx.db
-        .update(cups)
-        .set({
-          resultsPublishedAt: null,
-          updatedAt: new Date(),
-        })
-        .where(eq(cups.id, cupId));
-
-      return {
-        success: true,
-        message: "Publication des résultats annulée",
-      };
-    }),
-
-  /**
-   * Generate synthesis PDF for a single product
-   * Story 8.4: FR39 - PDFs avec graphiques radar
-   */
-  generateProductPdf: protectedProcedure
-    .input(z.object({ productId: z.string() }))
-    .mutation(async ({ ctx, input }) => {
-      const { productId } = input;
-
-      // Get product to verify access
-      const product = await ctx.db.query.products.findFirst({
-        where: eq(products.id, productId),
-        with: {
-          registration: {
-            with: {
-              cup: true,
-            },
-          },
-        },
-      });
-
-      if (!product) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Produit non trouvé",
-        });
-      }
-
-      // Verify cup access
-      await verifyCupAccess(ctx, product.registration.cupId, ["owner", "admin"]);
-
-      try {
-        const result = await generateProductSynthesisPdf(productId);
-
-        return {
-          success: true,
-          filename: result.filename,
-          // Return base64 encoded PDF for download
-          pdfBase64: result.buffer.toString("base64"),
-          mimeType: "application/pdf",
-        };
-      } catch (error) {
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: error instanceof Error ? error.message : "Erreur lors de la génération du PDF",
-        });
-      }
-    }),
+  // publishResults / unpublishResults vivent dans cup.ts : seul ce chemin
+  // exige que la notation soit clôturée (status = completed) et positionne
+  // resultsVisibility. Les doublons qui vivaient ici étaient plus permissifs.
 
   /**
    * Generate synthesis PDF for all products of a producer registration
    * Story 8.4: FR38 - Génération PDFs synthèse
    */
-  generateProducerPdf: protectedProcedure
+  generateProducerPdf: organizerProcedure
     .input(z.object({ registrationId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const { registrationId } = input;
@@ -1003,7 +387,7 @@ export const resultsRouter = createTRPCRouter({
       }
 
       // Verify cup access
-      await verifyCupAccess(ctx, registration.cupId, ["owner", "admin"]);
+      await requireOrganizerAndCup(ctx, registration.cupId);
 
       try {
         const result = await generateProducerSynthesisPdf(registrationId);
@@ -1023,220 +407,10 @@ export const resultsRouter = createTRPCRouter({
     }),
 
   /**
-   * Get product result data for preview (without generating PDF)
-   * Story 8.4
-   */
-  getProductPdfPreview: protectedProcedure
-    .input(z.object({ productId: z.string() }))
-    .query(async ({ ctx, input }) => {
-      const { productId } = input;
-
-      // Get product to verify access
-      const product = await ctx.db.query.products.findFirst({
-        where: eq(products.id, productId),
-        with: {
-          registration: {
-            with: {
-              cup: true,
-            },
-          },
-        },
-      });
-
-      if (!product) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Produit non trouvé",
-        });
-      }
-
-      // Verify cup access
-      await verifyCupAccess(ctx, product.registration.cupId, ["owner", "admin", "member"]);
-
-      const resultData = await getProductResultsForPdf(productId);
-
-      if (!resultData) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Données de résultat non trouvées",
-        });
-      }
-
-      return resultData;
-    }),
-
-  /**
-   * Generate synthesis PDFs for all producers in a cup (mass generation)
-   * Story 8.5: FR38 - Génération PDFs synthèse en masse
-   */
-  generateAllPdfs: protectedProcedure
-    .input(z.object({ cupId: z.string() }))
-    .mutation(async ({ ctx, input }) => {
-      const { cupId } = input;
-
-      // Verify cup access (owner/admin only)
-      const { cup } = await verifyCupAccess(ctx, cupId, ["owner", "admin"]);
-
-      // Verify cup status - must be in rating or completed
-      if (!["rating", "completed"].includes(cup.status)) {
-        throw new TRPCError({
-          code: "PRECONDITION_FAILED",
-          message: "La cup doit être en phase de notation ou terminée pour générer les PDFs",
-        });
-      }
-
-      // Get all confirmed registrations for this cup
-      const cupRegistrations = await ctx.db.query.registrations.findMany({
-        where: and(
-          eq(registrations.cupId, cupId),
-          eq(registrations.status, "confirmed")
-        ),
-        with: {
-          producer: true,
-          products: true,
-        },
-      });
-
-      if (cupRegistrations.length === 0) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Aucune inscription confirmée trouvée pour cette cup",
-        });
-      }
-
-      const results: Array<{
-        registrationId: string;
-        producerName: string;
-        productCount: number;
-        success: boolean;
-        filename?: string;
-        pdfBase64?: string;
-        error?: string;
-      }> = [];
-
-      let successCount = 0;
-      let errorCount = 0;
-
-      // Generate PDF for each registration
-      for (const registration of cupRegistrations) {
-        try {
-          // Skip registrations with no products
-          if (registration.products.length === 0) {
-            results.push({
-              registrationId: registration.id,
-              producerName: registration.producer.companyName ?? "N/A",
-              productCount: 0,
-              success: false,
-              error: "Aucun produit inscrit",
-            });
-            errorCount++;
-            continue;
-          }
-
-          const pdfResult = await generateProducerSynthesisPdf(registration.id);
-
-          results.push({
-            registrationId: registration.id,
-            producerName: registration.producer.companyName ?? "N/A",
-            productCount: registration.products.length,
-            success: true,
-            filename: pdfResult.filename,
-            pdfBase64: pdfResult.buffer.toString("base64"),
-          });
-          successCount++;
-        } catch (error) {
-          results.push({
-            registrationId: registration.id,
-            producerName: registration.producer.companyName ?? "N/A",
-            productCount: registration.products.length,
-            success: false,
-            error: error instanceof Error ? error.message : "Erreur inconnue",
-          });
-          errorCount++;
-        }
-      }
-
-      return {
-        cupId,
-        cupName: cup.name,
-        totalRegistrations: cupRegistrations.length,
-        successCount,
-        errorCount,
-        results,
-      };
-    }),
-
-  /**
-   * Get mass PDF generation status for a cup
-   * Lists all registrations with their PDF generation status
-   * Story 8.5
-   */
-  getMassGenerationStatus: protectedProcedure
-    .input(z.object({ cupId: z.string() }))
-    .query(async ({ ctx, input }) => {
-      const { cupId } = input;
-
-      // Verify cup access
-      const { cup } = await verifyCupAccess(ctx, cupId, ["owner", "admin", "member"]);
-
-      // Get all confirmed registrations
-      const cupRegistrations = await ctx.db.query.registrations.findMany({
-        where: and(
-          eq(registrations.cupId, cupId),
-          eq(registrations.status, "confirmed")
-        ),
-        with: {
-          producer: true,
-          products: {
-            with: {
-              category: true,
-            },
-          },
-        },
-      });
-
-      // Count products with results
-      const registrationStats = await Promise.all(
-        cupRegistrations.map(async (reg) => {
-          const productsWithResults = reg.products.filter(
-            (p) => p.finalScore !== null
-          ).length;
-
-          return {
-            registrationId: reg.id,
-            producerName: reg.producer.companyName ?? "N/A",
-            producerBrand: reg.producer.brandName,
-            productCount: reg.products.length,
-            productsWithResults,
-            readyForPdf: productsWithResults > 0,
-            products: reg.products.map((p) => ({
-              id: p.id,
-              name: p.name,
-              category: p.category?.name ?? "Sans catégorie",
-              hasResults: p.finalScore !== null,
-              finalScore: p.finalScore ? parseFloat(p.finalScore) : null,
-            })),
-          };
-        })
-      );
-
-      const readyCount = registrationStats.filter((r) => r.readyForPdf).length;
-
-      return {
-        cupId,
-        cupName: cup.name,
-        totalRegistrations: cupRegistrations.length,
-        readyForPdf: readyCount,
-        notReady: cupRegistrations.length - readyCount,
-        registrations: registrationStats,
-      };
-    }),
-
-  /**
    * Send results email to a single producer
    * Story 8.6: FR40 - Envoi PDFs par email
    */
-  sendResultsToProducer: protectedProcedure
+  sendResultsToProducer: organizerProcedure
     .input(
       z.object({
         registrationId: z.string(),
@@ -1262,7 +436,7 @@ export const resultsRouter = createTRPCRouter({
       }
 
       // Verify cup access (owner/admin only)
-      await verifyCupAccess(ctx, registration.cupId, ["owner", "admin"]);
+      await requireOrganizerAndCup(ctx, registration.cupId);
 
       // Send email
       const result = await sendResultsEmail({
@@ -1288,7 +462,7 @@ export const resultsRouter = createTRPCRouter({
    * Send results emails to all producers in a cup
    * Story 8.6: FR40 - Envoi PDFs par email en masse
    */
-  sendResultsToAllProducers: protectedProcedure
+  sendResultsToAllProducers: organizerProcedure
     .input(
       z.object({
         cupId: z.string(),
@@ -1299,7 +473,7 @@ export const resultsRouter = createTRPCRouter({
       const { cupId, customMessage } = input;
 
       // Verify cup access (owner/admin only)
-      const { cup } = await verifyCupAccess(ctx, cupId, ["owner", "admin"]);
+      const { cup } = await requireOrganizerAndCup(ctx, cupId);
 
       // Verify cup status - must be in rating or completed
       if (!["rating", "completed"].includes(cup.status)) {
@@ -1328,7 +502,7 @@ export const resultsRouter = createTRPCRouter({
    * Get email send status for all producers in a cup
    * Story 8.7: FR40 - Suivi des envois de syntheses
    */
-  getEmailSendStatus: protectedProcedure
+  getEmailSendStatus: organizerProcedure
     .input(
       z.object({
         cupId: z.string(),
@@ -1339,7 +513,7 @@ export const resultsRouter = createTRPCRouter({
       const { cupId, status } = input;
 
       // Verify cup access
-      const { cup } = await verifyCupAccess(ctx, cupId, ["owner", "admin", "member"]);
+      const { cup } = await requireOrganizerAndCup(ctx, cupId);
 
       // Get all confirmed registrations with email status
       const cupRegistrations = await ctx.db.query.registrations.findMany({
@@ -1413,7 +587,7 @@ export const resultsRouter = createTRPCRouter({
    * Retry failed email send for a single producer
    * Story 8.7
    */
-  retryEmailSend: protectedProcedure
+  retryEmailSend: organizerProcedure
     .input(z.object({ registrationId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const { registrationId } = input;
@@ -1434,7 +608,7 @@ export const resultsRouter = createTRPCRouter({
       }
 
       // Verify cup access (owner/admin only)
-      await verifyCupAccess(ctx, registration.cupId, ["owner", "admin"]);
+      await requireOrganizerAndCup(ctx, registration.cupId);
 
       // Clear previous error before retry
       await ctx.db
@@ -1459,102 +633,6 @@ export const resultsRouter = createTRPCRouter({
         success: true,
         emailId: result.emailId,
         message: "Email renvoye avec succes",
-      };
-    }),
-
-  /**
-   * Retry failed email sends for all failed producers in a cup
-   * Story 8.7
-   */
-  retryAllFailedEmails: protectedProcedure
-    .input(z.object({ cupId: z.string() }))
-    .mutation(async ({ ctx, input }) => {
-      const { cupId } = input;
-
-      // Verify cup access (owner/admin only)
-      const { cup } = await verifyCupAccess(ctx, cupId, ["owner", "admin"]);
-
-      // Get all registrations with failed emails
-      const failedRegistrations = await ctx.db.query.registrations.findMany({
-        where: and(
-          eq(registrations.cupId, cupId),
-          eq(registrations.status, "confirmed"),
-          isNotNull(registrations.synthesisEmailError)
-        ),
-        with: {
-          producer: true,
-          products: true,
-        },
-      });
-
-      if (failedRegistrations.length === 0) {
-        return {
-          cupId,
-          cupName: cup.name,
-          totalRetried: 0,
-          success: 0,
-          failed: 0,
-          results: [],
-          message: "Aucun email en erreur a renvoyer",
-        };
-      }
-
-      const results: Array<{
-        registrationId: string;
-        producerName: string;
-        success: boolean;
-        error?: string;
-      }> = [];
-      let success = 0;
-      let failed = 0;
-
-      for (const reg of failedRegistrations) {
-        // Skip if no products with results
-        const hasResults = reg.products.some((p) => p.finalScore !== null);
-        if (!hasResults) {
-          results.push({
-            registrationId: reg.id,
-            producerName: reg.producer.companyName ?? "N/A",
-            success: false,
-            error: "Aucun produit avec resultats",
-          });
-          failed++;
-          continue;
-        }
-
-        // Clear previous error
-        await ctx.db
-          .update(registrations)
-          .set({
-            synthesisEmailError: null,
-            updatedAt: new Date(),
-          })
-          .where(eq(registrations.id, reg.id));
-
-        const result = await sendResultsEmail({ registrationId: reg.id });
-
-        results.push({
-          registrationId: reg.id,
-          producerName: reg.producer.companyName ?? "N/A",
-          success: result.success,
-          error: result.error,
-        });
-
-        if (result.success) {
-          success++;
-        } else {
-          failed++;
-        }
-      }
-
-      return {
-        cupId,
-        cupName: cup.name,
-        totalRetried: failedRegistrations.length,
-        success,
-        failed,
-        results,
-        message: `Renvois: ${success} succes, ${failed} echecs`,
       };
     }),
 
@@ -1638,7 +716,7 @@ export const resultsRouter = createTRPCRouter({
    * Get detailed results for all products in a cup
    * Used for interactive results visualization with radar charts
    */
-  getDetailedResults: protectedProcedure
+  getDetailedResults: organizerProcedure
     .input(
       z.object({
         cupId: z.string(),
@@ -1649,7 +727,7 @@ export const resultsRouter = createTRPCRouter({
       const { cupId, categoryId } = input;
 
       // Verify cup access
-      const { cup } = await verifyCupAccess(ctx, cupId, ["owner", "admin", "member"]);
+      const { cup } = await requireOrganizerAndCup(ctx, cupId);
 
       // Get categories
       const cupCategories = await ctx.db.query.categories.findMany({
@@ -1665,6 +743,61 @@ export const resultsRouter = createTRPCRouter({
       });
 
       const maxScale = getMaxScoreForScale(cup.ratingScale);
+
+      // Une seule agrégation pour toute la cup : la version précédente faisait
+      // une requête par (catégorie x critère) puis par (produit x critère),
+      // soit un millier d'allers-retours sur une cup de taille réelle.
+      const scoreAggregates = await ctx.db
+        .select({
+          productId: productRatings.productId,
+          criterionId: criterionScores.criterionId,
+          categoryId: products.categoryId,
+          total: sql<string>`sum(${criterionScores.score})`,
+          count: sql<string>`count(*)`,
+        })
+        .from(criterionScores)
+        .innerJoin(productRatings, eq(criterionScores.productRatingId, productRatings.id))
+        .innerJoin(products, eq(productRatings.productId, products.id))
+        .innerJoin(registrations, eq(products.registrationId, registrations.id))
+        .where(
+          and(eq(registrations.cupId, cupId), isNotNull(productRatings.submittedAt))
+        )
+        .groupBy(
+          productRatings.productId,
+          criterionScores.criterionId,
+          products.categoryId
+        );
+
+      // sum()/count() reviennent en bigint, donc en chaîne côté driver.
+      const addTo = (
+        map: Map<string, { total: number; count: number }>,
+        key: string,
+        total: number,
+        count: number
+      ) => {
+        const acc = map.get(key) ?? { total: 0, count: 0 };
+        acc.total += total;
+        acc.count += count;
+        map.set(key, acc);
+      };
+
+      const byProductCriterion = new Map<string, { total: number; count: number }>();
+      const byCategoryCriterion = new Map<string, { total: number; count: number }>();
+
+      for (const row of scoreAggregates) {
+        const total = Number(row.total);
+        const count = Number(row.count);
+        addTo(byProductCriterion, `${row.productId}:${row.criterionId}`, total, count);
+        addTo(byCategoryCriterion, `${row.categoryId}:${row.criterionId}`, total, count);
+      }
+
+      const averageOf = (
+        map: Map<string, { total: number; count: number }>,
+        key: string
+      ) => {
+        const acc = map.get(key);
+        return acc && acc.count > 0 ? acc.total / acc.count : null;
+      };
 
       const resultsByCategory = [];
 
@@ -1699,23 +832,8 @@ export const resultsRouter = createTRPCRouter({
         // Calculate category averages per criterion
         const criteriaAverages: Record<string, number> = {};
         for (const criterion of category.criteria) {
-          const scores = await ctx.db
-            .select({ score: criterionScores.score })
-            .from(criterionScores)
-            .innerJoin(productRatings, eq(criterionScores.productRatingId, productRatings.id))
-            .innerJoin(products, eq(productRatings.productId, products.id))
-            .innerJoin(registrations, eq(products.registrationId, registrations.id))
-            .where(
-              and(
-                eq(criterionScores.criterionId, criterion.id),
-                eq(products.categoryId, category.id),
-                eq(registrations.cupId, cupId),
-                isNotNull(productRatings.submittedAt)
-              )
-            );
-
-          if (scores.length > 0) {
-            const avg = scores.reduce((sum, s) => sum + s.score, 0) / scores.length;
+          const avg = averageOf(byCategoryCriterion, `${category.id}:${criterion.id}`);
+          if (avg !== null) {
             criteriaAverages[criterion.id] = avg; // Keep in original scale
           }
         }
@@ -1726,23 +844,11 @@ export const resultsRouter = createTRPCRouter({
           const criteriaScoresData = [];
 
           for (const criterion of category.criteria) {
-            // Get average score for this product on this criterion
-            const scores = await ctx.db
-              .select({ score: criterionScores.score })
-              .from(criterionScores)
-              .innerJoin(productRatings, eq(criterionScores.productRatingId, productRatings.id))
-              .where(
-                and(
-                  eq(criterionScores.criterionId, criterion.id),
-                  eq(productRatings.productId, product.id),
-                  isNotNull(productRatings.submittedAt)
-                )
-              );
-
-            const productScore =
-              scores.length > 0
-                ? scores.reduce((sum, s) => sum + s.score, 0) / scores.length // Keep in original scale
-                : null;
+            // Moyenne du produit sur ce critère, issue de l'agrégat ci-dessus.
+            const productScore = averageOf(
+              byProductCriterion,
+              `${product.id}:${criterion.id}`
+            );
 
             criteriaScoresData.push({
               criterionId: criterion.id,
@@ -1819,7 +925,7 @@ export const resultsRouter = createTRPCRouter({
    * Get anonymized jury scores for a specific product
    * Shows individual jury ratings without revealing jury identity
    */
-  getAnonymizedJuryScores: protectedProcedure
+  getAnonymizedJuryScores: organizerProcedure
     .input(
       z.object({
         productId: z.string(),
@@ -1855,7 +961,7 @@ export const resultsRouter = createTRPCRouter({
       }
 
       // Verify cup access
-      await verifyCupAccess(ctx, product.registration.cupId, ["owner", "admin", "member"]);
+      await requireOrganizerAndCup(ctx, product.registration.cupId);
 
       const cup = product.registration.cup;
       const maxScale = getMaxScoreForScale(cup.ratingScale);

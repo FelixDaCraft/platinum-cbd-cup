@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+// L'URL publique est lue dans `process.env` par `~/server/services/app-url`,
+// qui lève quand elle manque plutôt que de replier sur localhost.
+process.env.NEXT_PUBLIC_APP_URL = "https://test.platinumcbdcup.eu";
+
 // Mock the database and Resend - hoisted to be available at mock time
 const { mockFindFirst, mockSend } = vi.hoisted(() => {
   return {

@@ -2,10 +2,9 @@
 
 import { useState, useCallback } from "react";
 import { useDropzone } from "react-dropzone";
-import { Upload, X, Link as LinkIcon, Loader2, ImageIcon, Check } from "lucide-react";
+import { X, Loader2, ImageIcon, Check } from "lucide-react";
 import { cn } from "~/lib/utils";
 import { Button } from "./button";
-import { Input } from "./input";
 
 interface ImageUploadProps {
   value?: string;
@@ -19,8 +18,6 @@ interface ImageUploadProps {
   className?: string;
 }
 
-type UploadMode = "upload" | "url";
-
 export function ImageUpload({
   value,
   onChange,
@@ -32,11 +29,9 @@ export function ImageUpload({
   disabled = false,
   className,
 }: ImageUploadProps) {
-  const [mode, setMode] = useState<UploadMode>("upload");
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [urlInput, setUrlInput] = useState("");
   const [compressionInfo, setCompressionInfo] = useState<string | null>(null);
 
   const onDrop = useCallback(
@@ -94,10 +89,11 @@ export function ImageUpload({
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
+    // Pas de SVG : /api/upload le refuse aux comptes non-organisateurs
+    // (librsvg tourne dans le process Node).
     accept: {
       "image/jpeg": [".jpg", ".jpeg"],
       "image/png": [".png"],
-      "image/svg+xml": [".svg"],
       "image/webp": [".webp"],
       "image/gif": [".gif"],
     },
@@ -109,18 +105,10 @@ export function ImageUpload({
       if (rejection?.errors[0]?.code === "file-too-large") {
         setError(`Fichier trop volumineux. Maximum: ${maxSize}MB`);
       } else if (rejection?.errors[0]?.code === "file-invalid-type") {
-        setError("Format non supporté. Utilisez JPG, PNG, SVG, WebP ou GIF");
+        setError("Format non supporté. Utilisez JPG, PNG, WebP ou GIF");
       }
     },
   });
-
-  const handleUrlSubmit = () => {
-    if (urlInput.trim()) {
-      setError(null);
-      onChange(urlInput.trim());
-      setUrlInput("");
-    }
-  };
 
   const handleRemove = () => {
     onChange("");
@@ -146,48 +134,14 @@ export function ImageUpload({
 
   return (
     <div className={cn("space-y-3", className)}>
-      {/* Mode Toggle - Amber CupMetrics style */}
-      <div className="flex gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => setMode("upload")}
-          style={mode === "upload" ? { backgroundColor: "#f59e0b", color: "#0a0a0f", borderColor: "#f59e0b" } : undefined}
-          className={cn(
-            "flex-1 font-medium transition-all",
-            mode === "upload"
-              ? "shadow-lg shadow-amber-500/30 hover:bg-amber-400"
-              : "border-white/20 bg-white/5 hover:bg-white/10 hover:border-amber-500/50"
-          )}
-        >
-          <Upload className="mr-2 h-4 w-4" />
-          Upload
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => setMode("url")}
-          style={mode === "url" ? { backgroundColor: "#f59e0b", color: "#0a0a0f", borderColor: "#f59e0b" } : undefined}
-          className={cn(
-            "flex-1 font-medium transition-all",
-            mode === "url"
-              ? "shadow-lg shadow-amber-500/30 hover:bg-amber-400"
-              : "border-white/20 bg-white/5 hover:bg-white/10 hover:border-amber-500/50"
-          )}
-        >
-          <LinkIcon className="mr-2 h-4 w-4" />
-          URL
-        </Button>
-      </div>
-
       {/* Preview or Upload Zone */}
       {value ? (
         <div className={cn("relative rounded-lg overflow-hidden border border-white/20", previewAspectRatioClass)}>
           <img
             src={value}
-            alt="Preview"
+            alt="Aperçu de l'image téléversée"
+            loading="lazy"
+            decoding="async"
             className={cn("w-full h-full", objectFit === "contain" ? "object-contain" : "object-cover")}
             onError={(e) => {
               (e.target as HTMLImageElement).src = "";
@@ -213,7 +167,7 @@ export function ImageUpload({
             </div>
           )}
         </div>
-      ) : mode === "upload" ? (
+      ) : (
         <div
           {...getRootProps()}
           className={cn(
@@ -252,36 +206,11 @@ export function ImageUpload({
                   {isDragActive ? "Déposez l'image ici" : placeholder}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  JPG, PNG, SVG, WebP ou GIF (max {maxSize}MB)
+                  JPG, PNG, WebP ou GIF (max {maxSize}MB)
                 </p>
               </div>
             </div>
           )}
-        </div>
-      ) : (
-        <div className="space-y-2">
-          <div className="flex gap-2">
-            <Input
-              type="url"
-              placeholder="https://example.com/image.jpg"
-              value={urlInput}
-              onChange={(e) => setUrlInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleUrlSubmit())}
-              disabled={disabled}
-              className="flex-1"
-            />
-            <Button
-              type="button"
-              onClick={handleUrlSubmit}
-              disabled={!urlInput.trim() || disabled}
-              className="bg-primary hover:bg-primary/90"
-            >
-              <Check className="h-4 w-4" />
-            </Button>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Entrez l'URL d'une image existante
-          </p>
         </div>
       )}
 

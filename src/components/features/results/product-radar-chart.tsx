@@ -46,7 +46,7 @@ export function ProductRadarChart({
         <p className="text-sm text-muted-foreground text-center">
           Graphique radar non disponible
           <br />
-          <span className="text-xs">(minimum 3 criteres requis)</span>
+          <span className="text-xs">(minimum 3 critères requis)</span>
         </p>
       </div>
     );
@@ -88,9 +88,11 @@ export function ProductRadarChart({
           />
           <Radar
             name={productName}
-            dataKey="product"
-            stroke="#f59e0b"
-            fill="#f59e0b"
+            // Or #d4af37 de la charte Platinum (jeton --chart-1) : l'ambre
+            // #f59e0b d'origine venait de CupMetrics et jurait avec le reste
+            // de la page de résultats.
+            stroke="#d4af37"
+            fill="#d4af37"
             fillOpacity={0.5}
             strokeWidth={2}
           />

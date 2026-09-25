@@ -28,6 +28,13 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
+    # Le driver json-file est illimité par défaut : sans plafond déclaré ici,
+    # les logs applicatifs peuvent saturer le disque du homelab.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
 
   # ============================================
   # Postgres 16
@@ -53,6 +60,11 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
 
 volumes:
   platinum-pgdata:

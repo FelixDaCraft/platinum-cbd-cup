@@ -60,7 +60,10 @@ function ToolbarButton({
       disabled={disabled}
       title={title}
       className={cn(
-        "h-8 w-8 p-0 data-[state=on]:bg-amber-500/20 data-[state=on]:text-amber-500",
+        // L'accent suit le jeton `primary` (or #d4af37 de la charte Platinum)
+        // et non plus l'ambre #f59e0b hérité de CupMetrics, qui faisait
+        // cohabiter deux ors différents sur un même écran.
+        "h-8 w-8 p-0 data-[state=on]:bg-primary/20 data-[state=on]:text-primary",
         "hover:bg-white/10 hover:text-foreground"
       )}
     >
@@ -259,7 +262,7 @@ export function RichTextEditor({
       Link.configure({
         openOnClick: false,
         HTMLAttributes: {
-          class: "text-amber-500 underline hover:text-amber-400",
+          class: "text-primary underline hover:text-primary/80",
         },
       }),
       Placeholder.configure({
@@ -302,7 +305,7 @@ export function RichTextEditor({
     <div
       className={cn(
         "rounded-md border border-white/20 bg-background overflow-hidden",
-        "focus-within:border-amber-500/50 focus-within:ring-1 focus-within:ring-amber-500/20",
+        "focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/20",
         className
       )}
     >
@@ -390,7 +393,7 @@ export function RichTextEditor({
 
         /* Blockquote */
         .ProseMirror blockquote {
-          border-left: 3px solid #f59e0b;
+          border-left: 3px solid hsl(var(--primary));
           padding-left: 1rem;
           margin-left: 0;
           margin-right: 0;
@@ -406,14 +409,17 @@ export function RichTextEditor({
           margin: 1.5rem 0;
         }
 
-        /* Links */
+        /* Links — la couleur du thème, pas l'ambre hérité de CupMetrics.
+           Cette règle-ci n'est pas « layered » : elle l'emportait sur la classe
+           Tailwind text-primary posée par l'extension Link, si bien que les
+           liens insérés restaient ambre malgré elle. */
         .ProseMirror a {
-          color: #f59e0b;
+          color: hsl(var(--primary));
           text-decoration: underline;
           cursor: pointer;
         }
         .ProseMirror a:hover {
-          color: #fbbf24;
+          color: hsl(var(--primary) / 0.8);
         }
 
         /* Text alignment */
@@ -452,79 +458,11 @@ export function RichTextEditor({
 
         /* Selection */
         .ProseMirror ::selection {
-          background-color: rgba(245, 158, 11, 0.3);
+          background-color: hsl(var(--primary) / 0.3);
         }
       `}</style>
       <Toolbar editor={editor} />
       <EditorContent editor={editor} />
     </div>
   );
-}
-
-// Helper to convert TipTap JSON to HTML for display
-export function tiptapToHtml(content: Record<string, unknown>): string {
-  if (!content || typeof content !== "object") return "";
-
-  const renderNode = (node: Record<string, unknown>): string => {
-    if (!node.type) return "";
-
-    const children = Array.isArray(node.content)
-      ? node.content.map((child) => renderNode(child as Record<string, unknown>)).join("")
-      : "";
-
-    const textAlign = (node.attrs as Record<string, unknown>)?.textAlign as string | undefined;
-    const alignStyle = textAlign ? ` style="text-align: ${textAlign}"` : "";
-
-    switch (node.type) {
-      case "doc":
-        return children;
-      case "paragraph":
-        return children ? `<p${alignStyle}>${children}</p>` : "<p><br></p>";
-      case "heading": {
-        const level = (node.attrs as Record<string, unknown>)?.level ?? 1;
-        return `<h${level}${alignStyle}>${children}</h${level}>`;
-      }
-      case "text": {
-        let text = (node.text as string) || "";
-        const marks = (node.marks as Array<{ type: string; attrs?: Record<string, unknown> }>) || [];
-
-        marks.forEach((mark) => {
-          switch (mark.type) {
-            case "bold":
-              text = `<strong>${text}</strong>`;
-              break;
-            case "italic":
-              text = `<em>${text}</em>`;
-              break;
-            case "underline":
-              text = `<u>${text}</u>`;
-              break;
-            case "strike":
-              text = `<s>${text}</s>`;
-              break;
-            case "link":
-              text = `<a href="${mark.attrs?.href || "#"}" target="_blank" rel="noopener noreferrer" class="text-amber-500 hover:underline">${text}</a>`;
-              break;
-          }
-        });
-        return text;
-      }
-      case "bulletList":
-        return `<ul class="list-disc pl-6 space-y-1">${children}</ul>`;
-      case "orderedList":
-        return `<ol class="list-decimal pl-6 space-y-1">${children}</ol>`;
-      case "listItem":
-        return `<li>${children}</li>`;
-      case "blockquote":
-        return `<blockquote class="border-l-4 border-amber-500 pl-4 italic text-foreground/70">${children}</blockquote>`;
-      case "horizontalRule":
-        return `<hr class="border-white/20 my-6" />`;
-      case "hardBreak":
-        return "<br />";
-      default:
-        return children;
-    }
-  };
-
-  return renderNode(content);
 }

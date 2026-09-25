@@ -37,9 +37,19 @@ export default function CategoriesPage() {
 
   const utils = api.useUtils();
 
-  const { data: cup, isLoading: cupLoading } = api.cup.getById.useQuery({ id: cupId });
+  const {
+    data: cup,
+    isLoading: cupLoading,
+    isError: cupError,
+    refetch: refetchCup,
+  } = api.cup.getById.useQuery({ id: cupId });
 
-  const { data: categories = [], isLoading: categoriesLoading } = api.category.list.useQuery(
+  const {
+    data: categories = [],
+    isLoading: categoriesLoading,
+    isError: categoriesError,
+    refetch: refetchCategories,
+  } = api.category.list.useQuery(
     { cupId },
     { enabled: !!cup }
   );
@@ -121,6 +131,21 @@ export default function CategoriesPage() {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <span className="n-label">[LOADING...]</span>
+      </div>
+    );
+  }
+
+  // Une requête en échec ne doit pas se confondre avec une page vide :
+  // un écran « aucune donnée » masquerait l'incident.
+  if (cupError || categoriesError) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4 text-center">
+        <span role="alert" className="n-label" style={{ color: "var(--n-text-secondary)" }}>
+          [ERREUR] LES CATÉGORIES N&apos;ONT PAS PU ÊTRE CHARGÉES
+        </span>
+        <button type="button" className="n-btn-secondary text-xs" onClick={() => { void refetchCup(); void refetchCategories(); }}>
+          RÉESSAYER
+        </button>
       </div>
     );
   }

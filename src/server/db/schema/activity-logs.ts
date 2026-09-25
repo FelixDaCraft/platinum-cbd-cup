@@ -1,5 +1,6 @@
 import { pgTable, text, timestamp, pgEnum, index } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
+import { generateId } from "./id";
 import { users } from "./auth";
 
 /**
@@ -13,6 +14,10 @@ export const activityActionEnum = pgEnum("activity_action", [
   "password_reset",
   "email_change",
   // Admin actions
+  // [LEGACY CupMetrics] admin_suspend_organization, admin_reactivate_organization,
+  // admin_update_plan_config, organization_* et subscription_* ne sont plus
+  // jamais écrits. Postgres ne sait pas retirer une valeur d'un type enum :
+  // les purger demande un nouveau type + cast, donc une migration versionnée.
   "admin_create_organizer",
   "admin_suspend_organization",
   "admin_reactivate_organization",
@@ -57,7 +62,9 @@ export const activityActionEnum = pgEnum("activity_action", [
 export const activityLogs = pgTable(
   "activity_logs",
   {
-    id: text("id").primaryKey(),
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => generateId()),
     // Who performed the action (can be null for system actions)
     userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
     // Action type
@@ -71,7 +78,7 @@ export const activityLogs = pgTable(
     // User agent
     userAgent: text("user_agent"),
     // Timestamp
-    createdAt: timestamp("created_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     index("activity_logs_user_id_idx").on(table.userId),

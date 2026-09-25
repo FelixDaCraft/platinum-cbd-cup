@@ -6,14 +6,13 @@ import Link from "next/link";
 import Image from "next/image";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Eye, EyeOff, Loader2, ArrowRight } from "lucide-react";
+import { Eye, EyeOff, Loader2, ArrowRight, MailWarning } from "lucide-react";
 import { toast } from "sonner";
-import { motion } from "framer-motion";
 
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
-import { signIn, useSession } from "~/lib/auth-client";
+import { sendVerificationEmail, signIn, useSession } from "~/lib/auth-client";
 import { loginSchema, type LoginInput } from "~/lib/validations/auth";
 import { useOrganization, usePortalTheme } from "~/lib/portal/context";
 import { cn } from "~/lib/utils";
@@ -25,6 +24,40 @@ function getRedirectPathForRole(role: SessionUserRole, isAdmin: boolean): string
   if (role === "producer") return "/producer/dashboard";
   if (role === "jury") return "/jury/dashboard";
   return "/";
+}
+
+/**
+ * Normalise le `callbackUrl` posé par le middleware ou par les liens d'email.
+ *
+ * Tout chemin relatif du site est accepté — y compris `/producer/...` et
+ * `/dashboard/...`, jusqu'ici silencieusement ignorés, ce qui cassait les
+ * liens profonds envoyés par email. Sont refusées les URL absolues et les
+ * formes `//hôte` / `/\hôte`, qui sortiraient du domaine (open redirect).
+ *
+ * Trois précautions, chacune pour un contournement réel :
+ *   1. `useSearchParams` rend déjà la valeur décodée : redécoder ici ouvrirait
+ *      le double encodage (`%252F%252Fevil.com` → `//evil.com`).
+ *   2. Les navigateurs suppriment TAB, LF et CR avant de résoudre une URL :
+ *      `/<TAB>/evil.com` redevient `//evil.com`, donc un domaine externe. Ces
+ *      caractères sont retirés avant tout contrôle, pas après.
+ *   3. Filet final : on résout comme le fera le navigateur et on exige la même
+ *      origine. Ce qui ressort est reconstruit à partir de l'URL analysée.
+ */
+function sanitizeCallbackUrl(raw: string | null): string | null {
+  if (!raw) return null;
+
+  const value = raw.replace(/[\u0000-\u001F\u007F]/g, "");
+
+  if (!value.startsWith("/")) return null;
+  if (value.startsWith("//") || value.startsWith("/\\")) return null;
+
+  try {
+    const resolved = new URL(value, window.location.origin);
+    if (resolved.origin !== window.location.origin) return null;
+    return resolved.pathname + resolved.search + resolved.hash;
+  } catch {
+    return null;
+  }
 }
 
 export default function PortalLoginPage() {
@@ -60,17 +93,13 @@ export default function PortalLoginPage() {
 
       <Suspense
         fallback={
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="w-full max-w-md"
-          >
+          <div className="w-full max-w-md animate-in fade-in zoom-in-95 duration-300">
             <div className="bg-card/80 backdrop-blur-xl rounded-2xl border border-border/50 shadow-2xl shadow-black/5 p-8">
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
               </div>
             </div>
-          </motion.div>
+          </div>
         }
       >
         <PortalLoginForm />
@@ -88,6 +117,10 @@ function PortalLoginForm() {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [loginSuccess, setLoginSuccess] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
+  // Adresse dont la connexion a été refusée faute de vérification : sert à
+  // proposer le renvoi du lien de confirmation.
+  const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
+  const [isResendingVerification, setIsResendingVerification] = useState(false);
   const hasShownParamToast = useRef(false);
   const hasRedirected = useRef(false);
 
@@ -124,21 +157,9 @@ function PortalLoginForm() {
         sessionUser.isAdmin === true
       );
 
-      // Handle callbackUrl for redirects (decode in case of double-encoding from email verification)
-      let callbackUrl = searchParams.get("callbackUrl");
+      const callbackUrl = sanitizeCallbackUrl(searchParams.get("callbackUrl"));
       if (callbackUrl) {
-        try {
-          if (callbackUrl.startsWith("%2F") || callbackUrl.startsWith("%2f")) {
-            callbackUrl = decodeURIComponent(callbackUrl);
-          }
-        } catch { /* ignore decode errors */ }
-        if (
-          callbackUrl.startsWith("/jury-invite/") ||
-          callbackUrl.startsWith("/jury/") ||
-          callbackUrl.startsWith("/activate")
-        ) {
-          redirectPath = callbackUrl;
-        }
+        redirectPath = callbackUrl;
       }
 
       // Fallback: check localStorage for pending jury activation code
@@ -217,6 +238,7 @@ function PortalLoginForm() {
           const errorCode = result.error.code ?? "";
           const errorCodeUpper = errorCode.toUpperCase();
           const errorMessage = result.error.message?.toLowerCase() ?? "";
+          const status = result.error.status ?? 0;
 
           // Handle email not verified
           if (
@@ -225,14 +247,20 @@ function PortalLoginForm() {
             errorMessage.includes("verify") ||
             errorMessage.includes("verified")
           ) {
+            // `emailVerification.sendOnSignIn` vient de renvoyer le lien ;
+            // le panneau offre un second envoi si l'email n'arrive pas.
+            setUnverifiedEmail(data.email);
             toast.warning(
-              "Veuillez vérifier votre email avant de vous connecter."
+              "Votre email n'est pas encore confirmé. Un nouveau lien vient de vous être envoyé."
             );
             return;
           }
 
+          setUnverifiedEmail(null);
+
           // Handle rate limiting
           if (
+            status === 429 ||
             errorCode === "RATE_LIMIT_EXCEEDED" ||
             errorCode === "TOO_MANY_REQUESTS" ||
             errorCodeUpper.includes("RATE") ||
@@ -243,10 +271,36 @@ function PortalLoginForm() {
             return;
           }
 
-          // Handle invalid credentials
-          toast.error("Email ou mot de passe incorrect");
+          // Panne côté serveur (500, base indisponible, passerelle Cloudflare).
+          // Longtemps confondue avec un mauvais mot de passe, ce qui envoyait
+          // les utilisateurs réinitialiser un mot de passe pourtant valide.
+          if (status >= 500 || status === 0) {
+            toast.error(
+              "Service momentanément indisponible. Réessayez dans quelques minutes."
+            );
+            return;
+          }
+
+          // Identifiants réellement refusés par Better Auth. Les comptes créés
+          // par import n'ont aucun mot de passe et tombent ici : on rappelle le
+          // chemin « Mot de passe oublié », sans révéler si le compte existe.
+          if (status === 401 || errorCodeUpper.includes("INVALID_EMAIL_OR_PASSWORD")) {
+            toast.error(
+              "Email ou mot de passe incorrect. Si vous n'avez jamais défini de mot de passe, utilisez « Mot de passe oublié ? »."
+            );
+            return;
+          }
+
+          // Tout le reste (403 origine refusée, 400 requête invalide…) : ne pas
+          // le déguiser en erreur d'identifiants.
+          console.error("[Login] Erreur de connexion inattendue", result.error);
+          toast.error(
+            `Connexion impossible (erreur ${status || "inconnue"}). Contactez l'organisation si cela persiste.`
+          );
           return;
         }
+
+        setUnverifiedEmail(null);
 
         // Login succeeded!
         toast.success("Connexion réussie !");
@@ -261,21 +315,9 @@ function PortalLoginForm() {
           signedInUser?.isAdmin === true
         );
 
-        // Handle callbackUrl for redirects (decode in case of double-encoding from email verification)
-        let callbackUrl = searchParams.get("callbackUrl");
+        const callbackUrl = sanitizeCallbackUrl(searchParams.get("callbackUrl"));
         if (callbackUrl) {
-          try {
-            if (callbackUrl.startsWith("%2F") || callbackUrl.startsWith("%2f")) {
-              callbackUrl = decodeURIComponent(callbackUrl);
-            }
-          } catch { /* ignore decode errors */ }
-          if (
-            callbackUrl.startsWith("/jury-invite/") ||
-            callbackUrl.startsWith("/jury/") ||
-            callbackUrl.startsWith("/activate")
-          ) {
-            redirectPath = callbackUrl;
-          }
+          redirectPath = callbackUrl;
         }
 
         // Fallback: check localStorage for pending jury activation code
@@ -298,56 +340,77 @@ function PortalLoginForm() {
     [searchParams]
   );
 
+  const handleResendVerification = useCallback(async () => {
+    if (!unverifiedEmail) return;
+
+    setIsResendingVerification(true);
+    try {
+      const result = await sendVerificationEmail({
+        email: unverifiedEmail,
+        callbackURL: "/login",
+      });
+
+      if (result.error) {
+        if (result.error.status === 429) {
+          toast.error(
+            "Trop de demandes d'envoi. Patientez quelques minutes avant de réessayer."
+          );
+        } else {
+          toast.error(
+            "L'email n'a pas pu être renvoyé. Contactez l'organisation."
+          );
+        }
+        return;
+      }
+
+      toast.success(
+        `Email de confirmation renvoyé à ${unverifiedEmail}. Pensez à vérifier les spams.`
+      );
+    } catch {
+      toast.error("Erreur réseau. Vérifiez votre connexion internet.");
+    } finally {
+      setIsResendingVerification(false);
+    }
+  }, [unverifiedEmail]);
+
   // Show loading state
   if (!isSessionDetermined || isLoggingIn || loginSuccess) {
     return (
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="w-full max-w-md relative z-10"
-      >
+      <div className="w-full max-w-md relative z-10 animate-in fade-in zoom-in-95 duration-300">
         <div className="bg-card/80 backdrop-blur-xl rounded-2xl border border-border/50 shadow-2xl shadow-black/5 p-8">
           <div className="flex flex-col items-center justify-center py-8 gap-4">
-            <motion.div
-              animate={{ rotate: 360 }}
-              transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-            >
-              <Loader2 className="h-8 w-8 text-primary" />
-            </motion.div>
+            <Loader2 className="h-8 w-8 text-primary animate-spin" />
             <p className="text-sm text-muted-foreground">
               {loginSuccess ? "Redirection en cours..." : "Chargement..."}
             </p>
           </div>
         </div>
-      </motion.div>
+      </div>
     );
   }
 
   // Don't render form if already logged in (will redirect via useEffect)
   if (session?.user) {
     return (
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="w-full max-w-md relative z-10"
-      >
+      <div className="w-full max-w-md relative z-10 animate-in fade-in zoom-in-95 duration-300">
         <div className="bg-card/80 backdrop-blur-xl rounded-2xl border border-border/50 shadow-2xl shadow-black/5 p-8">
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>
         </div>
-      </motion.div>
+      </div>
     );
   }
 
   const logoUrl = theme.logoUrl || organization.logo;
 
+  // Animation d'apparition en CSS (tw-animate-css) plutôt qu'en JS :
+  // framer-motion pesait ~70 Ko compressés dans le premier chargement des
+  // quatre pages d'authentification — celles que les jurés et producteurs
+  // ouvrent en premier — pour une simple apparition.
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, ease: "easeOut" }}
-      className="w-full max-w-md relative z-10"
+    <div
+      className="w-full max-w-md relative z-10 animate-in fade-in slide-in-from-bottom-5 duration-500 ease-out"
     >
       {/* Premium Card */}
       <div className="bg-card/80 backdrop-blur-xl rounded-2xl border border-border/50 shadow-2xl shadow-black/5 overflow-hidden">
@@ -493,6 +556,36 @@ function PortalLoginForm() {
               )}
             </div>
 
+            {/* Email non confirmé : renvoi du lien d'activation */}
+            {unverifiedEmail && (
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 space-y-3">
+                <div className="flex gap-3">
+                  <MailWarning className="h-5 w-5 shrink-0 text-amber-500" aria-hidden="true" />
+                  <p className="text-sm text-muted-foreground">
+                    Votre adresse <strong className="text-foreground">{unverifiedEmail}</strong>{" "}
+                    n'est pas encore confirmée. Ouvrez le lien reçu par email, ou
+                    demandez un nouvel envoi.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full h-10 rounded-lg"
+                  onClick={handleResendVerification}
+                  disabled={isResendingVerification}
+                >
+                  {isResendingVerification ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Envoi en cours...
+                    </>
+                  ) : (
+                    "Renvoyer l'email de vérification"
+                  )}
+                </Button>
+              </div>
+            )}
+
             {/* Submit Button */}
             <div className="pt-2">
               <Button
@@ -547,6 +640,6 @@ function PortalLoginForm() {
         </div>
       </div>
 
-    </motion.div>
+    </div>
   );
 }

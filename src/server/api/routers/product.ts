@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { unlink } from "fs/promises";
 import path from "path";
@@ -8,38 +8,75 @@ import {
   createTRPCRouter,
   protectedProcedure,
   organizerProcedure,
+  callerIsOrganizer,
+  type AuthedContext,
 } from "~/server/api/trpc";
-import { db } from "~/server/db";
+import { getCupOrThrow } from "~/server/api/helpers/cup";
 import {
   generateProductQRCode,
   generateBatchQRCodes,
   type QRCodeType,
 } from "~/server/services/qrcode.service";
 import { products, labAnalyses } from "~/server/db/schema";
+import { notifyProductStatusChange } from "~/server/services/product-notification.service";
 import type { StoredCompoundRow } from "~/server/db/schema/lab-analyses";
 
-type ProtectedContext = {
-  db: typeof db;
-  userId: string;
-};
+const requireCup = (ctx: AuthedContext, cupId: string) =>
+  getCupOrThrow(ctx.db, cupId);
 
-const requireCup = async (ctx: ProtectedContext, cupId: string) => {
-  const cup = await ctx.db.query.cups.findFirst({
-    where: (cups, { eq }) => eq(cups.id, cupId),
-    columns: {
-      id: true,
-      name: true,
-    },
-  });
+/** Préfixe public sous lequel /api/upload/lab-analysis écrit les certificats. */
+const LAB_ANALYSIS_URL_PREFIX = "/uploads/lab-analyses/";
 
-  if (!cup) {
+/**
+ * Valide un `pdfUrl` d'analyse labo venu du client.
+ *
+ * Le seul `startsWith` ne suffit pas : `/uploads/lab-analyses/../../.env`
+ * commence bien par le préfixe mais `path.join` recollapse les `..` et sort
+ * du dossier. On résout donc le chemin absolu et on exige qu'il reste sous
+ * `public/uploads` (même garde que le DELETE de /api/upload).
+ */
+const assertLabAnalysisPdfUrl = (pdfUrl: string, productId?: string) => {
+  const expectedPrefix = productId
+    ? `${LAB_ANALYSIS_URL_PREFIX}${productId}/`
+    : LAB_ANALYSIS_URL_PREFIX;
+
+  if (!pdfUrl.startsWith(expectedPrefix)) {
     throw new TRPCError({
-      code: "NOT_FOUND",
-      message: "Cup non trouvee",
+      code: "BAD_REQUEST",
+      message: "Chemin de PDF non autorisé",
     });
   }
 
-  return cup;
+  const uploadsRoot = path.resolve(process.cwd(), "public", "uploads");
+  const resolved = path.resolve(
+    process.cwd(),
+    "public",
+    pdfUrl.replace(/^\//, "")
+  );
+
+  if (resolved !== uploadsRoot && !resolved.startsWith(uploadsRoot + path.sep)) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Chemin de PDF non autorisé",
+    });
+  }
+
+  return resolved;
+};
+
+/**
+ * Supprime du disque le PDF d'une analyse déjà enregistrée. Le `pdfUrl` en
+ * base a pu être posé avant la validation ci-dessus : on le revalide avant
+ * tout unlink, et on ignore silencieusement une valeur hors périmètre.
+ */
+const unlinkLabAnalysisPdf = async (pdfUrl: string) => {
+  let resolved: string;
+  try {
+    resolved = assertLabAnalysisPdfUrl(pdfUrl);
+  } catch {
+    return;
+  }
+  await unlink(resolved).catch(() => {});
 };
 
 /**
@@ -51,7 +88,7 @@ export const productRouter = createTRPCRouter({
    * Get all products for a cup grouped by category
    * Only accessible by organization members who own the cup
    */
-  listByCupGroupedByCategory: protectedProcedure
+  listByCupGroupedByCategory: organizerProcedure
     .input(
       z.object({
         cupId: z.string().min(1, "Cup ID requis"),
@@ -215,15 +252,12 @@ export const productRouter = createTRPCRouter({
       }
 
       // 3. Verify access: organizer (isAdmin or role) OR the product's producer
-      const user = await ctx.db.query.users.findFirst({
-        where: (users, { eq: eqFn }) => eqFn(users.id, ctx.userId),
-        columns: { isAdmin: true, role: true },
-      });
-      const isOrganizer = user?.isAdmin === true || user?.role === "organizer";
+      const isOrganizer = await callerIsOrganizer(ctx);
 
       const producer = await ctx.db.query.producers.findFirst({
         where: (producers, { eq: eqFn }) =>
           eqFn(producers.userId, ctx.userId),
+        columns: { id: true },
       });
 
       const isProducerOwner = producer?.id === product.registration.producerId;
@@ -256,7 +290,7 @@ export const productRouter = createTRPCRouter({
    * Generate QR codes for all products in a cup (batch)
    * Only accessible by organization members
    */
-  generateBatchQRCodes: protectedProcedure
+  generateBatchQRCodes: organizerProcedure
     .input(
       z.object({
         cupId: z.string().min(1, "Cup ID requis"),
@@ -390,7 +424,6 @@ export const productRouter = createTRPCRouter({
         });
       }
 
-      // 4. Verify organization membership
       return {
         id: product.id,
         name: product.name,
@@ -418,17 +451,7 @@ export const productRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const product = await ctx.db.query.products.findFirst({
         where: (p, { eq: eqFn }) => eqFn(p.id, input.productId),
-        with: {
-          registration: {
-            with: {
-              cup: {
-                columns: {
-                  id: true,
-                },
-              },
-            },
-          },
-        },
+        columns: { id: true, status: true },
       });
 
       if (!product) {
@@ -438,8 +461,7 @@ export const productRouter = createTRPCRouter({
         });
       }
 
-      // 3. Verify organization membership
-      // 4. Update product status
+      // 3. Update product status
       const updateData: {
         status: typeof input.status;
         updatedAt: Date;
@@ -460,9 +482,26 @@ export const productRouter = createTRPCRouter({
         .where(eq(products.id, input.productId))
         .returning();
 
+      // Notification au producteur, hors transaction et après l'écriture :
+      // le service relit le produit sur sa propre connexion (il verrait encore
+      // l'ancien statut depuis une transaction ouverte) et appelle Resend, dont
+      // la latence ne doit pas tenir un verrou. Un échec d'envoi ne doit pas
+      // faire échouer le changement de statut : le service renvoie son erreur
+      // au lieu de la lever.
+      let notified = false;
+      if (product.status !== input.status) {
+        const notification = await notifyProductStatusChange(
+          input.productId,
+          product.status,
+          input.status
+        );
+        notified = notification.success && !notification.skipped;
+      }
+
       return {
         success: true,
         product: updated,
+        notified,
       };
     }),
 
@@ -513,7 +552,7 @@ export const productRouter = createTRPCRouter({
    * Update a product's anonymous code
    * Only accessible by organization members
    */
-  updateAnonymousCode: protectedProcedure
+  updateAnonymousCode: organizerProcedure
     .input(
       z.object({
         productId: z.string().min(1, "Product ID requis"),
@@ -546,8 +585,7 @@ export const productRouter = createTRPCRouter({
         });
       }
 
-      // 3. Verify organization membership
-      // 4. Check uniqueness within category (if code is not null)
+      // 3. Check uniqueness within category (if code is not null)
       if (input.anonymousCode) {
         const existing = await ctx.db.query.products.findFirst({
           where: (p, { eq: eqFn, and: andFn }) =>
@@ -590,7 +628,7 @@ export const productRouter = createTRPCRouter({
    *   3. Organizer confirms → confirmLabAnalysis (upsert)
    * --------------------------------------------------------------------- */
 
-  getLabAnalysis: protectedProcedure
+  getLabAnalysis: organizerProcedure
     .input(z.object({ productId: z.string().min(1) }))
     .query(async ({ ctx, input }) => {
       const product = await ctx.db.query.products.findFirst({
@@ -611,7 +649,7 @@ export const productRouter = createTRPCRouter({
       return { analysis: analysis ?? null };
     }),
 
-  confirmLabAnalysis: protectedProcedure
+  confirmLabAnalysis: organizerProcedure
     .input(
       z.object({
         productId: z.string().min(1),
@@ -646,7 +684,8 @@ export const productRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      // Authz: the caller must be a member of the cup's organization.
+      assertLabAnalysisPdfUrl(input.pdfUrl, input.productId);
+
       const product = await ctx.db.query.products.findFirst({
         where: (p, { eq: eqFn }) => eqFn(p.id, input.productId),
         with: {
@@ -666,8 +705,7 @@ export const productRouter = createTRPCRouter({
         where: (la, { eq: eqFn }) => eqFn(la.productId, input.productId),
       });
       if (existing) {
-        const oldPath = path.join(process.cwd(), "public", existing.pdfUrl);
-        await unlink(oldPath).catch(() => {});
+        await unlinkLabAnalysisPdf(existing.pdfUrl);
       }
 
       // numeric columns are stored as strings in Drizzle (pg numeric → text to
@@ -722,7 +760,7 @@ export const productRouter = createTRPCRouter({
    * without a lab analysis are returned in a separate "without" bucket so
    * the UI can nudge the organizer to upload missing reports.
    */
-  rankByTerpenes: protectedProcedure
+  rankByTerpenes: organizerProcedure
     .input(z.object({ cupId: z.string().min(1) }))
     .query(async ({ ctx, input }) => {
       const cup = await requireCup(ctx, input.cupId);
@@ -845,7 +883,7 @@ export const productRouter = createTRPCRouter({
       };
     }),
 
-  deleteLabAnalysis: protectedProcedure
+  deleteLabAnalysis: organizerProcedure
     .input(z.object({ productId: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
       const product = await ctx.db.query.products.findFirst({
@@ -871,8 +909,7 @@ export const productRouter = createTRPCRouter({
         .delete(labAnalyses)
         .where(eq(labAnalyses.productId, input.productId));
 
-      const oldPath = path.join(process.cwd(), "public", existing.pdfUrl);
-      await unlink(oldPath).catch(() => {});
+      await unlinkLabAnalysisPdf(existing.pdfUrl);
 
       return { success: true, deleted: true };
     }),
@@ -880,7 +917,7 @@ export const productRouter = createTRPCRouter({
   /**
    * Toggle product exclusion from public results (disqualification, rule violation, etc.)
    */
-  toggleExcludeFromResults: protectedProcedure
+  toggleExcludeFromResults: organizerProcedure
     .input(
       z.object({
         productId: z.string().min(1),
@@ -888,16 +925,9 @@ export const productRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      // Verify the product exists and user has access
       const product = await ctx.db.query.products.findFirst({
         where: (p, { eq: eqFn }) => eqFn(p.id, input.productId),
-        with: {
-          registration: {
-            with: {
-              cup: true,
-            },
-          },
-        },
+        columns: { id: true },
       });
 
       if (!product) {
@@ -907,23 +937,17 @@ export const productRouter = createTRPCRouter({
         });
       }
 
-      // Verify user is organizer / admin
-      const user = await ctx.db.query.users.findFirst({
-        where: (u, { eq: eqFn }) => eqFn(u.id, ctx.userId),
-        columns: { isAdmin: true, role: true },
-      });
-
-      if (!user || (user.isAdmin !== true && user.role !== "organizer")) {
-        throw new TRPCError({
-          code: "FORBIDDEN",
-          message: "Accès réservé aux administrateurs",
-        });
-      }
-
+      // computeResults ignore les produits exclus : sans remise à null, le
+      // produit garderait son ancien score / rang / label et continuerait de
+      // les afficher (tableau de bord producteur, widget). Les rangs des
+      // autres produits ne sont recalculés qu'au prochain calcul de résultats.
       await ctx.db
         .update(products)
         .set({
           excludedFromResults: input.excluded,
+          ...(input.excluded
+            ? { finalScore: null, labelId: null, categoryRank: null }
+            : {}),
           updatedAt: new Date(),
         })
         .where(eq(products.id, input.productId));

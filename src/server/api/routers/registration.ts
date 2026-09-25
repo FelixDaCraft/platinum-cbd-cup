@@ -3,11 +3,22 @@ import { z } from "zod";
 import { nanoid } from "nanoid";
 import { and as drizzleAnd, eq, gte, lte } from "drizzle-orm";
 
-import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
+import {
+  createTRPCRouter,
+  protectedProcedure,
+  producerProcedure,
+  organizerProcedure,
+} from "~/server/api/trpc";
 import { db } from "~/server/db";
 import * as schema from "~/server/db/schema";
 import { createPaymentOrder, getTransaction } from "~/lib/viva";
-import { confirmPaidRegistration } from "~/server/services/registration-payment.service";
+import { formatPhaseDate } from "~/lib/validations/phases";
+import {
+  confirmPaidRegistration,
+  PaymentVerificationError,
+  type PaymentVerificationReason,
+} from "~/server/services/registration-payment.service";
+import { allocateInvoiceNumber } from "~/server/services/invoice.service";
 import {
   addProductSchema,
   removeProductSchema,
@@ -32,18 +43,99 @@ const getProducerByUser = async (ctx: ProtectedContext) =>
     where: (producers, { eq: eqFn }) => eqFn(producers.userId, ctx.userId),
   });
 
-const requireProducerByUser = async (ctx: ProtectedContext) => {
-  const producer = await getProducerByUser(ctx);
-
-  if (!producer) {
+/**
+ * Refuse tant que les inscriptions ne sont pas ouvertes. Facteur commun aux
+ * deux fenetres ci-dessous.
+ */
+function assertRegistrationHasOpened(cup: { registrationOpenAt: Date | null }) {
+  if (cup.registrationOpenAt && new Date() < new Date(cup.registrationOpenAt)) {
     throw new TRPCError({
-      code: "FORBIDDEN",
-      message: "Vous devez avoir un profil producteur",
+      code: "PRECONDITION_FAILED",
+      message: `Les inscriptions ne sont pas encore ouvertes (ouverture le ${formatPhaseDate(
+        cup.registrationOpenAt
+      )}).`,
     });
   }
+}
 
-  return producer;
-};
+/**
+ * Fenetre de DEPOT d'une inscription : creation et composition du panier.
+ *
+ * Aucun planificateur ne fait avancer `cups.status` (cf. phase-automation.ts,
+ * sans appelant) : les dates saisies par l'organisateur sont donc la seule
+ * source de verite. C'est ce controle qui decide quels produits concourent, donc
+ * celui qui protege l'integrite du concours ; il est strict.
+ */
+function assertRegistrationOpen(cup: {
+  registrationOpenAt: Date | null;
+  registrationCloseAt: Date | null;
+}) {
+  assertRegistrationHasOpened(cup);
+
+  if (cup.registrationCloseAt && new Date() > new Date(cup.registrationCloseAt)) {
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message: `Les inscriptions sont closes depuis le ${formatPhaseDate(
+        cup.registrationCloseAt
+      )}.`,
+    });
+  }
+}
+
+/**
+ * Fenetre de REGLEMENT d'une inscription deja deposee.
+ *
+ * Volontairement plus permissive que `assertRegistrationOpen` : un producteur
+ * inscrit dans les delais dont le paiement a echoue doit pouvoir le relancer
+ * apres la cloture (c'est ce que promet la page `register/cancel`). Son panier
+ * reste gele — `addProduct` ferme bien a `registrationCloseAt` — donc aucun
+ * produit nouveau n'entre au concours par ce chemin.
+ *
+ * La borne est le demarrage de la notation, pas la cloture des inscriptions :
+ * la confirmation declenche l'anonymisation des produits, et en injecter dans
+ * une cup deja en cours de jugement fausserait le concours. L'intervalle
+ * cloture -> debut de notation est la fenetre de reconciliation de
+ * l'organisateur.
+ */
+function assertPaymentWindowOpen(cup: {
+  status: string;
+  registrationOpenAt: Date | null;
+  ratingStartAt: Date | null;
+}) {
+  assertRegistrationHasOpened(cup);
+
+  const ratingStarted =
+    cup.status === "rating" ||
+    cup.status === "completed" ||
+    (cup.ratingStartAt !== null && new Date() >= new Date(cup.ratingStartAt));
+
+  if (ratingStarted) {
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message:
+        "La phase de notation a commence : cette inscription ne peut plus etre reglee en ligne. Contactez-nous via la page Contact.",
+    });
+  }
+}
+
+/**
+ * Message destine au producteur quand un paiement encaisse ne correspond pas a
+ * l'inscription qu'il pretend regler. Aucun de ces cas ne se resout tout seul :
+ * l'argent est chez Viva, l'inscription reste `pending_payment`, une
+ * intervention humaine est necessaire. Le message le dit explicitement plutot
+ * que de laisser croire a une panne passagere.
+ */
+function paymentVerificationMessage(reason: PaymentVerificationReason): string {
+  switch (reason) {
+    case "amount_mismatch":
+      return "Le montant regle ne correspond pas au total de votre inscription. Votre paiement n'est pas perdu : contactez-nous via la page Contact en precisant votre reference de paiement, nous regularisons.";
+    case "order_code_mismatch":
+    case "missing_order_code":
+      return "Ce paiement ne correspond pas a la commande enregistree pour votre inscription. Contactez-nous via la page Contact en precisant votre reference de paiement.";
+    case "amount_unknown":
+      return "Le montant de votre paiement n'a pas pu etre verifie. Contactez-nous via la page Contact pour finaliser votre inscription.";
+  }
+}
 
 /**
  * Helper to get the price for a product in a category
@@ -86,26 +178,83 @@ async function getProductPrice(
   return cup.defaultPricePerProduct ?? 0;
 }
 
+/** Client Drizzle au sein d'une transaction en cours. */
+type RegistrationTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
 /**
- * Helper to recalculate registration total from products
+ * Verrouille la ligne d'inscription pour la duree de la transaction et renvoie
+ * l'etat de facturation lu sous ce verrou.
+ *
+ * Toujours pris AVANT d'ecrire les produits, soit le meme ordre que
+ * `confirmPaidRegistration` (inscription puis produits) : verrouiller dans
+ * l'ordre inverse — insertion d'un produit, qui prend un KEY SHARE sur
+ * l'inscription, puis montee en FOR UPDATE — exposerait a un interblocage avec
+ * une confirmation concurrente.
  */
-async function recalculateRegistrationTotal(
-  db: typeof import("~/server/db").db,
+async function lockRegistrationForBilling(
+  tx: RegistrationTx,
   registrationId: string
-): Promise<number> {
-  const products = await db.query.products.findMany({
+) {
+  const [locked] = await tx
+    .select({
+      totalAmount: schema.registrations.totalAmount,
+      paymentOrderCode: schema.registrations.paymentOrderCode,
+    })
+    .from(schema.registrations)
+    .where(eq(schema.registrations.id, registrationId))
+    .for("update");
+
+  return locked;
+}
+
+/**
+ * Recalcule le total d'une inscription depuis ses produits et le persiste.
+ *
+ * Toute variation du total perime la commande Viva deja creee : le
+ * `paymentOrderCode` est efface. Sans cela, un producteur pouvait faire creer
+ * une commande pour un produit, en ajouter neuf, puis regler l'ancien checkout —
+ * `confirmPaidRegistration` refuse desormais ce sous-paiement, mais le
+ * producteur se retrouvait avec une commande perimee sans le savoir. En
+ * l'effacant ici, le prochain `createCheckoutSession` en emet une neuve au bon
+ * montant.
+ *
+ * `previous` est l'etat lu par `lockRegistrationForBilling` dans la meme
+ * transaction : le total et l'effacement de la commande sont donc commites avec
+ * l'ecriture du produit qui les a provoques.
+ */
+async function applyRecalculatedTotal(
+  tx: RegistrationTx,
+  registrationId: string,
+  previous: { totalAmount: number; paymentOrderCode: string | null } | undefined
+): Promise<{ total: number; paymentOrderInvalidated: boolean }> {
+  const products = await tx.query.products.findMany({
     where: (prod, { eq: eqFn }) => eqFn(prod.registrationId, registrationId),
+    columns: { priceAtRegistration: true },
   });
 
   const total = products.reduce((sum, p) => sum + p.priceAtRegistration, 0);
 
-  // Update registration total
-  await db
+  const paymentOrderInvalidated =
+    previous !== undefined &&
+    previous.paymentOrderCode !== null &&
+    previous.totalAmount !== total;
+
+  await tx
     .update(schema.registrations)
-    .set({ totalAmount: total, updatedAt: new Date() })
+    .set({
+      totalAmount: total,
+      ...(paymentOrderInvalidated ? { paymentOrderCode: null } : {}),
+      updatedAt: new Date(),
+    })
     .where(eq(schema.registrations.id, registrationId));
 
-  return total;
+  if (paymentOrderInvalidated) {
+    console.log(
+      `[Registration] ${registrationId}: total ${previous.totalAmount} -> ${total}, commande Viva ${previous.paymentOrderCode} perimee`
+    );
+  }
+
+  return { total, paymentOrderInvalidated };
 }
 
 export const registrationRouter = createTRPCRouter({
@@ -113,10 +262,10 @@ export const registrationRouter = createTRPCRouter({
    * Get or create a registration for the current producer on a cup
    * Creates a pending_payment registration if none exists
    */
-  getOrCreate: protectedProcedure
+  getOrCreate: producerProcedure
     .input(getOrCreateRegistrationSchema)
     .mutation(async ({ ctx, input }) => {
-      const producer = await requireProducerByUser(ctx);
+      const producer = ctx.producer;
 
       // Check cup exists and is open for registration
       const cup = await ctx.db.query.cups.findFirst({
@@ -137,6 +286,8 @@ export const registrationRouter = createTRPCRouter({
         });
       }
 
+      assertRegistrationOpen(cup);
+
       // Check if registration already exists
       const existingRegistration = await ctx.db.query.registrations.findFirst({
         where: (reg, { eq: eqFn, and: andFn }) =>
@@ -156,24 +307,33 @@ export const registrationRouter = createTRPCRouter({
       if (existingRegistration) {
         // If cancelled, reactivate it
         if (existingRegistration.status === "cancelled") {
-          await ctx.db
-            .update(schema.registrations)
-            .set({
-              status: "pending_payment",
-              totalAmount: 0,
-              updatedAt: new Date(),
-            })
-            .where(eq(schema.registrations.id, existingRegistration.id));
+          // Remise a zero et purge des produits dans la meme transaction, et
+          // `paymentOrderCode` efface : la commande Viva de la tentative
+          // annulee ne doit pas pouvoir regler le nouveau panier.
+          await ctx.db.transaction(async (tx) => {
+            await lockRegistrationForBilling(tx, existingRegistration.id);
 
-          // Delete any old products from cancelled registration
-          await ctx.db
-            .delete(schema.products)
-            .where(eq(schema.products.registrationId, existingRegistration.id));
+            await tx
+              .update(schema.registrations)
+              .set({
+                status: "pending_payment",
+                totalAmount: 0,
+                paymentOrderCode: null,
+                updatedAt: new Date(),
+              })
+              .where(eq(schema.registrations.id, existingRegistration.id));
+
+            // Delete any old products from cancelled registration
+            await tx
+              .delete(schema.products)
+              .where(eq(schema.products.registrationId, existingRegistration.id));
+          });
 
           return {
             ...existingRegistration,
             status: "pending_payment" as const,
             totalAmount: 0,
+            paymentOrderCode: null,
             products: [],
           };
         }
@@ -205,10 +365,10 @@ export const registrationRouter = createTRPCRouter({
    * Get a registration by ID with products
    * Only the owning producer can access
    */
-  getById: protectedProcedure
+  getById: producerProcedure
     .input(getRegistrationSchema)
     .query(async ({ ctx, input }) => {
-      const producer = await requireProducerByUser(ctx);
+      const producer = ctx.producer;
 
       // Get registration with products
       const registration = await ctx.db.query.registrations.findFirst({
@@ -248,10 +408,10 @@ export const registrationRouter = createTRPCRouter({
    * Add a product to a registration
    * Only pending_payment registrations can be modified
    */
-  addProduct: protectedProcedure
+  addProduct: producerProcedure
     .input(addProductSchema)
     .mutation(async ({ ctx, input }) => {
-      const producer = await requireProducerByUser(ctx);
+      const producer = ctx.producer;
 
       // Get registration and verify ownership
       const registration = await ctx.db.query.registrations.findFirst({
@@ -276,6 +436,20 @@ export const registrationRouter = createTRPCRouter({
         });
       }
 
+      const cup = await ctx.db.query.cups.findFirst({
+        where: (cups, { eq: eqFn }) => eqFn(cups.id, registration.cupId),
+        columns: { registrationOpenAt: true, registrationCloseAt: true },
+      });
+
+      if (!cup) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Cup non trouvee",
+        });
+      }
+
+      assertRegistrationOpen(cup);
+
       // Verify category belongs to the cup
       const category = await ctx.db.query.categories.findFirst({
         where: (cat, { eq: eqFn, and: andFn }) =>
@@ -295,27 +469,41 @@ export const registrationRouter = createTRPCRouter({
       // Get price for this product
       const price = await getProductPrice(ctx.db, registration.cupId, input.categoryId);
 
-      // Create product
-      const productId = nanoid();
-      const [product] = await ctx.db
-        .insert(schema.products)
-        .values({
-          id: productId,
-          registrationId: input.registrationId,
-          categoryId: input.categoryId,
-          name: input.name,
-          description: input.description ?? null,
-          priceAtRegistration: price,
-          status: "pending",
-        })
-        .returning();
+      // L'insertion et le recalcul du total sont commites ensemble : un produit
+      // enregistre sans que le total suive laisserait payer moins que du.
+      const { product, total, paymentOrderInvalidated } = await ctx.db.transaction(
+        async (tx) => {
+          const previous = await lockRegistrationForBilling(tx, input.registrationId);
 
-      // Recalculate total
-      const newTotal = await recalculateRegistrationTotal(ctx.db, input.registrationId);
+          const [created] = await tx
+            .insert(schema.products)
+            .values({
+              id: nanoid(),
+              registrationId: input.registrationId,
+              categoryId: input.categoryId,
+              name: input.name,
+              description: input.description ?? null,
+              priceAtRegistration: price,
+              status: "pending",
+            })
+            .returning();
+
+          const recalculated = await applyRecalculatedTotal(
+            tx,
+            input.registrationId,
+            previous
+          );
+
+          return { product: created, ...recalculated };
+        }
+      );
 
       return {
         product,
-        newTotal,
+        newTotal: total,
+        // Vrai si une commande Viva anterieure vient d'etre perimee : le client
+        // doit repasser par createCheckoutSession, l'ancien lien ne vaut plus.
+        paymentOrderInvalidated,
       };
     }),
 
@@ -323,10 +511,10 @@ export const registrationRouter = createTRPCRouter({
    * Remove a product from a registration
    * Only pending_payment registrations can be modified
    */
-  removeProduct: protectedProcedure
+  removeProduct: producerProcedure
     .input(removeProductSchema)
     .mutation(async ({ ctx, input }) => {
-      const producer = await requireProducerByUser(ctx);
+      const producer = ctx.producer;
 
       // Get product with registration
       const product = await ctx.db.query.products.findFirst({
@@ -358,20 +546,22 @@ export const registrationRouter = createTRPCRouter({
         });
       }
 
-      // Delete product
-      await ctx.db
-        .delete(schema.products)
-        .where(eq(schema.products.id, input.productId));
+      const { total, paymentOrderInvalidated } = await ctx.db.transaction(
+        async (tx) => {
+          const previous = await lockRegistrationForBilling(tx, product.registrationId);
 
-      // Recalculate total
-      const newTotal = await recalculateRegistrationTotal(
-        ctx.db,
-        product.registrationId
+          await tx
+            .delete(schema.products)
+            .where(eq(schema.products.id, input.productId));
+
+          return applyRecalculatedTotal(tx, product.registrationId, previous);
+        }
       );
 
       return {
         success: true,
-        newTotal,
+        newTotal: total,
+        paymentOrderInvalidated,
       };
     }),
 
@@ -379,10 +569,10 @@ export const registrationRouter = createTRPCRouter({
    * Get registration summary for payment
    * Returns products grouped by category with totals
    */
-  getSummary: protectedProcedure
+  getSummary: producerProcedure
     .input(getRegistrationSchema)
     .query(async ({ ctx, input }) => {
-      const producer = await requireProducerByUser(ctx);
+      const producer = ctx.producer;
 
       // Get registration with products and cup
       const registration = await ctx.db.query.registrations.findFirst({
@@ -528,10 +718,10 @@ export const registrationRouter = createTRPCRouter({
    * producer must be sent to. Only works for pending_payment registrations
    * that actually have products and a non-zero total.
    */
-  createCheckoutSession: protectedProcedure
+  createCheckoutSession: producerProcedure
     .input(getRegistrationSchema)
     .mutation(async ({ ctx, input }) => {
-      const producer = await requireProducerByUser(ctx);
+      const producer = ctx.producer;
 
       // Get registration with products and cup
       const registration = await ctx.db.query.registrations.findFirst({
@@ -546,6 +736,9 @@ export const registrationRouter = createTRPCRouter({
             columns: {
               id: true,
               name: true,
+              status: true,
+              registrationOpenAt: true,
+              ratingStartAt: true,
             },
           },
         },
@@ -565,6 +758,10 @@ export const registrationRouter = createTRPCRouter({
         });
       }
 
+      // Fenetre de reglement, pas de depot : le panier a ete compose avant la
+      // cloture (`addProduct`), on ne fait ici que le payer.
+      assertPaymentWindowOpen(registration.cup);
+
       if (registration.products.length === 0) {
         throw new TRPCError({
           code: "BAD_REQUEST",
@@ -573,9 +770,14 @@ export const registrationRouter = createTRPCRouter({
       }
 
       if (registration.totalAmount === 0) {
+        // Cas ouvert par le schéma (`cups.default_price_per_product` nullable,
+        // `categories.price_override` à 0) mais non branché côté client : la
+        // page d'inscription appelle toujours ce checkout. Le message doit
+        // donc rester lisible par un producteur, pas nommer une procédure.
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message: "Utilisez confirmFreeRegistration pour les inscriptions gratuites",
+          message:
+            "Cette inscription est gratuite : aucun paiement n'est requis. Contactez l'organisateur pour la faire confirmer.",
         });
       }
 
@@ -617,10 +819,10 @@ export const registrationRouter = createTRPCRouter({
    * from Viva and confirms the registration itself; `confirmPaidRegistration`
    * is idempotent, so whichever path runs second is a no-op.
    */
-  confirmVivaPayment: protectedProcedure
+  confirmVivaPayment: producerProcedure
     .input(z.object({ transactionId: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
-      const producer = await requireProducerByUser(ctx);
+      const producer = ctx.producer;
 
       let transaction;
       try {
@@ -663,12 +865,39 @@ export const registrationRouter = createTRPCRouter({
         });
       }
 
-      await confirmPaidRegistration({
-        registrationId,
-        transactionId: transaction.transactionId,
-        orderCode: transaction.orderCode,
-      });
+      let result;
+      try {
+        result = await confirmPaidRegistration({
+          registrationId,
+          transactionId: transaction.transactionId,
+          orderCode: transaction.orderCode,
+          // Deja lu chez Viva juste au-dessus : sans ce montant le service
+          // refait la meme requete pour rien.
+          amount: transaction.amount,
+        });
+      } catch (error) {
+        if (error instanceof PaymentVerificationError) {
+          // Le paiement existe mais ne correspond pas a l'inscription : c'est un
+          // litige a traiter a la main, pas une panne serveur.
+          console.error(
+            `[Registration] Paiement ${transaction.transactionId} refuse pour l'inscription ${registrationId} (${error.reason}): ${error.message}`
+          );
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: paymentVerificationMessage(error.reason),
+          });
+        }
+        throw error;
+      }
 
+      if (result.status === "not_found") {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Inscription non trouvee",
+        });
+      }
+
+      // `already_confirmed` : le webhook est passe avant le retour navigateur.
       return { status: "confirmed" as const, registrationId };
     }),
 
@@ -676,10 +905,10 @@ export const registrationRouter = createTRPCRouter({
    * Confirm a free registration (totalAmount = 0)
    * Directly sets status to confirmed without payment
    */
-  confirmFreeRegistration: protectedProcedure
+  confirmFreeRegistration: producerProcedure
     .input(getRegistrationSchema)
     .mutation(async ({ ctx, input }) => {
-      const producer = await requireProducerByUser(ctx);
+      const producer = ctx.producer;
 
       // Get registration
       const registration = await ctx.db.query.registrations.findFirst({
@@ -690,6 +919,13 @@ export const registrationRouter = createTRPCRouter({
           ),
         with: {
           products: true,
+          cup: {
+            columns: {
+              status: true,
+              registrationOpenAt: true,
+              ratingStartAt: true,
+            },
+          },
         },
       });
 
@@ -707,6 +943,10 @@ export const registrationRouter = createTRPCRouter({
         });
       }
 
+      // Meme fenetre que le reglement payant : confirmer une inscription
+      // gratuite est l'acte equivalent, et son panier est gele de la meme facon.
+      assertPaymentWindowOpen(registration.cup);
+
       if (registration.products.length === 0) {
         throw new TRPCError({
           code: "BAD_REQUEST",
@@ -721,34 +961,68 @@ export const registrationRouter = createTRPCRouter({
         });
       }
 
-      // Confirm registration
-      await ctx.db
-        .update(schema.registrations)
-        .set({
-          status: "confirmed",
-          updatedAt: new Date(),
-        })
-        .where(eq(schema.registrations.id, registration.id));
+      const now = new Date();
 
-      // Anonymize products for free registrations too
-      const anonymizedProducts = await anonymizeRegistrationProducts(
-        ctx.db,
-        registration.id
-      );
+      // Meme contrat que le chemin payant (confirmPaidRegistration) : numero de
+      // facture et anonymisation commites avec le passage en `confirmed`.
+      // Sans l'attribution ici, une inscription gratuite n'etait numerotee qu'au
+      // premier telechargement de sa facture, donc hors ordre chronologique.
+      const confirmation = await ctx.db.transaction(async (tx) => {
+        // Verrou de ligne : un double clic ne doit pas anonymiser deux fois ni
+        // consommer deux numeros de facture.
+        const [locked] = await tx
+          .select({ status: schema.registrations.status })
+          .from(schema.registrations)
+          .where(eq(schema.registrations.id, registration.id))
+          .for("update");
+
+        if (locked?.status === "confirmed") {
+          return { alreadyConfirmed: true as const };
+        }
+
+        const invoiceNumber = await allocateInvoiceNumber(tx, registration.id, now);
+
+        await tx
+          .update(schema.registrations)
+          .set({
+            status: "confirmed",
+            updatedAt: now,
+          })
+          .where(eq(schema.registrations.id, registration.id));
+
+        // Dans la transaction : une inscription confirmee dont les produits ne
+        // seraient pas anonymises serait lisible en clair par le jury.
+        const anonymizedProducts = await anonymizeRegistrationProducts(
+          tx as unknown as typeof db,
+          registration.id
+        );
+
+        return { alreadyConfirmed: false as const, invoiceNumber, anonymizedProducts };
+      });
+
+      if (confirmation.alreadyConfirmed) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Cette inscription a deja ete confirmee ou annulee",
+        });
+      }
+
+      const { invoiceNumber, anonymizedProducts } = confirmation;
 
       return {
         success: true,
         registrationId: registration.id,
+        invoiceNumber,
         anonymizedProducts,
       };
     }),
 
   /**
    * List all registrations for a cup (organizer view)
-   * Only organization members can access this endpoint
-   * Includes producer details and products
+   * Organisateur uniquement : la reponse expose l'email, le SIRET et le montant
+   * paye de chaque producteur participant.
    */
-  listByCup: protectedProcedure
+  listByCup: organizerProcedure
     .input(listByCupSchema)
     .query(async ({ ctx, input }) => {
       // Verify cup exists (single-tenant)

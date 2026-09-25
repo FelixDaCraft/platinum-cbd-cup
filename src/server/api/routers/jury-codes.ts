@@ -5,6 +5,7 @@
  */
 
 import { z } from "zod";
+import { randomInt } from "crypto";
 import { TRPCError } from "@trpc/server";
 import { eq, and, desc, inArray } from "drizzle-orm";
 import { nanoid } from "nanoid";
@@ -12,7 +13,8 @@ import {
   createTRPCRouter,
   organizerProcedure,
   protectedProcedure,
-  publicProcedure,
+  rateLimitedPublicProcedure,
+  rateLimitMiddleware,
 } from "~/server/api/trpc";
 import * as schema from "~/server/db/schema";
 
@@ -25,11 +27,50 @@ function generateShortCode(): string {
   for (let s = 0; s < 3; s++) {
     let segment = "";
     for (let i = 0; i < 3; i++) {
-      segment += chars[Math.floor(Math.random() * chars.length)];
+      // randomInt (CSPRNG) et non Math.random : un code d'invitation ne doit
+      // pas être prédictible à partir de codes déjà distribués.
+      segment += chars[randomInt(chars.length)];
     }
     segments.push(segment);
   }
   return segments.join("-");
+}
+
+/** Client de base compatible avec `ctx.db` comme avec une transaction. */
+type DbClient =
+  | typeof import("~/server/db").db
+  | Parameters<Parameters<typeof import("~/server/db").db.transaction>[0]>[0];
+
+/**
+ * Aligne `users.role` sur "jury" au moment ou le compte devient jure.
+ *
+ * Sans cette ecriture la colonne reste sur son defaut "producer" et
+ * `user.getRedirectPath` renvoie le jure vers /producer/dashboard. Meme regle
+ * que dans jury.ts (duplique volontairement : les deux routeurs sont les seuls
+ * a creer des jures, et un import croise entre routeurs serait pire).
+ * Ni organisateur ni producteur deja identifie n'est degrade.
+ */
+async function alignUserRoleToJury(db: DbClient, userId: string) {
+  const user = await db.query.users.findFirst({
+    where: eq(schema.users.id, userId),
+    columns: { role: true, isAdmin: true },
+  });
+
+  if (!user || user.isAdmin || user.role === "organizer" || user.role === "jury") {
+    return;
+  }
+
+  const producerProfile = await db.query.producers.findFirst({
+    where: eq(schema.producers.userId, userId),
+    columns: { id: true },
+  });
+
+  if (producerProfile) return;
+
+  await db
+    .update(schema.users)
+    .set({ role: "jury", updatedAt: new Date() })
+    .where(eq(schema.users.id, userId));
 }
 
 const normalizeCode = (code: string) =>
@@ -142,7 +183,7 @@ export const juryCodesRouter = createTRPCRouter({
   /**
    * List all invitation codes for a cup
    */
-  list: protectedProcedure
+  list: organizerProcedure
     .input(
       z.object({
         cupId: z.string().min(1, "Cup ID requis"),
@@ -215,29 +256,11 @@ export const juryCodesRouter = createTRPCRouter({
     }),
 
   /**
-   * Get unique destinations for a cup (for filter dropdown)
-   */
-  getDestinations: protectedProcedure
-    .input(z.object({ cupId: z.string().min(1, "Cup ID requis") }))
-    .query(async ({ ctx, input }) => {
-      const codes = await ctx.db.query.juryInvitationCodes.findMany({
-        where: eq(schema.juryInvitationCodes.cupId, input.cupId),
-        columns: { destination: true },
-      });
-
-      const destinations = [...new Set(
-        codes
-          .map((c) => c.destination)
-          .filter((d): d is string => d !== null && d.trim() !== "")
-      )].sort();
-
-      return destinations;
-    }),
-
-  /**
    * Get code details by code string (public endpoint for activation)
+   * Limité en débit : sans cela, l'espace des codes (9 caractères sur un
+   * alphabet de 32) serait énumérable depuis /api/trpc.
    */
-  getByCode: publicProcedure
+  getByCode: rateLimitedPublicProcedure
     .input(z.object({ code: z.string().min(1, "Code requis") }))
     .query(async ({ ctx, input }) => {
       const code = await ctx.db.query.juryInvitationCodes.findFirst({
@@ -304,6 +327,7 @@ export const juryCodesRouter = createTRPCRouter({
    * Activate a code - link it to the current user and create jury assignment
    */
   activate: protectedProcedure
+    .use(rateLimitMiddleware)
     .input(z.object({ code: z.string().min(1, "Code requis") }))
     .mutation(async ({ ctx, input }) => {
       const invitationCode = await ctx.db.query.juryInvitationCodes.findFirst({
@@ -342,6 +366,31 @@ export const juryCodesRouter = createTRPCRouter({
         });
       }
 
+      // Conflit d'intérêts : un producteur inscrit à cette cup ne peut pas
+      // devenir juré de la cup où ses propres produits sont notés.
+      const producer = await ctx.db.query.producers.findFirst({
+        where: eq(schema.producers.userId, ctx.userId),
+        columns: { id: true },
+      });
+
+      if (producer) {
+        const ownRegistration = await ctx.db.query.registrations.findFirst({
+          where: and(
+            eq(schema.registrations.cupId, invitationCode.cupId),
+            eq(schema.registrations.producerId, producer.id)
+          ),
+          columns: { id: true },
+        });
+
+        if (ownRegistration) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message:
+              "Vous êtes inscrit à cette cup en tant que producteur : vous ne pouvez pas en devenir juré",
+          });
+        }
+      }
+
       const existingCupJury = await ctx.db.query.cupJuries.findFirst({
         where: and(
           eq(schema.cupJuries.cupId, invitationCode.cupId),
@@ -349,79 +398,97 @@ export const juryCodesRouter = createTRPCRouter({
         ),
       });
 
-      // Sequential operations (neon-http doesn't support transactions)
+      // Une transaction : sans elle, un échec après l'étape 1 brûlait le code
+      // sans créer le profil, et le juré restait bloqué sur « code déjà utilisé ».
+      await ctx.db.transaction(async (tx) => {
+        // 1. Consommer le code. Le filtre sur `status` rend la prise atomique :
+        //    deux activations concurrentes du même code, une seule gagne.
+        const claimed = await tx
+          .update(schema.juryInvitationCodes)
+          .set({
+            status: "activated",
+            activatedByUserId: ctx.userId,
+            activatedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(schema.juryInvitationCodes.id, invitationCode.id),
+              eq(schema.juryInvitationCodes.status, "pending")
+            )
+          )
+          .returning({ id: schema.juryInvitationCodes.id });
 
-      // 1. Update code status
-      await ctx.db
-        .update(schema.juryInvitationCodes)
-        .set({
-          status: "activated",
-          activatedByUserId: ctx.userId,
-          activatedAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .where(eq(schema.juryInvitationCodes.id, invitationCode.id));
+        if (claimed.length === 0) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Ce code a déjà été utilisé",
+          });
+        }
 
-      // 2. Ensure user has a jury profile
-      let juryProfileId: string;
-      const existingProfile = await ctx.db.query.juryProfiles.findFirst({
-        where: eq(schema.juryProfiles.userId, ctx.userId),
-      });
-
-      if (existingProfile) {
-        juryProfileId = existingProfile.id;
-      } else {
-        juryProfileId = nanoid();
-        await ctx.db.insert(schema.juryProfiles).values({
-          id: juryProfileId,
-          userId: ctx.userId,
-          juryType: "public",
+        // 2. Ensure user has a jury profile
+        let juryProfileId: string;
+        const existingProfile = await tx.query.juryProfiles.findFirst({
+          where: eq(schema.juryProfiles.userId, ctx.userId),
         });
-      }
 
-      // 3. Handle cup jury and category assignments
-      if (existingCupJury) {
-        const categoryIds = invitationCode.categories.map((c) => c.categoryId);
+        if (existingProfile) {
+          juryProfileId = existingProfile.id;
+        } else {
+          juryProfileId = nanoid();
+          await tx.insert(schema.juryProfiles).values({
+            id: juryProfileId,
+            userId: ctx.userId,
+            juryType: "public",
+          });
+        }
 
-        const existingAssignments = await ctx.db.query.juryCategoryAssignments.findMany({
-          where: and(
-            eq(schema.juryCategoryAssignments.cupJuryId, existingCupJury.id),
-            inArray(schema.juryCategoryAssignments.categoryId, categoryIds)
-          ),
-        });
-        const existingCategoryIds = new Set(existingAssignments.map((a) => a.categoryId));
+        // 3. Handle cup jury and category assignments
+        if (existingCupJury) {
+          const categoryIds = invitationCode.categories.map((c) => c.categoryId);
 
-        const newAssignments = categoryIds
-          .filter((catId) => !existingCategoryIds.has(catId))
-          .map((catId) => ({
+          const existingAssignments = await tx.query.juryCategoryAssignments.findMany({
+            where: and(
+              eq(schema.juryCategoryAssignments.cupJuryId, existingCupJury.id),
+              inArray(schema.juryCategoryAssignments.categoryId, categoryIds)
+            ),
+          });
+          const existingCategoryIds = new Set(existingAssignments.map((a) => a.categoryId));
+
+          const newAssignments = categoryIds
+            .filter((catId) => !existingCategoryIds.has(catId))
+            .map((catId) => ({
+              id: nanoid(),
+              cupJuryId: existingCupJury.id,
+              categoryId: catId,
+            }));
+
+          if (newAssignments.length > 0) {
+            await tx.insert(schema.juryCategoryAssignments).values(newAssignments);
+          }
+        } else {
+          const cupJuryId = nanoid();
+          await tx.insert(schema.cupJuries).values({
+            id: cupJuryId,
+            cupId: invitationCode.cupId,
+            userId: ctx.userId,
+            juryProfileId: juryProfileId,
+            isActive: true,
+          });
+
+          const assignments = invitationCode.categories.map((c) => ({
             id: nanoid(),
-            cupJuryId: existingCupJury.id,
-            categoryId: catId,
+            cupJuryId: cupJuryId,
+            categoryId: c.categoryId,
           }));
 
-        if (newAssignments.length > 0) {
-          await ctx.db.insert(schema.juryCategoryAssignments).values(newAssignments);
+          if (assignments.length > 0) {
+            await tx.insert(schema.juryCategoryAssignments).values(assignments);
+          }
         }
-      } else {
-        const cupJuryId = nanoid();
-        await ctx.db.insert(schema.cupJuries).values({
-          id: cupJuryId,
-          cupId: invitationCode.cupId,
-          userId: ctx.userId,
-          juryProfileId: juryProfileId,
-          isActive: true,
-        });
 
-        const assignments = invitationCode.categories.map((c) => ({
-          id: nanoid(),
-          cupJuryId: cupJuryId,
-          categoryId: c.categoryId,
-        }));
-
-        if (assignments.length > 0) {
-          await ctx.db.insert(schema.juryCategoryAssignments).values(assignments);
-        }
-      }
+        await alignUserRoleToJury(tx, ctx.userId);
+      });
 
       return {
         success: true,
@@ -538,7 +605,7 @@ export const juryCodesRouter = createTRPCRouter({
   /**
    * Get statistics for a cup's invitation codes
    */
-  getStats: protectedProcedure
+  getStats: organizerProcedure
     .input(z.object({ cupId: z.string().min(1, "Cup ID requis") }))
     .query(async ({ ctx, input }) => {
       const cup = await ctx.db.query.cups.findFirst({

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -40,7 +40,11 @@ const nothingCss = `
   --n-surface-raised: #1A1A1A;
   --n-border: #222222;
   --n-border-visible: #333333;
-  --n-text-disabled: #666666;
+  /* #666666 ne donnait que 3.66:1 sur --n-black, sous le seuil WCAG AA (4.5:1),
+     alors que ce token porte de l'information (libellés de stats, en-têtes de
+     tableau, "[LOADING...]") et pas seulement des éléments désactivés.
+     #858585 = 5.70:1 sur #000, 5.12:1 sur --n-surface, 4.72:1 sur --n-surface-raised. */
+  --n-text-disabled: #858585;
   --n-text-secondary: #999999;
   --n-text-primary: #E8E8E8;
   --n-text-display: #FFFFFF;
@@ -179,6 +183,25 @@ const nothingCss = `
 .nothing-org .animate-pulse { animation: none !important; }
 .nothing-org .animated-gradient-bg { display: none !important; }
 .nothing-org .bg-grid-pattern { display: none !important; }
+
+/* Lien d'évitement : hors écran tant qu'il n'a pas le focus. */
+.nothing-org .n-skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 100;
+  padding: 10px 16px;
+  font-family: 'Space Mono', monospace;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  background-color: var(--n-surface-raised);
+  color: var(--n-text-display);
+  border: 1px solid var(--n-border-visible);
+}
+.nothing-org .n-skip-link:focus {
+  left: 8px;
+  top: 8px;
+}
 `;
 
 // ─── Navigation Types ───────────────────────────────────────────────────────
@@ -198,36 +221,40 @@ interface CollapsibleSection {
 
 // ─── Sidebar check ──────────────────────────────────────────────────────────
 
-function isInsideCupDetail(pathname: string, baseUrl: string): boolean {
-  const cupsPath = baseUrl ? `${baseUrl}/cups` : "/cups";
-  const match = pathname.match(new RegExp(`^${cupsPath.replace("/", "\\/")}\\/([^/]+)`));
-  return !!(match && match[1] && match[1].length > 0 && pathname !== cupsPath);
+// Racine de l'espace organisateur. C'était un préfixe de sous-domaine
+// paramétrable du temps du SaaS multi-tenant ; il ne reste qu'une seule
+// installation, donc une seule racine.
+const ORG_ROOT = "/dashboard";
+const CUPS_PATH = `${ORG_ROOT}/cups`;
+
+function isInsideCupDetail(pathname: string): boolean {
+  const match = pathname.match(new RegExp(`^${CUPS_PATH.replace("/", "\\/")}\\/([^/]+)`));
+  return !!(match && match[1] && match[1].length > 0 && pathname !== CUPS_PATH);
 }
 
 // ─── Nothing Organizer Sidebar ──────────────────────────────────────────────
 
-function NothingOrgSidebar({ baseUrl = "" }: { baseUrl?: string }) {
+function NothingOrgSidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const organization = useOrganization();
   const { data: session } = useSession();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>(() => {
-    const aboutPath = `${baseUrl}/settings/portal/about`;
-    const articlesPath = `${baseUrl}/articles`;
-    const pressPath = `${baseUrl}/settings/portal/press`;
-    const seoPath = `${baseUrl}/settings/portal/seo`;
-    const domainPath = `${baseUrl}/settings/portal`;
-    return {
-      contenu: pathname.startsWith(aboutPath) || pathname.startsWith(articlesPath) || pathname.startsWith(pressPath),
-      domainSeo: pathname === domainPath || pathname.startsWith(seoPath),
-    };
-  });
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>(() => ({
+    contenu:
+      pathname.startsWith(`${ORG_ROOT}/settings/portal/about`) ||
+      pathname.startsWith(`${ORG_ROOT}/articles`) ||
+      pathname.startsWith(`${ORG_ROOT}/settings/portal/press`),
+  }));
+  // Référence stable : MobileNavDrawer la garde en dépendance de son effet
+  // (piège à focus + écouteur Échap), qu'on ne veut pas réinstaller à chaque
+  // rendu de la barre latérale.
+  const closeMobileMenu = useCallback(() => setMobileMenuOpen(false), []);
 
-  const inCupDetail = isInsideCupDetail(pathname, baseUrl);
+  const inCupDetail = isInsideCupDetail(pathname);
   if (inCupDetail) return null;
 
-  const buildPath = (path: string) => `${baseUrl}${path}`;
+  const buildPath = (path: string) => `${ORG_ROOT}${path}`;
 
   const handleLogout = async () => {
     await authClient.signOut({ fetchOptions: { onSuccess: () => router.push("/login") } });
@@ -249,19 +276,18 @@ function NothingOrgSidebar({ baseUrl = "" }: { baseUrl?: string }) {
   const contenuSection: CollapsibleSection = {
     id: "contenu", label: "CONTENU", icon: FileText,
     items: [
-      { href: buildPath("/settings/portal/about"), label: "A PROPOS", icon: Info },
-      { href: buildPath("/articles"), label: "ACTUALITES", icon: Newspaper },
+      { href: buildPath("/settings/portal/about"), label: "À PROPOS", icon: Info },
+      { href: buildPath("/articles"), label: "ACTUALITÉS", icon: Newspaper },
       { href: buildPath("/settings/portal/press"), label: "PRESSE", icon: Megaphone },
     ],
   };
 
   const isActive = (href: string) => {
     const dashRoot = buildPath("");
-    const cupsPath = buildPath("/cups");
     const settingsPath = buildPath("/settings");
     const portalPath = buildPath("/settings/portal");
     if (href === dashRoot) return pathname === dashRoot || pathname === dashRoot + "/";
-    if (href === cupsPath) return pathname === cupsPath;
+    if (href === CUPS_PATH) return pathname === CUPS_PATH;
     if (href === settingsPath) return pathname === settingsPath;
     if (href === portalPath) return pathname === portalPath;
     return pathname === href || pathname.startsWith(href + "/");
@@ -277,6 +303,9 @@ function NothingOrgSidebar({ baseUrl = "" }: { baseUrl?: string }) {
         key={item.href}
         href={item.href}
         onClick={onNav}
+        // L'état actif n'était signalé que par la couleur : inaudible au
+        // lecteur d'écran sans aria-current.
+        aria-current={active ? "page" : undefined}
         className="flex items-center gap-3 px-3 py-2 text-xs relative transition-colors duration-200"
         style={{
           fontFamily: "'Space Mono', monospace",
@@ -302,6 +331,7 @@ function NothingOrgSidebar({ baseUrl = "" }: { baseUrl?: string }) {
         <button
           type="button"
           onClick={() => toggleSection(section.id)}
+          aria-expanded={expanded ?? false}
           className="flex items-center gap-3 px-3 py-2 text-xs w-full transition-colors duration-200"
           style={{
             fontFamily: "'Space Mono', monospace",
@@ -327,6 +357,7 @@ function NothingOrgSidebar({ baseUrl = "" }: { baseUrl?: string }) {
                   key={item.href}
                   href={item.href}
                   onClick={onNav}
+                  aria-current={active ? "page" : undefined}
                   className="flex items-center gap-2 px-2 py-1.5 text-xs transition-colors duration-200"
                   style={{
                     fontFamily: "'Space Mono', monospace",
@@ -365,7 +396,7 @@ function NothingOrgSidebar({ baseUrl = "" }: { baseUrl?: string }) {
       </div>
 
       {/* Nav */}
-      <div className="flex-1 overflow-y-auto py-3 px-2 min-h-0 space-y-1">
+      <nav aria-label="Navigation organisateur" className="flex-1 overflow-y-auto py-3 px-2 min-h-0 space-y-1">
         {mainNavItems.map(i => renderItem(i, onNav))}
 
         <div className="my-3 mx-3" style={{ borderTop: "1px solid var(--n-border)" }} />
@@ -379,8 +410,8 @@ function NothingOrgSidebar({ baseUrl = "" }: { baseUrl?: string }) {
         <p className="px-3 pb-1" style={{ fontFamily: "'Space Mono', monospace", fontSize: "9px", letterSpacing: "0.1em", color: "var(--n-text-disabled)" }}>
           CONFIGURATION
         </p>
-        {renderItem({ href: buildPath("/settings"), label: "PARAMETRES", icon: Settings }, onNav)}
-      </div>
+        {renderItem({ href: buildPath("/settings"), label: "PARAMÈTRES", icon: Settings }, onNav)}
+      </nav>
 
       {/* User */}
       {session?.user && (
@@ -396,7 +427,13 @@ function NothingOrgSidebar({ baseUrl = "" }: { baseUrl?: string }) {
               <p className="text-xs font-medium truncate" style={{ color: "var(--n-text-primary)" }}>{session.user.name ?? "Utilisateur"}</p>
               <p className="text-[10px] truncate" style={{ color: "var(--n-text-disabled)" }}>{session.user.email}</p>
             </div>
-            <button onClick={handleLogout} className="p-2 transition-colors" style={{ color: "var(--n-text-disabled)" }} title="Deconnexion">
+            <button
+              onClick={handleLogout}
+              className="p-2 transition-colors"
+              style={{ color: "var(--n-text-disabled)" }}
+              title="Déconnexion"
+              aria-label="Déconnexion"
+            >
               <LogOut className="h-4 w-4" strokeWidth={1.5} />
             </button>
           </div>
@@ -416,6 +453,9 @@ function NothingOrgSidebar({ baseUrl = "" }: { baseUrl?: string }) {
       <div className="lg:hidden fixed top-4 left-4 z-50">
         <button
           onClick={() => setMobileMenuOpen(true)}
+          aria-label="Ouvrir le menu"
+          aria-expanded={mobileMenuOpen}
+          aria-controls={MOBILE_DRAWER_ID}
           className="flex items-center justify-center w-10 h-10 rounded-lg transition-colors"
           style={{ backgroundColor: "var(--n-surface)", border: "1px solid var(--n-border-visible)", color: "var(--n-text-secondary)" }}
         >
@@ -424,33 +464,109 @@ function NothingOrgSidebar({ baseUrl = "" }: { baseUrl?: string }) {
       </div>
 
       {/* Mobile overlay */}
-      {mobileMenuOpen && (
-        <div className="lg:hidden fixed inset-0 z-50 flex">
-          <div className="absolute inset-0 bg-black/80" onClick={() => setMobileMenuOpen(false)} />
-          <div className="relative w-72 h-full border-r" style={{ backgroundColor: "var(--n-black)", borderColor: "var(--n-border)" }}>
-            <button
-              onClick={() => setMobileMenuOpen(false)}
-              className="absolute top-4 right-4 p-1"
-              style={{ color: "var(--n-text-disabled)" }}
-            >
-              <X className="h-5 w-5" strokeWidth={1.5} />
-            </button>
-            {navContent(() => setMobileMenuOpen(false))}
-          </div>
-        </div>
-      )}
+      <MobileNavDrawer open={mobileMenuOpen} onClose={closeMobileMenu}>
+        {navContent(closeMobileMenu)}
+      </MobileNavDrawer>
     </>
   );
 }
 
-// ─── Mobile Header ──────────────────────────────────────────────────────────
+// ─── Mobile drawer ──────────────────────────────────────────────────────────
 
-export function NothingMobileHeader({ title, subtitle }: { title: string; subtitle?: string }) {
+const MOBILE_DRAWER_ID = "nothing-org-mobile-nav";
+
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/**
+ * Tiroir de navigation mobile.
+ *
+ * C'était un simple `div fixed inset-0` : pas de rôle, pas de fermeture au
+ * clavier, et le focus continuait de parcourir la page masquée derrière lui.
+ * On lui donne donc le contrat d'une boîte de dialogue modale — role/aria-modal,
+ * touche Échap, piège à focus, restitution du focus au déclencheur — et on
+ * gèle le défilement de la page tant qu'il est ouvert.
+ */
+function MobileNavDrawer({
+  open,
+  onClose,
+  children,
+}: {
+  open: boolean;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const panel = panelRef.current;
+    panel?.focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+      if (event.key !== "Tab" || !panel) return;
+
+      const focusables = Array.from(
+        panel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
+      );
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (!first || !last) {
+        event.preventDefault();
+        return;
+      }
+      const active = document.activeElement;
+      if (event.shiftKey && (active === first || active === panel)) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+      previouslyFocused?.focus();
+    };
+  }, [open, onClose]);
+
+  if (!open) return null;
+
   return (
-    <div className="lg:hidden flex items-center gap-3 p-4 pl-16 sticky top-0 z-40 border-b" style={{ backgroundColor: "var(--n-black)", borderColor: "var(--n-border)" }}>
-      <div className="flex-1 min-w-0">
-        <h1 className="n-font-body text-lg font-medium truncate" style={{ color: "var(--n-text-display)" }}>{title}</h1>
-        {subtitle && <p className="n-label truncate mt-0.5">{subtitle}</p>}
+    <div className="lg:hidden fixed inset-0 z-50 flex">
+      <div className="absolute inset-0 bg-black/80" onClick={onClose} aria-hidden="true" />
+      <div
+        ref={panelRef}
+        id={MOBILE_DRAWER_ID}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Menu de navigation"
+        tabIndex={-1}
+        className="relative w-72 h-full border-r outline-none"
+        style={{ backgroundColor: "var(--n-black)", borderColor: "var(--n-border)" }}
+      >
+        <button
+          onClick={onClose}
+          aria-label="Fermer le menu"
+          className="absolute top-4 right-4 p-1"
+          style={{ color: "var(--n-text-disabled)" }}
+        >
+          <X className="h-5 w-5" strokeWidth={1.5} />
+        </button>
+        {children}
       </div>
     </div>
   );
@@ -464,15 +580,24 @@ interface NothingOrganizerLayoutProps {
 
 export function NothingOrganizerLayout({ children }: NothingOrganizerLayoutProps) {
   const pathname = usePathname();
-  const inCupDetail = isInsideCupDetail(pathname, "/dashboard");
+  const inCupDetail = isInsideCupDetail(pathname);
 
   return (
-    <PWAWrapper portal="organizer">
+    <PWAWrapper>
       <style dangerouslySetInnerHTML={{ __html: nothingCss }} />
       <div className="nothing-org min-h-screen" style={{ backgroundColor: "var(--n-black)" }}>
-        <NothingOrgSidebar baseUrl="/dashboard" />
+        {/* Premier élément focusable de la page : permet de sauter la barre
+            latérale, qui compte une trentaine de liens répétés à chaque écran. */}
+        <a href="#contenu-principal" className="n-skip-link">
+          Aller au contenu
+        </a>
+        <NothingOrgSidebar />
         <div className={cn("flex-1 flex flex-col min-h-screen relative", !inCupDetail && "lg:ml-64")}>
-          <main className={inCupDetail ? "flex-1 overflow-auto" : "flex-1 overflow-auto p-6 lg:p-8"}>
+          <main
+            id="contenu-principal"
+            tabIndex={-1}
+            className={inCupDetail ? "flex-1 overflow-auto" : "flex-1 overflow-auto p-6 lg:p-8"}
+          >
             {children}
           </main>
         </div>

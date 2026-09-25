@@ -1,5 +1,6 @@
-import { pgTable, text, timestamp, integer, unique, numeric, boolean } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { pgTable, text, timestamp, integer, unique, numeric, boolean, index, check } from "drizzle-orm/pg-core";
+import { relations, sql } from "drizzle-orm";
+import { generateId } from "./id";
 import { registrations } from "./registrations";
 import { categories } from "./categories";
 import { cupLabels } from "./cup-labels";
@@ -21,7 +22,9 @@ export type ProductStatus = (typeof productStatusEnum)[number];
 export const products = pgTable(
   "products",
   {
-    id: text("id").primaryKey(), // nanoid generated
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => generateId()),
     registrationId: text("registration_id")
       .notNull()
       .references(() => registrations.id, { onDelete: "cascade" }),
@@ -41,7 +44,7 @@ export const products = pgTable(
     // Generated after payment confirmation, null before
     anonymousCode: text("anonymous_code"),
     // Timestamp when the product was received (set when status changes to "received")
-    receivedAt: timestamp("received_at"),
+    receivedAt: timestamp("received_at", { withTimezone: true }),
     // Final score calculated after rating phase closure (0-100 scale)
     // Weighted average of all jury ratings, normalized to 0-100
     finalScore: numeric("final_score", { precision: 5, scale: 2 }),
@@ -55,8 +58,8 @@ export const products = pgTable(
     // as "DISQUALIFIÉ" at the bottom of its category — no score, no rank, no
     // label — and excluded from every ranking (podium, best-in-show, widget…).
     disqualified: boolean("disqualified").notNull().default(false),
-    createdAt: timestamp("created_at").notNull().defaultNow(),
-    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     // Unique anonymous code per category (allows same code in different categories)
@@ -64,6 +67,11 @@ export const products = pgTable(
       table.categoryId,
       table.anonymousCode
     ),
+    // Jointure la plus fréquente (palmarès, résultats, widget, PDF) et
+    // cascade de suppression d'une inscription.
+    index("products_registration_id_idx").on(table.registrationId),
+    index("products_label_id_idx").on(table.labelId),
+    check("products_status_check", sql`${table.status} in ('pending', 'received', 'rating', 'rated')`),
   ]
 );
 

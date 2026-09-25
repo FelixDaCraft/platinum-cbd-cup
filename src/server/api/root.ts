@@ -1,9 +1,9 @@
-import { postRouter } from "~/server/api/routers/post";
 import { profileRouter } from "~/server/api/routers/profile";
 import { cupRouter } from "~/server/api/routers/cup";
 import { categoryRouter } from "~/server/api/routers/category";
 import { labelsRouter } from "~/server/api/routers/labels";
 import { criteriaRouter } from "~/server/api/routers/criteria";
+import { pricingRouter } from "~/server/api/routers/pricing";
 import { phaseAutomationRouter } from "~/server/api/routers/phase-automation";
 import { producerRouter } from "~/server/api/routers/producer";
 import { registrationRouter } from "~/server/api/routers/registration";
@@ -15,7 +15,6 @@ import { sponsorsRouter } from "~/server/api/routers/sponsors";
 import { articlesRouter } from "~/server/api/routers/articles";
 import { newsletterRouter } from "~/server/api/routers/newsletter";
 import { widgetRouter } from "~/server/api/routers/widget";
-import { rsTemplatesRouter } from "~/server/api/routers/rs-templates";
 import { contactMessagesRouter } from "~/server/api/routers/contact-messages";
 import { cupImportRouter } from "~/server/api/routers/cup-import";
 import { scoringRouter } from "~/server/api/routers/scoring";
@@ -32,12 +31,12 @@ import { createCallerFactory, createTRPCRouter } from "~/server/api/trpc";
  * All routers added in /api/routers should be manually added here.
  */
 export const appRouter = createTRPCRouter({
-  post: postRouter,
   profile: profileRouter,
   cup: cupRouter,
   category: categoryRouter,
   labels: labelsRouter,
   criteria: criteriaRouter,
+  pricing: pricingRouter,
   phaseAutomation: phaseAutomationRouter,
   producer: producerRouter,
   registration: registrationRouter,
@@ -49,7 +48,6 @@ export const appRouter = createTRPCRouter({
   articles: articlesRouter,
   newsletter: newsletterRouter,
   widget: widgetRouter,
-  rsTemplates: rsTemplatesRouter,
   contactMessages: contactMessagesRouter,
   cupImport: cupImportRouter,
   scoring: scoringRouter,
@@ -67,7 +65,7 @@ export type AppRouter = typeof appRouter;
  * Create a server-side caller for the tRPC API.
  * @example
  * const trpc = createCaller(createContext);
- * const res = await trpc.post.all();
- *       ^? Post[]
+ * const res = await trpc.cup.list();
+ *       ^? Cup[]
  */
 export const createCaller = createCallerFactory(appRouter);

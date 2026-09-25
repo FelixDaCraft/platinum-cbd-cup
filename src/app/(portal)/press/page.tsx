@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { db } from "~/server/db";
 import { Eyebrow, Placeholder } from "~/components/portal/platinum";
+import { canonical } from "../_lib/seo";
 
 export const metadata = {
+  alternates: { canonical: canonical("/press") },
   title: "Presse",
   description: "Communiqués, kit média et galerie presse de la Platinum CBD Cup.",
 };
@@ -56,7 +58,7 @@ export default async function PressPage() {
       </section>
 
       {/* MEDIA KIT */}
-      {(settings?.mediaKitUrl ?? settings?.showMediaKit) && (
+      {settings?.showMediaKit !== false && settings?.mediaKitUrl && (
         <section
           className="card"
           style={{
@@ -93,6 +95,7 @@ export default async function PressPage() {
       )}
 
       {/* PRESS RELEASES */}
+      {settings?.showPressReleases !== false && (
       <section style={{ marginTop: 16 }}>
         <h2 className="section-title">Communiqués</h2>
         {releases.length === 0 ? (
@@ -151,9 +154,10 @@ export default async function PressPage() {
           </div>
         )}
       </section>
+      )}
 
       {/* GALLERY */}
-      {gallery.length > 0 && (
+      {settings?.showGallery !== false && gallery.length > 0 && (
         <section style={{ marginTop: 64 }}>
           <h2 className="section-title">Galerie</h2>
           <div className="grid g-3" style={{ marginTop: 24 }}>
@@ -180,6 +184,7 @@ export default async function PressPage() {
       )}
 
       {/* CONTACT */}
+      {settings?.showContact !== false && (
       <section style={{ marginTop: 64 }}>
         <div className="card">
           <Eyebrow>Press contact</Eyebrow>
@@ -202,6 +207,7 @@ export default async function PressPage() {
           </div>
         </div>
       </section>
+      )}
     </div>
   );
 }

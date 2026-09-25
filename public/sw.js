@@ -1,5 +1,21 @@
 // Platinum CBD Cup Service Worker
-const CACHE_NAME = 'platinum-cbd-cup-v1';
+// Bump this name à chaque changement de politique de cache : l'activation
+// purge tous les caches qui ne portent pas ce nom.
+const CACHE_NAME = 'platinum-cbd-cup-v2';
+
+/**
+ * Espaces authentifiés : leur HTML ne doit JAMAIS entrer dans le cache.
+ * Le cache est partagé par tout le profil du navigateur, sans notion de
+ * session : une page de tableau de bord mise en cache reste lisible après
+ * déconnexion, et sur un poste partagé par l'utilisateur suivant.
+ */
+const PRIVATE_PREFIXES = ['/dashboard', '/producer', '/jury', '/account'];
+
+function isPrivatePath(pathname) {
+  return PRIVATE_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(prefix + '/')
+  );
+}
 const STATIC_ASSETS = [
   '/favicon.ico',
   '/offline.html',
@@ -34,12 +50,15 @@ self.addEventListener('fetch', (event) => {
   // Skip non-GET requests
   if (event.request.method !== 'GET') return;
 
-  // Skip API calls and auth routes - always go to network
+  // Toujours réseau, jamais de cache : API, authentification, et tous les
+  // espaces authentifiés.
   const url = new URL(event.request.url);
   if (
+    url.origin !== self.location.origin ||
     url.pathname.startsWith('/api/') ||
     url.pathname.startsWith('/trpc/') ||
-    url.pathname.includes('auth')
+    url.pathname.includes('auth') ||
+    isPrivatePath(url.pathname)
   ) {
     return;
   }
@@ -47,8 +66,17 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        // Clone and cache successful responses
-        if (response.status === 200) {
+        // On ne met en cache que les ressources publiques et immuables.
+        // Le HTML des pages publiques est volontairement exclu : une page
+        // périmée servie hors ligne vaut moins qu'un message hors ligne
+        // honnête, et le portail est rendu dynamiquement à chaque requête.
+        const isCacheable =
+          response.status === 200 &&
+          response.type === 'basic' &&
+          event.request.mode !== 'navigate' &&
+          !response.headers.get('Cache-Control')?.includes('no-store');
+
+        if (isCacheable) {
           const responseClone = response.clone();
           caches.open(CACHE_NAME).then((cache) => {
             cache.put(event.request, responseClone);

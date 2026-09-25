@@ -220,8 +220,10 @@ async function importCup(
     categoryCodeByKey.set(cat.key, cat.code);
     if (apply) {
       await client.query(
-        `INSERT INTO categories (id, cup_id, name, sort_order, rating_scale_min, rating_scale_max, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, 1, 20, now(), now())`,
+        // `rating_scale_min` / `rating_scale_max` ont été supprimées par la
+        // migration 0002 : l'échelle est portée par `cups.rating_scale`.
+        `INSERT INTO categories (id, cup_id, name, sort_order, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, now(), now())`,
         [id, cupId, cat.name, i]
       );
     }

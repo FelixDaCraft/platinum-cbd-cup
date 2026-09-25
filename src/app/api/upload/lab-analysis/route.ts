@@ -4,8 +4,8 @@
  * POC flow:
  *  1. Organizer uploads a SpectralFingerprints certificate for a given
  *     productId (multipart/form-data: "file" + "productId").
- *  2. We verify the caller is a member of the organization that owns the
- *     cup containing that product.
+ *  2. We verify the caller is an organizer (or the platform admin): the
+ *     app is single-tenant, there is no organization membership anymore.
  *  3. We save the PDF under public/uploads/lab-analyses/<productId>/<nanoid>.pdf
  *     (this is an authoritative final location — orphans from cancelled
  *     previews are accepted trade-off for POC simplicity).
@@ -22,21 +22,21 @@ import { writeFile, mkdir, unlink } from "fs/promises";
 import { existsSync } from "fs";
 import path from "path";
 import { nanoid } from "nanoid";
-import { auth } from "~/lib/auth";
-import { headers } from "next/headers";
 import { db } from "~/server/db";
 import { parseLabAnalysisPdf } from "~/server/services/lab-analysis/parser";
+import { requireOrganizer } from "../../_lib/route-auth";
+import { consumeUploadBudget } from "../_lib/budget";
+import { sniffType } from "../_lib/file-type";
 
 const MAX_PDF_SIZE = 20 * 1024 * 1024; // 20 MB is very generous for a 1-page certificate
 const UPLOAD_SUBDIR = path.join("uploads", "lab-analyses");
 
 export async function POST(request: NextRequest) {
-  // 1. Auth
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) {
-    return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-  }
-  const userId = session.user.id;
+  // 1. Auth — mono-tenant : le certificat est déposé par l'organisateur
+  //    (ou l'admin plateforme), l'appartenance à une organisation n'existe
+  //    plus.
+  const caller = await requireOrganizer();
+  if (caller instanceof NextResponse) return caller;
 
   // 2. Multipart parsing
   let formData: FormData;
@@ -59,12 +59,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "productId manquant" }, { status: 400 });
   }
 
-  if (file.type !== "application/pdf") {
-    return NextResponse.json(
-      { error: "Le fichier doit être un PDF" },
-      { status: 400 },
-    );
-  }
   if (file.size > MAX_PDF_SIZE) {
     return NextResponse.json(
       { error: `PDF trop volumineux (max ${MAX_PDF_SIZE / 1024 / 1024} MB)` },
@@ -72,9 +66,8 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // 3. Authorization: single-tenant — require authenticated organizer.
-  //    Ownership is enforced by the org-wide role rather than by org
-  //    membership (there is no organizations/members table anymore).
+  // 3. Le produit doit exister : son id sert ensuite de segment de chemin
+  //    sur le disque, la table fait donc office d'allowlist.
   const product = await db.query.products.findFirst({
     where: (p, { eq }) => eq(p.id, productId),
     columns: { id: true },
@@ -83,18 +76,28 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Produit introuvable" }, { status: 404 });
   }
 
-  const caller = await db.query.users.findFirst({
-    where: (u, { eq }) => eq(u.id, userId),
-    columns: { role: true, isAdmin: true },
-  });
-  if (!caller || (caller.role !== "organizer" && !caller.isAdmin)) {
+  // Chaque dépôt écrit un PDF de plus, jamais purgé (les orphelins d'un
+  // aperçu abandonné sont assumés) : budget partagé avec les autres routes
+  // d'upload pour qu'une boucle ne remplisse pas le disque de l'hôte.
+  const budget = consumeUploadBudget(caller.userId, caller.isOrganizer, file.size);
+  if (!budget.allowed) {
     return NextResponse.json(
-      { error: "Accès non autorisé à ce produit" },
-      { status: 403 },
+      { error: "Trop d'uploads. Réessayez plus tard." },
+      {
+        status: 429,
+        headers: { "Retry-After": String(budget.retryAfter ?? 60) },
+      },
     );
   }
-  // Silence the unused-var lint if any downstream expected `userId`.
-  void userId;
+
+  // The declared Content-Type is attacker-controlled: the bytes decide.
+  const buffer = Buffer.from(await file.arrayBuffer());
+  if (sniffType(buffer) !== "pdf") {
+    return NextResponse.json(
+      { error: "Le fichier doit être un PDF" },
+      { status: 400 },
+    );
+  }
 
   // 4. Save the PDF to disk. Final path so the confirm step doesn't need
   //    to move the file — re-uploads for the same product just add a new
@@ -104,7 +107,6 @@ export async function POST(request: NextRequest) {
   const pdfFilename = `${nanoid(10)}.pdf`;
   const filePath = path.join(dir, pdfFilename);
 
-  const buffer = Buffer.from(await file.arrayBuffer());
   await writeFile(filePath, buffer);
 
   const pdfUrl = `/${UPLOAD_SUBDIR.replace(/\\/g, "/")}/${productId}/${pdfFilename}`;

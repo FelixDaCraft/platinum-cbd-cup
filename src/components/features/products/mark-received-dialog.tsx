@@ -77,7 +77,7 @@ export function MarkReceivedDialog({
       <DialogTrigger asChild>
         <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs">
           <Package className="h-3 w-3" />
-          Recu
+          Reçu
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
@@ -87,9 +87,9 @@ export function MarkReceivedDialog({
             <div className="rounded-full bg-green-100 p-3 mb-4">
               <CheckCircle className="h-8 w-8 text-green-600" />
             </div>
-            <h3 className="text-lg font-semibold">Reception confirmee</h3>
+            <h3 className="text-lg font-semibold">Réception confirmée</h3>
             <p className="text-sm text-muted-foreground mt-1">
-              {anonymousCode ?? productName} a ete marque comme recu.
+              {anonymousCode ?? productName} a été marqué comme reçu.
             </p>
           </div>
         )}
@@ -109,7 +109,7 @@ export function MarkReceivedDialog({
               className="mt-4"
               onClick={() => setStatus("idle")}
             >
-              Reessayer
+              Réessayer
             </Button>
           </div>
         )}
@@ -118,9 +118,9 @@ export function MarkReceivedDialog({
         {status === "idle" && (
           <>
             <DialogHeader>
-              <DialogTitle>Marquer comme recu</DialogTitle>
+              <DialogTitle>Marquer comme reçu</DialogTitle>
               <DialogDescription>
-                Confirmez la reception du produit {anonymousCode ?? productName}.
+                Confirmez la réception du produit {anonymousCode ?? productName}.
               </DialogDescription>
             </DialogHeader>
 
@@ -136,7 +136,7 @@ export function MarkReceivedDialog({
                 <Label htmlFor="note">Note (optionnel)</Label>
                 <Textarea
                   id="note"
-                  placeholder="Ajoutez une note sur la reception..."
+                  placeholder="Ajoutez une note sur la réception..."
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
                   rows={3}
@@ -160,7 +160,7 @@ export function MarkReceivedDialog({
                 ) : (
                   <>
                     <Package className="h-4 w-4 mr-2" />
-                    Confirmer reception
+                    Confirmer la réception
                   </>
                 )}
               </Button>

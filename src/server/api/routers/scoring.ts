@@ -1,8 +1,8 @@
-import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { createTRPCRouter, organizerProcedure } from "~/server/api/trpc";
+import { getCupOrThrow } from "~/server/api/helpers/cup";
 import * as schema from "~/server/db/schema";
-import { eq, and, count, sql, isNotNull, inArray, desc } from "drizzle-orm";
+import { eq, and, count, isNotNull, inArray } from "drizzle-orm";
 import { convertScoreToScale } from "~/lib/validations/labels";
 import { ratingCriteria } from "~/server/db/schema/rating-criteria";
 
@@ -18,17 +18,7 @@ export const scoringRouter = createTRPCRouter({
   getGlobalProgress: organizerProcedure
     .input(z.object({ cupId: z.string().min(1, "Cup ID requis") }))
     .query(async ({ ctx, input }) => {
-      // Verify cup exists (single-tenant)
-      const cup = await ctx.db.query.cups.findFirst({
-        where: (cups, { eq: eqFn }) => eqFn(cups.id, input.cupId),
-      });
-
-      if (!cup) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Cup non trouvée",
-        });
-      }
+      const cup = await getCupOrThrow(ctx.db, input.cupId);
 
       // Get all categories for this cup
       const categories = await ctx.db.query.categories.findMany({
@@ -113,17 +103,7 @@ export const scoringRouter = createTRPCRouter({
   getCategoryProgress: organizerProcedure
     .input(z.object({ cupId: z.string().min(1, "Cup ID requis") }))
     .query(async ({ ctx, input }) => {
-      // Verify cup exists (single-tenant)
-      const cup = await ctx.db.query.cups.findFirst({
-        where: (cups, { eq: eqFn }) => eqFn(cups.id, input.cupId),
-      });
-
-      if (!cup) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Cup non trouvée",
-        });
-      }
+      const cup = await getCupOrThrow(ctx.db, input.cupId);
 
       // Get all categories with product counts and rating counts
       const categories = await ctx.db.query.categories.findMany({
@@ -131,72 +111,98 @@ export const scoringRouter = createTRPCRouter({
         orderBy: (cat, { asc }) => [asc(cat.sortOrder)],
       });
 
-      // For each category, get product count and rating count
-      const categoryProgress = await Promise.all(
-        categories.map(async (category) => {
-          // Count products in this category (with anonymous code = confirmed)
-          const productsResult = await ctx.db
-            .select({ count: count() })
-            .from(schema.products)
-            .where(
-              and(
-                eq(schema.products.categoryId, category.id),
-                isNotNull(schema.products.anonymousCode)
-              )
-            );
-          const totalProducts = productsResult[0]?.count ?? 0;
+      if (categories.length === 0) {
+        return { categories: [], cupStatus: cup.status };
+      }
 
-          // Count juries assigned to this category
-          const juriesResult = await ctx.db
-            .select({ count: count() })
-            .from(schema.juryCategoryAssignments)
-            .innerJoin(
-              schema.cupJuries,
-              eq(schema.juryCategoryAssignments.cupJuryId, schema.cupJuries.id)
+      const categoryIds = categories.map((c) => c.id);
+
+      // Trois agregats pour toute la cup au lieu de trois requetes par
+      // categorie : la page /results/live rappelle ce endpoint toutes les
+      // 30 s, le fan-out saturait le pool de connexions.
+      const [productCounts, juryCounts, ratingCounts] = await Promise.all([
+        ctx.db
+          .select({
+            categoryId: schema.products.categoryId,
+            total: count(),
+          })
+          .from(schema.products)
+          .where(
+            and(
+              inArray(schema.products.categoryId, categoryIds),
+              isNotNull(schema.products.anonymousCode)
             )
-            .where(
-              and(
-                eq(schema.juryCategoryAssignments.categoryId, category.id),
-                eq(schema.cupJuries.isActive, true)
-              )
-            );
-          const assignedJuries = juriesResult[0]?.count ?? 0;
-
-          // Count submitted ratings for products in this category
-          const ratingsResult = await ctx.db
-            .select({ count: count() })
-            .from(schema.productRatings)
-            .innerJoin(
-              schema.products,
-              eq(schema.productRatings.productId, schema.products.id)
+          )
+          .groupBy(schema.products.categoryId),
+        ctx.db
+          .select({
+            categoryId: schema.juryCategoryAssignments.categoryId,
+            total: count(),
+          })
+          .from(schema.juryCategoryAssignments)
+          .innerJoin(
+            schema.cupJuries,
+            eq(schema.juryCategoryAssignments.cupJuryId, schema.cupJuries.id)
+          )
+          .where(
+            and(
+              inArray(schema.juryCategoryAssignments.categoryId, categoryIds),
+              eq(schema.cupJuries.isActive, true)
             )
-            .where(
-              and(
-                eq(schema.products.categoryId, category.id),
-                isNotNull(schema.productRatings.submittedAt)
-              )
-            );
-          const completedRatings = ratingsResult[0]?.count ?? 0;
+          )
+          .groupBy(schema.juryCategoryAssignments.categoryId),
+        ctx.db
+          .select({
+            categoryId: schema.products.categoryId,
+            total: count(),
+          })
+          .from(schema.productRatings)
+          .innerJoin(
+            schema.products,
+            eq(schema.productRatings.productId, schema.products.id)
+          )
+          .where(
+            and(
+              inArray(schema.products.categoryId, categoryIds),
+              isNotNull(schema.productRatings.submittedAt)
+            )
+          )
+          .groupBy(schema.products.categoryId),
+      ]);
 
-          // Expected = products × assigned juries
-          const expectedRatings = totalProducts * assignedJuries;
-          const completionPercentage =
-            expectedRatings > 0
-              ? Math.round((completedRatings / expectedRatings) * 100)
-              : 0;
-
-          return {
-            id: category.id,
-            name: category.name,
-            totalProducts,
-            assignedJuries,
-            completedRatings,
-            expectedRatings,
-            completionPercentage,
-            isComplete: completionPercentage === 100,
-          };
-        })
+      const productsByCategory = new Map(
+        productCounts.map((r) => [r.categoryId, r.total])
       );
+      const juriesByCategory = new Map(
+        juryCounts.map((r) => [r.categoryId, r.total])
+      );
+      const ratingsByCategory = new Map(
+        ratingCounts.map((r) => [r.categoryId, r.total])
+      );
+
+      const categoryProgress = categories.map((category) => {
+        const totalProducts = productsByCategory.get(category.id) ?? 0;
+        const assignedJuries = juriesByCategory.get(category.id) ?? 0;
+        const completedRatings = ratingsByCategory.get(category.id) ?? 0;
+
+        // Expected = products × assigned juries
+        const expectedRatings = totalProducts * assignedJuries;
+        const completionPercentage =
+          expectedRatings > 0
+            ? Math.round((completedRatings / expectedRatings) * 100)
+            : 0;
+
+        return {
+          id: category.id,
+          name: category.name,
+          totalProducts,
+          assignedJuries,
+          completedRatings,
+          expectedRatings,
+          completionPercentage,
+          isComplete: completionPercentage === 100,
+        };
+      });
 
       return {
         categories: categoryProgress,
@@ -211,17 +217,7 @@ export const scoringRouter = createTRPCRouter({
   getJuryProgress: organizerProcedure
     .input(z.object({ cupId: z.string().min(1, "Cup ID requis") }))
     .query(async ({ ctx, input }) => {
-      // Verify cup exists (single-tenant)
-      const cup = await ctx.db.query.cups.findFirst({
-        where: (cups, { eq: eqFn }) => eqFn(cups.id, input.cupId),
-      });
-
-      if (!cup) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Cup non trouvée",
-        });
-      }
+      const cup = await getCupOrThrow(ctx.db, input.cupId);
 
       // Get all active juries with their user info and category assignments
       const juries = await ctx.db.query.cupJuries.findMany({
@@ -250,79 +246,94 @@ export const scoringRouter = createTRPCRouter({
         orderBy: (cj, { desc }) => [desc(cj.joinedAt)],
       });
 
-      // For each jury, calculate their progress
-      const juryProgress = await Promise.all(
-        juries.map(async (jury) => {
-          const assignedCategoryIds = jury.categoryAssignments.map(
-            (a) => a.categoryId
-          );
+      // Deux agregats pour tout le panel au lieu de deux requetes par jure :
+      // avec 70 jures, la page /results/live declenchait 140 requetes en
+      // parallele toutes les 30 s sur un pool de 10 connexions.
+      const assignedCategoryIds = [
+        ...new Set(
+          juries.flatMap((jury) => jury.categoryAssignments.map((a) => a.categoryId))
+        ),
+      ];
 
-          if (assignedCategoryIds.length === 0) {
-            return {
-              id: jury.id,
-              name: jury.user.name ?? jury.user.email,
-              email: jury.user.email,
-              image: jury.user.image,
-              assignedCategories: [],
-              totalToRate: 0,
-              completedRatings: 0,
-              completionPercentage: 0,
-              lastActivityAt: jury.lastActivityAt,
-              joinedAt: jury.joinedAt,
-            };
-          }
-
-          // Count products in assigned categories
-          const productsResult = await ctx.db
-            .select({ count: count() })
-            .from(schema.products)
-            .where(
-              and(
-                inArray(schema.products.categoryId, assignedCategoryIds),
-                isNotNull(schema.products.anonymousCode)
+      const [productCounts, ratingCounts] = assignedCategoryIds.length
+        ? await Promise.all([
+            ctx.db
+              .select({
+                categoryId: schema.products.categoryId,
+                total: count(),
+              })
+              .from(schema.products)
+              .where(
+                and(
+                  inArray(schema.products.categoryId, assignedCategoryIds),
+                  isNotNull(schema.products.anonymousCode)
+                )
               )
-            );
-          const totalToRate = productsResult[0]?.count ?? 0;
-
-          // Count submitted ratings by this jury
-          const ratingsResult = await ctx.db
-            .select({ count: count() })
-            .from(schema.productRatings)
-            .innerJoin(
-              schema.products,
-              eq(schema.productRatings.productId, schema.products.id)
-            )
-            .where(
-              and(
-                eq(schema.productRatings.juryId, jury.id),
-                inArray(schema.products.categoryId, assignedCategoryIds),
-                isNotNull(schema.productRatings.submittedAt)
+              .groupBy(schema.products.categoryId),
+            ctx.db
+              .select({
+                juryId: schema.productRatings.juryId,
+                categoryId: schema.products.categoryId,
+                total: count(),
+              })
+              .from(schema.productRatings)
+              .innerJoin(
+                schema.products,
+                eq(schema.productRatings.productId, schema.products.id)
               )
-            );
-          const completedRatings = ratingsResult[0]?.count ?? 0;
+              .where(
+                and(
+                  inArray(
+                    schema.productRatings.juryId,
+                    juries.map((jury) => jury.id)
+                  ),
+                  inArray(schema.products.categoryId, assignedCategoryIds),
+                  isNotNull(schema.productRatings.submittedAt)
+                )
+              )
+              .groupBy(schema.productRatings.juryId, schema.products.categoryId),
+          ])
+        : [[], []];
 
-          const completionPercentage =
-            totalToRate > 0
-              ? Math.round((completedRatings / totalToRate) * 100)
-              : 0;
-
-          return {
-            id: jury.id,
-            name: jury.user.name ?? jury.user.email,
-            email: jury.user.email,
-            image: jury.user.image,
-            assignedCategories: jury.categoryAssignments.map((a) => ({
-              id: a.category.id,
-              name: a.category.name,
-            })),
-            totalToRate,
-            completedRatings,
-            completionPercentage,
-            lastActivityAt: jury.lastActivityAt,
-            joinedAt: jury.joinedAt,
-          };
-        })
+      const productsByCategory = new Map(
+        productCounts.map((r) => [r.categoryId, r.total])
       );
+      const ratingsByJuryCategory = new Map(
+        ratingCounts.map((r) => [`${r.juryId}:${r.categoryId}`, r.total])
+      );
+
+      const juryProgress = juries.map((jury) => {
+        const categoryIds = jury.categoryAssignments.map((a) => a.categoryId);
+
+        let totalToRate = 0;
+        let completedRatings = 0;
+        for (const categoryId of categoryIds) {
+          totalToRate += productsByCategory.get(categoryId) ?? 0;
+          completedRatings +=
+            ratingsByJuryCategory.get(`${jury.id}:${categoryId}`) ?? 0;
+        }
+
+        const completionPercentage =
+          totalToRate > 0
+            ? Math.round((completedRatings / totalToRate) * 100)
+            : 0;
+
+        return {
+          id: jury.id,
+          name: jury.user.name ?? jury.user.email,
+          email: jury.user.email,
+          image: jury.user.image,
+          assignedCategories: jury.categoryAssignments.map((a) => ({
+            id: a.category.id,
+            name: a.category.name,
+          })),
+          totalToRate,
+          completedRatings,
+          completionPercentage,
+          lastActivityAt: jury.lastActivityAt,
+          joinedAt: jury.joinedAt,
+        };
+      });
 
       // Sort by completion percentage (ascending - show least complete first)
       juryProgress.sort((a, b) => a.completionPercentage - b.completionPercentage);
@@ -348,17 +359,7 @@ export const scoringRouter = createTRPCRouter({
       })
     )
     .query(async ({ ctx, input }) => {
-      // Verify cup exists (single-tenant)
-      const cup = await ctx.db.query.cups.findFirst({
-        where: (cups, { eq: eqFn }) => eqFn(cups.id, input.cupId),
-      });
-
-      if (!cup) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Cup non trouvée",
-        });
-      }
+      const cup = await getCupOrThrow(ctx.db, input.cupId);
 
       // Only allow live scores during or after rating
       if (cup.status !== "rating" && cup.status !== "completed") {
@@ -391,15 +392,18 @@ export const scoringRouter = createTRPCRouter({
       const categoryIds = categories.map((c) => c.id);
 
       // Build coefficient map per criterion for weighted average calculation
-      const criteriaCoefficients = new Map<string, number>();
-      for (const category of categories) {
-        const criteria = await ctx.db.query.ratingCriteria.findMany({
-          where: (rc, { eq: eqFn }) => eqFn(rc.categoryId, category.id),
-        });
-        for (const criterion of criteria) {
-          criteriaCoefficients.set(criterion.id, criterion.coefficient);
-        }
-      }
+      // (une seule requete pour toutes les categories, pas une par categorie)
+      const criteria = await ctx.db
+        .select({
+          id: ratingCriteria.id,
+          coefficient: ratingCriteria.coefficient,
+        })
+        .from(ratingCriteria)
+        .where(inArray(ratingCriteria.categoryId, categoryIds));
+
+      const criteriaCoefficients = new Map(
+        criteria.map((criterion) => [criterion.id, criterion.coefficient])
+      );
 
       // Get products with their ratings
       // For completed cups, use finalScore; for rating phase, calculate average

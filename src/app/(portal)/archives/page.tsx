@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { db } from "~/server/db";
 import { Eyebrow, Pill } from "~/components/portal/platinum";
+import { canonical } from "../_lib/seo";
 
 export const metadata = {
+  alternates: { canonical: canonical("/archives") },
   title: "Archives",
   description: "Toutes les éditions passées de la Platinum CBD Cup.",
 };

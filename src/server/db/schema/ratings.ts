@@ -1,12 +1,13 @@
-import { pgTable, text, timestamp, integer, unique } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, integer, unique, index } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
+import { generateId } from "./id";
 import { products } from "./products";
 import { cupJuries } from "./juries";
 import { ratingCriteria } from "./rating-criteria";
 
 /**
  * Product Ratings table - Overall rating for a product by a jury
- * Multi-tenant: each rating belongs to a product (which belongs to a cup → organization)
+ * Chaque note appartient à un produit (donc à une cup).
  *
  * Stores the jury's rating submission including optional comment and submission timestamp.
  * Individual criterion scores are stored in the criterionScores table.
@@ -14,7 +15,9 @@ import { ratingCriteria } from "./rating-criteria";
 export const productRatings = pgTable(
   "product_ratings",
   {
-    id: text("id").primaryKey(), // nanoid generated
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => generateId()),
     productId: text("product_id")
       .notNull()
       .references(() => products.id, { onDelete: "cascade" }),
@@ -24,13 +27,16 @@ export const productRatings = pgTable(
     // Optional global comment for the product
     comment: text("comment"),
     // Submission status - null means draft, set when jury finalizes rating
-    submittedAt: timestamp("submitted_at"),
-    createdAt: timestamp("created_at").notNull().defaultNow(),
-    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     // A jury can only rate a product once
     unique("product_rating_product_jury_unique").on(table.productId, table.juryId),
+    // L'unique ci-dessus ne couvre que product_id : le tableau de bord juré et
+    // le calcul d'avancement filtrent par jury_id.
+    index("product_ratings_jury_id_idx").on(table.juryId),
   ]
 );
 
@@ -41,7 +47,9 @@ export const productRatings = pgTable(
 export const criterionScores = pgTable(
   "criterion_scores",
   {
-    id: text("id").primaryKey(), // nanoid generated
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => generateId()),
     productRatingId: text("product_rating_id")
       .notNull()
       .references(() => productRatings.id, { onDelete: "cascade" }),
@@ -50,8 +58,8 @@ export const criterionScores = pgTable(
       .references(() => ratingCriteria.id, { onDelete: "cascade" }),
     // Score value (1-10 scale)
     score: integer("score").notNull(),
-    createdAt: timestamp("created_at").notNull().defaultNow(),
-    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     // A criterion can only be scored once per product rating
@@ -59,6 +67,8 @@ export const criterionScores = pgTable(
       table.productRatingId,
       table.criterionId
     ),
+    // Agrégation par critère et cascade de suppression d'un critère.
+    index("criterion_scores_criterion_id_idx").on(table.criterionId),
   ]
 );
 

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { db } from "~/server/db";
 import { Eyebrow } from "~/components/portal/platinum";
 import type { TeamMember } from "~/server/db/schema/organization-about";
+import { canonical } from "../_lib/seo";
 
 function getInitials(name: string): string {
   const parts = name.trim().split(/\s+/);
@@ -11,6 +12,7 @@ function getInitials(name: string): string {
 }
 
 export const metadata: Metadata = {
+  alternates: { canonical: canonical("/about") },
   title: "Manifesto",
   description: "Notre mission, notre histoire et notre équipe derrière la seule compétition CBD évaluée à l'aveugle en Europe.",
 };

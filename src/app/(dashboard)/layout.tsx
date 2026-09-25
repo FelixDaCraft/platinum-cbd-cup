@@ -1,87 +1,54 @@
-"use client";
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
+import type { Metadata } from "next";
 
-import { useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
-import { toast } from "sonner";
+import { auth } from "~/lib/auth";
+import { getUserPortalAccess } from "~/lib/portal/server-auth";
 
-import { useSession } from "~/lib/auth-client";
-import { NothingOrganizerLayout } from "~/components/dashboard/nothing-organizer-layout";
+import { DashboardShell } from "./_dashboard-shell";
 
-type SessionUserWithRole = {
-  id: string;
-  role?: "organizer" | "producer" | "jury" | string;
-  isAdmin?: boolean;
+export const metadata: Metadata = {
+  title: {
+    default: "Platinum CBD Cup — Organisateur",
+    template: "%s — Organisateur",
+  },
+  description: "Espace organisateur - Pilotez les cups, les jurys et le portail",
+  // Espace authentifié : rien à indexer.
+  robots: { index: false, follow: false },
 };
 
-export default function PortalDashboardLayout({
+/**
+ * Garde serveur de l'espace organisateur.
+ *
+ * La coquille (`DashboardShell`) est un composant client : elle ne pouvait
+ * donc vérifier le rôle qu'après hydratation, une fois le squelette du
+ * tableau de bord déjà envoyé au navigateur. Le middleware, lui, ne contrôle
+ * que la PRÉSENCE d'un cookie de session, ni sa validité ni le rôle.
+ * Résultat : un producteur ou un juré authentifié recevait la structure de
+ * navigation de l'organisateur avant d'être renvoyé.
+ *
+ * Les données restent protégées par `organizerProcedure` côté tRPC ; cette
+ * garde ferme la fuite de structure et évite le clignotement.
+ */
+export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const router = useRouter();
-  const { data: session, isPending: isSessionLoading } = useSession();
-  const hasShownToast = useRef(false);
-  const lastUserId = useRef<string | null>(null);
+  const session = await auth.api.getSession({ headers: await headers() });
 
-  // Reset toast flag when user changes
-  if (session?.user?.id !== lastUserId.current) {
-    hasShownToast.current = false;
-    lastUserId.current = session?.user?.id ?? null;
+  if (!session?.user) {
+    redirect("/login?callbackUrl=/dashboard");
   }
 
-  const isSessionDetermined = !isSessionLoading && session !== undefined;
-  const isLoading = !isSessionDetermined;
-  const sessionUser = session?.user as SessionUserWithRole | undefined;
-  const isOrganizer =
-    sessionUser?.isAdmin === true || sessionUser?.role === "organizer";
+  const access = await getUserPortalAccess();
 
-  useEffect(() => {
-    if (!isSessionDetermined) return;
-
-    if (!sessionUser) {
-      router.push("/login");
-      return;
-    }
-
-    if (!isOrganizer) {
-      if (!hasShownToast.current) {
-        toast.error("Vous n'avez pas acces a l'espace organisateur");
-        hasShownToast.current = true;
-      }
-      if (sessionUser.role === "producer") {
-        router.push("/producer");
-      } else if (sessionUser.role === "jury") {
-        router.push("/jury");
-      } else {
-        router.push("/login");
-      }
-    }
-  }, [sessionUser, isSessionDetermined, isOrganizer, router]);
-
-  // Nothing-styled loading state
-  if (isLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center" style={{ backgroundColor: "#000000" }}>
-        <span style={{ fontFamily: "'Space Mono', monospace", fontSize: "13px", letterSpacing: "0.08em", color: "#666666" }}>
-          [LOADING...]
-        </span>
-      </div>
-    );
+  if (!access.roles.includes("organizer")) {
+    // L'utilisateur est authentifié mais n'est pas organisateur. Ne jamais le
+    // renvoyer vers /login, qui redirige selon le rôle et le ferait revenir
+    // ici en boucle.
+    redirect("/");
   }
 
-  if (!session?.user || !isOrganizer) {
-    return (
-      <div className="flex min-h-screen items-center justify-center" style={{ backgroundColor: "#000000" }}>
-        <span style={{ fontFamily: "'Space Mono', monospace", fontSize: "13px", letterSpacing: "0.08em", color: "#666666" }}>
-          [LOADING...]
-        </span>
-      </div>
-    );
-  }
-
-  return (
-    <NothingOrganizerLayout>
-      {children}
-    </NothingOrganizerLayout>
-  );
+  return <DashboardShell>{children}</DashboardShell>;
 }

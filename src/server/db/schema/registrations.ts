@@ -1,5 +1,6 @@
-import { pgTable, text, timestamp, integer, unique } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { pgTable, text, timestamp, integer, unique, index, check } from "drizzle-orm/pg-core";
+import { relations, sql } from "drizzle-orm";
+import { generateId } from "./id";
 import { cups, type Currency } from "./cups";
 import { producers } from "./producers";
 import { products } from "./products";
@@ -24,7 +25,9 @@ export type RegistrationStatus = (typeof registrationStatusEnum)[number];
 export const registrations = pgTable(
   "registrations",
   {
-    id: text("id").primaryKey(), // nanoid generated
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => generateId()),
     cupId: text("cup_id")
       .notNull()
       .references(() => cups.id, { onDelete: "cascade" }),
@@ -48,18 +51,23 @@ export const registrations = pgTable(
     stripePaymentIntentId: text("stripe_payment_intent_id"),
     // Invoice fields
     invoiceNumber: text("invoice_number").unique(), // Format: INV-YYYY-XXXXX
-    invoiceGeneratedAt: timestamp("invoice_generated_at"),
+    invoiceGeneratedAt: timestamp("invoice_generated_at", { withTimezone: true }),
     invoiceUrl: text("invoice_url"), // URL or path to the stored PDF
     // Synthesis email tracking - Story 8.7
-    synthesisEmailSentAt: timestamp("synthesis_email_sent_at"), // When email was sent successfully
+    synthesisEmailSentAt: timestamp("synthesis_email_sent_at", { withTimezone: true }), // When email was sent successfully
     synthesisEmailError: text("synthesis_email_error"), // Error message if send failed
     synthesisEmailAttempts: integer("synthesis_email_attempts").default(0), // Number of send attempts
-    createdAt: timestamp("created_at").notNull().defaultNow(),
-    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     // A producer can only have one registration per cup
     unique("registration_producer_cup_unique").on(table.cupId, table.producerId),
+    // L'unique ci-dessus ne couvre que cup_id : le tableau de bord producteur
+    // et la suppression en cascade d'un producteur filtrent par producer_id.
+    index("registrations_producer_id_idx").on(table.producerId),
+    check("registrations_status_check", sql`${table.status} in ('pending_payment', 'confirmed', 'cancelled')`),
+    check("registrations_currency_check", sql`${table.currency} in ('EUR', 'USD', 'GBP', 'CHF')`),
   ]
 );
 

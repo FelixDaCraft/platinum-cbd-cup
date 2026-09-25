@@ -23,7 +23,12 @@ function formatDate(date: Date | string | null | undefined): string {
 }
 
 export default function ProducerLabelsPage() {
-  const { data: labels, isLoading } = api.producer.getMyLabels.useQuery();
+  const {
+    data: labels,
+    isLoading,
+    isError,
+    refetch,
+  } = api.producer.getMyLabels.useQuery();
   const [downloadingPdf, setDownloadingPdf] = useState<string | null>(null);
 
   const getMyPdf = api.results.getMyPdf.useMutation({
@@ -59,14 +64,27 @@ export default function ProducerLabelsPage() {
     );
   }
 
+  // Une requête en échec ne doit pas se confondre avec une liste vide :
+  // « vous n'avez rien » est plausible et masquerait l'incident.
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4 text-center">
+        <span role="alert" className="n-font-data text-sm tracking-widest" style={{ color: "var(--n-text-secondary)" }}>
+          [ERREUR] VOS LABELS N&apos;ONT PAS PU ÊTRE CHARGÉS
+        </span>
+        <button type="button" className="n-btn-secondary text-xs" onClick={() => void refetch()}>
+          RÉESSAYER
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
       {/* Header */}
       <div className="flex items-center gap-4">
-        <Link href="/producer/dashboard">
-          <button className="n-btn-ghost text-xs" style={{ padding: "8px 12px" }}>
-            ← RETOUR
-          </button>
+        <Link href="/producer/dashboard" className="n-btn-ghost text-xs" style={{ padding: "8px 12px" }}>
+          ← RETOUR
         </Link>
         <div>
           <div className="n-label mb-1" style={{ color: "var(--n-text-disabled)" }}>
@@ -101,11 +119,7 @@ export default function ProducerLabelsPage() {
           <p className="text-sm mb-6" style={{ color: "var(--n-text-disabled)" }}>
             Participez aux competitions pour remporter des labels.
           </p>
-          <Link href="/cups">
-            <button className="n-btn-secondary text-xs">
-              DECOUVRIR LES COMPETITIONS
-            </button>
-          </Link>
+          <Link href="/cups" className="n-btn-secondary text-xs">DECOUVRIR LES COMPETITIONS</Link>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

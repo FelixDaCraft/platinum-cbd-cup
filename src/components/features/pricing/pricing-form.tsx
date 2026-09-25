@@ -36,6 +36,8 @@ interface PricingFormProps {
   cupStatus: string;
   onSubmit: (data: { defaultPricePerProduct: number | null; currency: Currency }) => void;
   isSubmitting: boolean;
+  /** Faux quand la cup est terminée : le tarif est figé. */
+  canEdit?: boolean;
 }
 
 export function PricingForm({
@@ -44,8 +46,11 @@ export function PricingForm({
   cupStatus,
   onSubmit,
   isSubmitting,
+  canEdit = true,
 }: PricingFormProps) {
-  const isLocked = cupStatus !== "draft";
+  // La devise se verrouille dès la publication : les montants déjà figés
+  // (priceAtRegistration, totaux, factures) ne portent pas leur devise.
+  const isLocked = !canEdit || cupStatus !== "draft";
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -77,7 +82,9 @@ export function PricingForm({
             <Input
               id="priceInput"
               type="text"
+              inputMode="decimal"
               placeholder="0,00"
+              disabled={!canEdit}
               {...form.register("priceInput")}
               className="pr-10 h-11"
             />
@@ -132,7 +139,7 @@ export function PricingForm({
       </div>
 
       <div className="pt-2">
-        <Button type="submit" disabled={isSubmitting}>
+        <Button type="submit" disabled={isSubmitting || !canEdit}>
           {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           Enregistrer les modifications
         </Button>

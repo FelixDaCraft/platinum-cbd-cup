@@ -1,8 +1,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import type { Metadata, Viewport } from "next";
-import { auth } from "~/lib/auth";
-import { getUserPortalAccess } from "~/lib/portal/server-auth";
+import { getPortalSession, getUserPortalAccess } from "~/lib/portal/server-auth";
 import { NothingProducerLayout } from "~/components/portal/nothing-producer-layout";
 
 export const metadata: Metadata = {
@@ -17,11 +16,12 @@ export const metadata: Metadata = {
 
 const COMPLETE_PROFILE_PATH = "/producer/complete-profile";
 
+// Pas de maximumScale ni userScalable: false — le pinch-zoom doit rester
+// possible (WCAG 1.4.4), l'espace jury étant utilisé sur tablette pendant les
+// dégustations. Le zoom auto d'iOS au focus est évité par des inputs >= 16px.
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
 };
 
 /**
@@ -35,14 +35,13 @@ export default async function PortalProducerLayout({
   children: React.ReactNode;
 }) {
   // Check authentication
-  const headersList = await headers();
-  const session = await auth.api.getSession({ headers: headersList });
+  const session = await getPortalSession();
 
   if (!session?.user) {
     redirect("/login?callbackUrl=/producer");
   }
 
-  // Check role - only producers and organizers can access
+  // Check roles - only producers and organizers can access
   const access = await getUserPortalAccess();
 
   if (!access.hasAccess) {
@@ -51,9 +50,9 @@ export default async function PortalProducerLayout({
     redirect("/");
   }
 
-  if (access.role !== "producer" && access.role !== "organizer") {
+  if (!access.roles.includes("producer") && !access.roles.includes("organizer")) {
     // User has access but wrong role - redirect to their area
-    if (access.role === "jury") {
+    if (access.roles.includes("jury")) {
       redirect("/jury");
     }
     // Fallback
@@ -63,7 +62,7 @@ export default async function PortalProducerLayout({
   // Signed up but never completed the producer profile: every page under
   // /producer needs one, so funnel them to the form instead of bouncing
   // them back to /login (which would send them straight back here).
-  const pathname = headersList.get("x-pathname") ?? "";
+  const pathname = (await headers()).get("x-pathname") ?? "";
   if (access.needsProducerProfile && pathname !== COMPLETE_PROFILE_PATH) {
     redirect(COMPLETE_PROFILE_PATH);
   }

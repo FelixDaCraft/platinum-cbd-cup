@@ -1,7 +1,5 @@
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { auth } from "~/lib/auth";
-import { getUserPortalAccess } from "~/lib/portal/server-auth";
+import { getPortalSession, getUserPortalAccess } from "~/lib/portal/server-auth";
 import { NothingJuryLayout } from "~/components/jury/nothing-layout";
 
 /**
@@ -16,14 +14,13 @@ export default async function ProtectedJuryLayout({
   children: React.ReactNode;
 }) {
   // Check authentication
-  const headersList = await headers();
-  const session = await auth.api.getSession({ headers: headersList });
+  const session = await getPortalSession();
 
   if (!session?.user) {
     redirect("/login?callbackUrl=/jury/dashboard");
   }
 
-  // Check role - only jury and organizers can access
+  // Check roles - only jury and organizers can access
   const access = await getUserPortalAccess();
 
   if (!access.hasAccess) {
@@ -32,9 +29,12 @@ export default async function ProtectedJuryLayout({
     redirect("/");
   }
 
-  if (access.role !== "jury" && access.role !== "organizer") {
+  // On teste l'appartenance et non le rôle principal : un producteur qui
+  // active un code jury détient les deux profils, et la précédence
+  // producteur le renvoyait indéfiniment vers /producer.
+  if (!access.roles.includes("jury") && !access.roles.includes("organizer")) {
     // User has access but wrong role - redirect to their area
-    if (access.role === "producer") {
+    if (access.roles.includes("producer")) {
       redirect("/producer");
     }
     // Fallback

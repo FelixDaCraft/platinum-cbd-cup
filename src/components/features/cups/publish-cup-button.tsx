@@ -149,7 +149,7 @@ export function PublishCupButton({ cupId, status }: PublishCupButtonProps) {
               <AlertDialogTitle>Publier avec avertissements ?</AlertDialogTitle>
               <AlertDialogDescription asChild>
                 <div className="space-y-3">
-                  <p>Votre cup peut etre publiee, mais il y a des avertissements :</p>
+                  <p>Votre cup peut être publiée, mais il y a des avertissements :</p>
                   <Alert variant="default" className="border-amber-500 bg-amber-50 dark:bg-amber-950">
                     <AlertTriangle className="h-4 w-4 text-amber-600" />
                     <AlertDescription>
@@ -168,7 +168,7 @@ export function PublishCupButton({ cupId, status }: PublishCupButtonProps) {
               <AlertDialogAction
                 onClick={() => publishMutation.mutate({ cupId })}
               >
-                Publier quand meme
+                Publier quand même
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

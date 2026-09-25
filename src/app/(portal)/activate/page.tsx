@@ -31,6 +31,7 @@ import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { api } from "~/trpc/react";
 import { authClient } from "~/lib/auth-client";
+import { getErrorMessage } from "../_lib/errors";
 
 function ActivatePageContent() {
   const searchParams = useSearchParams();
@@ -62,14 +63,23 @@ function ActivatePageContent() {
   const activateMutation = api.juryCodes.activate.useMutation({
     onSuccess: (result) => {
       localStorage.removeItem("pendingActivationCode");
-      toast.success("Code active!", {
-        description: `Vous avez maintenant acces a ${result.categoriesCount} categorie${result.categoriesCount !== 1 ? "s" : ""}`,
+      toast.success("Code activé !", {
+        description: `Vous avez maintenant accès à ${result.categoriesCount} catégorie${result.categoriesCount !== 1 ? "s" : ""}`,
       });
       // Redirect to jury cup page
       router.push(`/jury/cups/${result.cupId}`);
     },
     onError: (err) => {
-      toast.error(err.message);
+      // Les erreurs métier du routeur sont déjà rédigées en français
+      // (lib/errors.ts) ; une erreur serveur, elle, remonte un libellé
+      // technique en anglais qu'il ne faut pas afficher tel quel.
+      const isServerFault =
+        err.data?.code === "INTERNAL_SERVER_ERROR" || !err.message;
+      toast.error(
+        isServerFault
+          ? "L'activation a échoué. Réessayez dans quelques instants."
+          : err.message
+      );
     },
   });
 
@@ -131,7 +141,7 @@ function ActivatePageContent() {
             </div>
             <CardTitle>Activer un code d&apos;invitation</CardTitle>
             <CardDescription>
-              Entrez le code d&apos;invitation que vous avez recu pour devenir jury
+              Entrez le code d&apos;invitation que vous avez reçu pour devenir jury
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -149,7 +159,7 @@ function ActivatePageContent() {
           </CardContent>
           <CardFooter>
             <Button className="w-full" onClick={handleSearchCode}>
-              Verifier le code
+              Vérifier le code
             </Button>
           </CardFooter>
         </Card>
@@ -165,7 +175,7 @@ function ActivatePageContent() {
           <CardContent className="pt-6">
             <div className="flex flex-col items-center gap-4">
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-              <p className="text-muted-foreground">Verification du code...</p>
+              <p className="text-muted-foreground">Vérification du code...</p>
             </div>
           </CardContent>
         </Card>
@@ -183,7 +193,9 @@ function ActivatePageContent() {
               <AlertCircle className="h-8 w-8 text-destructive" />
             </div>
             <CardTitle>Code invalide</CardTitle>
-            <CardDescription>{error.message}</CardDescription>
+            <CardDescription>
+              {getErrorMessage(error, "Ce code d'activation n'est pas valide.")}
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
@@ -200,11 +212,11 @@ function ActivatePageContent() {
           </CardContent>
           <CardFooter className="flex flex-col gap-3">
             <Button className="w-full" onClick={handleSearchCode}>
-              Verifier le code
+              Vérifier le code
             </Button>
             <Link href="/" className="w-full">
               <Button variant="outline" className="w-full">
-                Retour a l&apos;accueil
+                Retour à l&apos;accueil
               </Button>
             </Link>
           </CardFooter>
@@ -232,7 +244,7 @@ function ActivatePageContent() {
             </div>
             <CardTitle>
               {isExpired && "Code expire"}
-              {isActivated && "Code deja utilise"}
+              {isActivated && "Code déjà utilisé"}
               {isRevoked && "Code revoque"}
             </CardTitle>
             <CardDescription>{data.message}</CardDescription>
@@ -252,12 +264,12 @@ function ActivatePageContent() {
           </CardContent>
           <CardFooter className="flex flex-col gap-3">
             <Button className="w-full" onClick={handleSearchCode}>
-              Verifier le code
+              Vérifier le code
             </Button>
             {session?.user && (
               <Link href="/jury" className="w-full">
                 <Button variant="outline" className="w-full">
-                  Acceder a mon espace jury
+                  Accéder à mon espace jury
                 </Button>
               </Link>
             )}
@@ -303,7 +315,7 @@ function ActivatePageContent() {
               <span className="font-medium">Platinum CBD Cup</span>
             </div>
             <div className="flex items-start justify-between">
-              <span className="text-sm text-muted-foreground">Categories</span>
+              <span className="text-sm text-muted-foreground">Catégories</span>
               <div className="flex flex-wrap gap-1 justify-end max-w-[60%]">
                 {categories.map((cat) => (
                   <Badge key={cat.id} variant="secondary">
@@ -334,7 +346,7 @@ function ActivatePageContent() {
               <li className="flex items-start gap-2">
                 <Layers className="h-4 w-4 mt-0.5 text-primary shrink-0" />
                 <span>
-                  Acceder a {categories.length} categorie{categories.length !== 1 ? "s" : ""} : {categories.map((c) => c.name).join(", ")}
+                  Accéder à {categories.length} catégorie{categories.length !== 1 ? "s" : ""} : {categories.map((c) => c.name).join(", ")}
                 </span>
               </li>
               <li className="flex items-start gap-2">
@@ -364,7 +376,7 @@ function ActivatePageContent() {
                 <Link href={`/register?intent=jury&callbackUrl=${encodeURIComponent(callbackUrl)}`} className="flex-1">
                   <Button className="w-full">
                     <UserPlus className="mr-2 h-4 w-4" />
-                    Creer un compte
+                    Créer un compte
                   </Button>
                 </Link>
               </div>
@@ -398,7 +410,7 @@ function ActivatePageContent() {
             </Button>
           ) : (
             <p className="w-full text-center text-sm text-muted-foreground">
-              Veuillez vous connecter ou creer un compte pour continuer
+              Veuillez vous connecter ou créer un compte pour continuer
             </p>
           )}
         </CardFooter>

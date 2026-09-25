@@ -4,11 +4,11 @@ import { nanoid } from "nanoid";
 
 import {
   createTRPCRouter,
-  protectedProcedure,
   publicProcedure,
   organizerProcedure,
 } from "~/server/api/trpc";
 import { Errors } from "~/lib/errors";
+import { getCupOrThrow } from "~/server/api/helpers/cup";
 import * as schema from "~/server/db/schema";
 import {
   createCupSchema,
@@ -27,15 +27,56 @@ import { eq, and, count, inArray, asc, isNotNull } from "drizzle-orm";
 import { hasAnonymizedProducts } from "~/server/services/anonymization.service";
 import { computeResults } from "~/server/api/routers/results";
 
-const requireCup = async (
+const requireCup = (
   ctx: { db: typeof import("~/server/db").db },
   cupId: string
-) => {
-  const cup = await ctx.db.query.cups.findFirst({
-    where: (cups, { eq: eqFn }) => eqFn(cups.id, cupId),
-  });
-  if (!cup) Errors.cupNotFound();
-  return cup!;
+) => getCupOrThrow(ctx.db, cupId);
+
+/**
+ * Statut de phase effectif.
+ *
+ * `getPhaseStatus` ne regarde que `registrationOpenAt` : une cup encore
+ * `published` dont la date de clôture est passée était donc annoncée comme
+ * « inscriptions ouvertes ». Aucun planificateur ne fait avancer `cups.status`
+ * (cf. phase-automation.ts, sans appelant), donc la date tranche.
+ */
+const resolvePhaseStatus = (cup: {
+  status: typeof schema.cups.$inferSelect["status"];
+  registrationOpenAt: Date | null;
+  registrationCloseAt: Date | null;
+  ratingStartAt: Date | null;
+  ratingEndAt: Date | null;
+}) => {
+  const status = getPhaseStatus(cup);
+
+  if (
+    status === "registration" &&
+    cup.registrationCloseAt &&
+    new Date() > new Date(cup.registrationCloseAt)
+  ) {
+    return "closed" as const;
+  }
+
+  return status;
+};
+
+/**
+ * Les inscriptions sont réellement ouvertes : cup publiée et fenêtre de dates
+ * respectée. Utilisé par la page publique pour ne pas proposer un parcours que
+ * `registration.getOrCreate` refusera.
+ */
+const isRegistrationOpen = (cup: {
+  status: string;
+  registrationOpenAt: Date | null;
+  registrationCloseAt: Date | null;
+}) => {
+  if (cup.status !== "published") return false;
+
+  const now = new Date();
+  if (cup.registrationOpenAt && now < new Date(cup.registrationOpenAt)) return false;
+  if (cup.registrationCloseAt && now > new Date(cup.registrationCloseAt)) return false;
+
+  return true;
 };
 
 export const cupRouter = createTRPCRouter({
@@ -62,9 +103,10 @@ export const cupRouter = createTRPCRouter({
     }),
 
   /**
-   * List all cups. Any authenticated user can view.
+   * List all cups, brouillons inclus : organisateur uniquement.
+   * Le public passe par `getPublicDetails` / `getPublicResults`.
    */
-  list: protectedProcedure.query(async ({ ctx }) => {
+  list: organizerProcedure.query(async ({ ctx }) => {
     const cups = await ctx.db.query.cups.findMany({
       orderBy: (cups, { desc }) => [desc(cups.createdAt)],
     });
@@ -73,9 +115,9 @@ export const cupRouter = createTRPCRouter({
   }),
 
   /**
-   * Get a cup by ID.
+   * Get a cup by ID (organisateur : expose la configuration interne complète).
    */
-  getById: protectedProcedure
+  getById: organizerProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ ctx, input }) => {
       return await requireCup(ctx, input.id);
@@ -116,7 +158,7 @@ export const cupRouter = createTRPCRouter({
   /**
    * Get phase dates for a cup
    */
-  getPhaseDates: protectedProcedure
+  getPhaseDates: organizerProcedure
     .input(z.object({ cupId: z.string() }))
     .query(async ({ ctx, input }) => {
       const cup = await requireCup(ctx, input.cupId);
@@ -126,7 +168,7 @@ export const cupRouter = createTRPCRouter({
         registrationCloseAt: cup.registrationCloseAt,
         ratingStartAt: cup.ratingStartAt,
         ratingEndAt: cup.ratingEndAt,
-        status: getPhaseStatus(cup),
+        status: resolvePhaseStatus(cup),
         cupStatus: cup.status,
         editableDates: getEditableDates(cup.status),
       };
@@ -211,7 +253,7 @@ export const cupRouter = createTRPCRouter({
 
       return {
         ...updatedCup,
-        status: getPhaseStatus(updatedCup),
+        status: resolvePhaseStatus(updatedCup),
         editableDates: getEditableDates(updatedCup.status),
       };
     }),
@@ -219,7 +261,7 @@ export const cupRouter = createTRPCRouter({
   /**
    * Get publication status for a cup
    */
-  getPublishStatus: protectedProcedure
+  getPublishStatus: organizerProcedure
     .input(z.object({ cupId: z.string() }))
     .query(async ({ ctx, input }) => {
       const cup = await requireCup(ctx, input.cupId);
@@ -244,7 +286,7 @@ export const cupRouter = createTRPCRouter({
   /**
    * Get dashboard statistics for a cup
    */
-  getDashboardStats: protectedProcedure
+  getDashboardStats: organizerProcedure
     .input(z.object({ cupId: z.string() }))
     .query(async ({ ctx, input }) => {
       const cup = await requireCup(ctx, input.cupId);
@@ -497,15 +539,13 @@ export const cupRouter = createTRPCRouter({
         throw new TRPCError({ code: "NOT_FOUND", message: "Cup non trouvee" });
       }
 
+      // Une seule requête : la page publique n'est pas cachée, le 1+N par
+      // catégorie se payait à chaque visite.
       const categories = await ctx.db.query.categories.findMany({
         where: (cat, { eq: eqFn }) => eqFn(cat.cupId, input.cupId),
         orderBy: (cat) => [asc(cat.sortOrder)],
-      });
-
-      const categoriesWithCriteria = await Promise.all(
-        categories.map(async (category) => {
-          const criteria = await ctx.db.query.ratingCriteria.findMany({
-            where: (rc, { eq: eqFn }) => eqFn(rc.categoryId, category.id),
+        with: {
+          criteria: {
             orderBy: (rc) => [asc(rc.sortOrder)],
             columns: {
               id: true,
@@ -514,20 +554,20 @@ export const cupRouter = createTRPCRouter({
               coefficient: true,
               sortOrder: true,
             },
-          });
+          },
+        },
+      });
 
-          return {
-            id: category.id,
-            name: category.name,
-            description: category.description,
-            pricePerProduct: category.priceOverride,
-            criteria,
-          };
-        })
-      );
+      const categoriesWithCriteria = categories.map((category) => ({
+        id: category.id,
+        name: category.name,
+        description: category.description,
+        pricePerProduct: category.priceOverride,
+        criteria: category.criteria,
+      }));
 
       const ratingScale = getRatingScaleValues(cup.ratingScale);
-      const canRegister = cup.status === "published";
+      const canRegister = isRegistrationOpen(cup);
 
       let galleryUrls: string[] = [];
       if (cup.galleryUrls) {
@@ -887,7 +927,7 @@ export const cupRouter = createTRPCRouter({
   /**
    * Get overview stats for all cups
    */
-  getOverviewStats: protectedProcedure.query(async ({ ctx }) => {
+  getOverviewStats: organizerProcedure.query(async ({ ctx }) => {
     const cups = await ctx.db.query.cups.findMany({
       orderBy: (cups, { desc }) => [desc(cups.createdAt)],
       with: {

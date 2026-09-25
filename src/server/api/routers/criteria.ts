@@ -5,6 +5,7 @@ import { eq, asc, count, inArray } from "drizzle-orm";
 
 import { createTRPCRouter, organizerProcedure } from "~/server/api/trpc";
 import { Errors } from "~/lib/errors";
+import { getCupOrThrow } from "~/server/api/helpers/cup";
 import * as schema from "~/server/db/schema";
 import type { CupStatus } from "~/server/db/schema";
 import {
@@ -31,7 +32,7 @@ function assertCriteriaEditable(cupStatus: CupStatus): void {
   }
 }
 
-type Ctx = { db: { query: typeof import("~/server/db").db.query } };
+type Ctx = { db: typeof import("~/server/db").db };
 
 const requireCategoryWithCup = async (
   ctx: Ctx,
@@ -64,13 +65,7 @@ const requireCriterionWithCategoryAndCup = async (
   return criterion!;
 };
 
-const requireCup = async (ctx: Ctx, cupId: string) => {
-  const cup = await ctx.db.query.cups.findFirst({
-    where: (cups, { eq: eqFn }) => eqFn(cups.id, cupId),
-  });
-  if (!cup) Errors.cupNotFound();
-  return cup!;
-};
+const requireCup = (ctx: Ctx, cupId: string) => getCupOrThrow(ctx.db, cupId);
 
 export const criteriaRouter = createTRPCRouter({
   /**

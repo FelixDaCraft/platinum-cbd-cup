@@ -231,10 +231,8 @@ export default function JuryResultsComparisonPage({ params }: PageProps) {
   if (error) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
-        <Link href="/jury/dashboard">
-          <button className="n-btn-ghost" style={{ fontSize: "13px" }}>
-            &lt; Retour au tableau de bord
-          </button>
+        <Link href="/jury/dashboard" className="n-btn-ghost" style={{ fontSize: "13px" }}>
+          &lt; Retour au tableau de bord
         </Link>
         <div style={{ textAlign: "center", padding: "64px 24px" }}>
           <p className="n-label" style={{ color: "var(--n-accent)", marginBottom: "8px" }}>RÉSULTATS NON DISPONIBLES</p>
@@ -261,10 +259,8 @@ export default function JuryResultsComparisonPage({ params }: PageProps) {
     <div style={{ display: "flex", flexDirection: "column", gap: "32px" }}>
       {/* Back button */}
       <div>
-        <Link href="/jury/dashboard">
-          <button className="n-btn-ghost" style={{ fontSize: "13px" }}>
-            &lt; Retour
-          </button>
+        <Link href="/jury/dashboard" className="n-btn-ghost" style={{ fontSize: "13px" }}>
+          &lt; Retour
         </Link>
       </div>
 
@@ -610,11 +606,7 @@ export default function JuryResultsComparisonPage({ params }: PageProps) {
 
       {/* Back button at bottom */}
       <div style={{ display: "flex", justifyContent: "center", paddingTop: "8px" }}>
-        <Link href="/jury/dashboard">
-          <button className="n-btn-ghost">
-            &lt; Retour au tableau de bord
-          </button>
-        </Link>
+        <Link href="/jury/dashboard" className="n-btn-ghost">&lt; Retour au tableau de bord</Link>
       </div>
     </div>
   );

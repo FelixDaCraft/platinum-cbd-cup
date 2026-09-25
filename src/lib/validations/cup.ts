@@ -1,6 +1,8 @@
 import { z } from "zod";
 
-// Import and re-export types from schema to avoid duplication
+// Les énumérations viennent de ~/lib/enums et non du schéma Drizzle : ce
+// module est importé par des formulaires client, et passer par le schéma
+// embarquait drizzle-orm/pg-core dans le bundle navigateur.
 import {
   cupTypeEnum,
   cupStatusEnum,
@@ -8,7 +10,7 @@ import {
   type CupType,
   type CupStatus,
   type RatingScale,
-} from "~/server/db/schema/cups";
+} from "~/lib/enums";
 
 export { cupTypeEnum, cupStatusEnum, ratingScaleEnum, type CupType, type CupStatus, type RatingScale };
 

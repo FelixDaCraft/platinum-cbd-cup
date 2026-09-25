@@ -40,7 +40,12 @@ export default function CupDetailPage() {
   const [selectedScale, setSelectedScale] = useState<RatingScale>("0-20");
 
   const utils = api.useUtils();
-  const { data: cup, isLoading } = api.cup.getById.useQuery({ id: cupId });
+  const {
+    data: cup,
+    isLoading,
+    isError,
+    refetch,
+  } = api.cup.getById.useQuery({ id: cupId });
 
   const updateCup = api.cup.update.useMutation({
     onSuccess: () => {
@@ -70,6 +75,21 @@ export default function CupDetailPage() {
   );
   const { data: dashboardStats, isLoading: isLoadingStats } =
     api.cup.getDashboardStats.useQuery({ cupId }, { enabled: !!cup });
+
+  // Une requête en échec ne doit pas se confondre avec une page vide :
+  // un écran « aucune donnée » masquerait l'incident.
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4 text-center">
+        <span role="alert" className="n-label" style={{ color: "var(--n-text-secondary)" }}>
+          [ERREUR] CETTE CUP N&apos;A PAS PU ÊTRE CHARGÉE
+        </span>
+        <button type="button" className="n-btn-secondary text-xs" onClick={() => void refetch()}>
+          RÉESSAYER
+        </button>
+      </div>
+    );
+  }
 
   if (isLoading || !cup) {
     return (

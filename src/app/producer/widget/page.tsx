@@ -7,7 +7,12 @@ import { toast } from "sonner";
 import { api } from "~/trpc/react";
 
 export default function ProducerWidgetPage() {
-  const { data: embedData, isLoading } = api.widget.getEmbedCode.useQuery();
+  const {
+    data: embedData,
+    isLoading,
+    isError,
+    refetch,
+  } = api.widget.getEmbedCode.useQuery();
   const [copiedType, setCopiedType] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"iframe" | "script">("iframe");
 
@@ -33,14 +38,27 @@ export default function ProducerWidgetPage() {
     );
   }
 
+  // Une requête en échec ne doit pas se confondre avec une liste vide :
+  // « vous n'avez rien » est plausible et masquerait l'incident.
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4 text-center">
+        <span role="alert" className="n-font-data text-sm tracking-widest" style={{ color: "var(--n-text-secondary)" }}>
+          [ERREUR] LE CODE D&apos;INTÉGRATION N&apos;A PAS PU ÊTRE CHARGÉ
+        </span>
+        <button type="button" className="n-btn-secondary text-xs" onClick={() => void refetch()}>
+          RÉESSAYER
+        </button>
+      </div>
+    );
+  }
+
   if (!embedData) {
     return (
       <div className="space-y-6">
         <div className="flex items-center gap-4">
-          <Link href="/producer/dashboard">
-            <button className="n-btn-ghost text-xs" style={{ padding: "8px 12px" }}>
-              ← RETOUR
-            </button>
+          <Link href="/producer/dashboard" className="n-btn-ghost text-xs" style={{ padding: "8px 12px" }}>
+            ← RETOUR
           </Link>
           <div>
             <div className="n-label mb-1" style={{ color: "var(--n-text-disabled)" }}>
@@ -75,10 +93,8 @@ export default function ProducerWidgetPage() {
     <div className="space-y-8">
       {/* Header */}
       <div className="flex items-center gap-4">
-        <Link href="/producer/dashboard">
-          <button className="n-btn-ghost text-xs" style={{ padding: "8px 12px" }}>
-            ← RETOUR
-          </button>
+        <Link href="/producer/dashboard" className="n-btn-ghost text-xs" style={{ padding: "8px 12px" }}>
+          ← RETOUR
         </Link>
         <div>
           <div className="n-label mb-1" style={{ color: "var(--n-text-disabled)" }}>

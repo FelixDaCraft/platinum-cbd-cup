@@ -8,7 +8,7 @@ import { api } from "~/trpc/react";
  * Lists all completed cups where the jury can view results
  */
 export default function JuryResultsListPage() {
-  const { data: completedCups, isLoading } =
+  const { data: completedCups, isLoading, isError, refetch } =
     api.jury.getCompletedCupsWithResults.useQuery();
 
   // Single-tenant: no org filter
@@ -29,6 +29,21 @@ export default function JuryResultsListPage() {
         <span className="n-font-data" style={{ color: "var(--n-text-disabled)", fontSize: "12px", letterSpacing: "0.08em" }}>
           [LOADING...]
         </span>
+      </div>
+    );
+  }
+
+  // Sans ce garde-fou, une requête en échec affichait « aucun résultat » :
+  // indiscernable d'une absence réelle de cup terminée.
+  if (isError) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "400px", gap: "16px" }}>
+        <span role="alert" className="n-font-data" style={{ color: "var(--n-text-secondary)", fontSize: "12px", letterSpacing: "0.08em", textAlign: "center" }}>
+          [ERREUR] LES RÉSULTATS N&apos;ONT PAS PU ÊTRE CHARGÉS
+        </span>
+        <button type="button" className="n-btn-secondary" onClick={() => void refetch()}>
+          RÉESSAYER
+        </button>
       </div>
     );
   }

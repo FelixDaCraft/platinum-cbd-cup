@@ -14,6 +14,9 @@ vi.mock("~/server/db", () => ({
     },
     select: vi.fn(),
     update: vi.fn(),
+    // Verrou consultatif pris avant l'attribution d'un code : sans lui, deux
+    // confirmations concurrentes tireraient le même nombre.
+    execute: vi.fn().mockResolvedValue(undefined),
   },
 }));
 
@@ -32,6 +35,7 @@ vi.mock("drizzle-orm", async (importOriginal) => {
       })),
       {
         join: vi.fn(),
+        raw: vi.fn((value: string) => ({ value, type: "sql.raw" })),
       }
     ),
   };
@@ -175,8 +179,12 @@ describe("Anonymization Service", () => {
       const { generateAnonymousCode } = await import("./anonymization.service");
       const code = await generateAnonymousCode(db as never, "cup-1", "cat-1");
 
-      // Should fallback to 101+
-      expect(code).toBe("F101");
+      // La plage s'élargit au-delà de 100, mais le tirage reste aléatoire :
+      // un repli séquentiel (101, 102, …) révélerait l'ordre de confirmation.
+      expect(code).toMatch(/^F\d+$/);
+      const picked = Number(code.slice(1));
+      expect(picked).toBeGreaterThan(100);
+      expect(picked).toBeLessThanOrEqual(202);
     });
   });
 

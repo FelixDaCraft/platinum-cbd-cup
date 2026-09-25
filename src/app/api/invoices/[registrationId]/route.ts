@@ -7,9 +7,8 @@
  */
 
 import { NextResponse } from "next/server";
-import { headers } from "next/headers";
-import { auth } from "~/lib/auth";
 import { db } from "~/server/db";
+import { forbidden, requireSession } from "../../_lib/route-auth";
 import { eq } from "drizzle-orm";
 import * as schema from "~/server/db/schema";
 import { generateInvoicePdf } from "~/server/services/invoice.service";
@@ -25,6 +24,14 @@ const RATE_LIMIT_MAX_REQUESTS = 10;
 
 function checkRateLimit(userId: string): { allowed: boolean; retryAfter?: number } {
   const now = Date.now();
+
+  // Cheap eviction so the map cannot grow without bound.
+  if (rateLimitMap.size > 500) {
+    for (const [key, entry] of rateLimitMap) {
+      if (now > entry.resetAt) rateLimitMap.delete(key);
+    }
+  }
+
   const userLimit = rateLimitMap.get(userId);
 
   if (!userLimit || now > userLimit.resetAt) {
@@ -48,20 +55,11 @@ export async function GET(
   try {
     const { registrationId } = await params;
 
-    // Get the current session
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    });
-
-    if (!session?.user) {
-      return NextResponse.json(
-        { error: "Vous devez etre connecte" },
-        { status: 401 }
-      );
-    }
+    const session = await requireSession();
+    if (session instanceof NextResponse) return session;
 
     // Check rate limit
-    const rateLimit = checkRateLimit(session.user.id);
+    const rateLimit = checkRateLimit(session.userId);
     if (!rateLimit.allowed) {
       return NextResponse.json(
         { error: "Trop de requetes. Reessayez plus tard." },
@@ -94,11 +92,8 @@ export async function GET(
     }
 
     // Check if the user is the owner of this registration
-    if (registration.producer.userId !== session.user.id) {
-      return NextResponse.json(
-        { error: "Vous n'avez pas acces a cette facture" },
-        { status: 403 }
-      );
+    if (registration.producer.userId !== session.userId) {
+      return forbidden();
     }
 
     // Check if registration is confirmed (has paid)
@@ -109,21 +104,10 @@ export async function GET(
       );
     }
 
-    // Generate the PDF
+    // Generate the PDF. generateInvoicePdf alloue et persiste le numero de
+    // facture lui-meme, sous verrou : ne pas le reecrire ici, ce serait
+    // ecraser invoiceGeneratedAt avec la date du telechargement.
     const { buffer, invoiceNumber } = await generateInvoicePdf(registrationId);
-
-    // If invoice wasn't saved to DB yet, save it now
-    if (!registration.invoiceNumber) {
-      await db
-        .update(schema.registrations)
-        .set({
-          invoiceNumber,
-          invoiceGeneratedAt: new Date(),
-          // invoiceUrl is not set because we generate on-demand
-          updatedAt: new Date(),
-        })
-        .where(eq(schema.registrations.id, registrationId));
-    }
 
     // Return PDF as download
     const filename = `${invoiceNumber}.pdf`;

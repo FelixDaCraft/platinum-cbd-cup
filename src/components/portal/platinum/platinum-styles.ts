@@ -20,7 +20,9 @@ export const platinumCSS = `
   --bg-2: #111111;
   --fg: #f2f2f2;
   --fg-2: rgba(242,242,242,.62);
-  --fg-3: rgba(242,242,242,.38);
+  /* .50 sur --bg = 4.88:1, le minimum WCAG AA (4.5:1) pour les libellés de
+     champs et les légendes qui portent de l'information. */
+  --fg-3: rgba(242,242,242,.50);
   --line: rgba(242,242,242,.10);
   --line-strong: rgba(242,242,242,.20);
   --accent: #d4af37;
@@ -41,7 +43,8 @@ export const platinumCSS = `
   --bg-2: #ffffff;
   --fg: #0a0a0a;
   --fg-2: rgba(10,10,10,.62);
-  --fg-3: rgba(10,10,10,.38);
+  /* .58 sur le fond clair = 4.76:1 (cf. --fg-3 du thème sombre). */
+  --fg-3: rgba(10,10,10,.58);
   --line: rgba(10,10,10,.10);
   --line-strong: rgba(10,10,10,.20);
   --accent: #8a6a1f;
@@ -75,6 +78,22 @@ body{
 [data-matrix="off"] .matrix{ display:none; }
 
 .shell{ position: relative; z-index: 1; min-height: 100vh; display: flex; flex-direction: column; }
+
+/* ── Lien d'évitement ───────────────────────────────────────
+   Hors de l'écran tant qu'il n'a pas le focus : il ne doit rien coûter
+   visuellement, mais rester le premier arrêt de tabulation. */
+.skip-link{
+  position: absolute; left: -9999px; top: 0; z-index: 100;
+  padding: 10px 16px;
+  font-family: var(--mono); font-size: 11px; letter-spacing: .1em;
+  text-transform: uppercase; text-decoration: none;
+  background: var(--bg-2); color: var(--fg);
+  border: 1px solid var(--line-strong); border-radius: 8px;
+}
+.skip-link:focus{ left: 12px; top: 12px; }
+/* Le focus de <main> est programmatique (cible du lien d'évitement) : le
+   contour permanent du navigateur n'apporte rien au clavier. */
+.page:focus{ outline: none; }
 
 /* ── Top navigation ─────────────────────────────────────── */
 .topbar{
@@ -216,6 +235,34 @@ h2.section-title{
 }
 .btn:hover{ transform: translateY(-1px); }
 .btn:focus-visible, .nav button:focus-visible, .nav a:focus-visible{
+  outline: 2px solid var(--accent-hi);
+  outline-offset: 2px;
+}
+
+/* ── Check (platinum-shared) ──────────────────────────────
+   L'<input> natif est étiré transparent au-dessus du carré décoratif : il
+   reçoit les clics, le focus et les clics redirigés par un <label> parent.
+   Le carré ne fait que refléter son état via :checked / :focus-visible. */
+.pt-check{
+  position: relative; width: 24px; height: 24px; margin: -3px;
+  flex-shrink: 0; display: grid; place-items: center;
+}
+.pt-check input{
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  margin: 0; opacity: 0; cursor: pointer;
+}
+.pt-check-box{
+  width: 18px; height: 18px; border-radius: 5px;
+  border: 1px solid var(--line-strong); background: transparent;
+  display: grid; place-items: center;
+  color: #002a00; font-size: 12px;
+  transition: border-color .15s ease, background .15s ease;
+  pointer-events: none;
+}
+.pt-check input:checked + .pt-check-box{
+  border-color: var(--accent); background: var(--accent);
+}
+.pt-check input:focus-visible + .pt-check-box{
   outline: 2px solid var(--accent-hi);
   outline-offset: 2px;
 }
@@ -698,13 +745,10 @@ h2.section-title{
 .ticker-group .dot{ width:5px; height:5px; border-radius:50%; background: var(--accent); }
 @keyframes tick{ from{ transform: translateX(0); } to{ transform: translateX(-50%); } }
 
-/* ── Trophy keyframes ─────────────────────────────────── */
-@keyframes spin3d {
-  0%   { transform: rotateY(0deg) rotateX(2deg); }
-  50%  { transform: rotateY(180deg) rotateX(-2deg); }
-  100% { transform: rotateY(360deg) rotateX(2deg); }
-}
-@keyframes spinRing { to { transform: rotate(360deg); } }
+/* ── Emblème 3D ───────────────────────────────────────────
+   spin3d et spinRing servaient au PlatinumTrophy en CSS-3D, remplacé par
+   GeometricEmblem (React Three Fiber) : supprimés avec lui. Seule l'ombre
+   portée reste pilotée en CSS. */
 @keyframes shadowPulse {
   0%, 100% { opacity: .9; transform: scaleX(1); }
   50%      { opacity: .6; transform: scaleX(.82); }
@@ -719,10 +763,20 @@ h2.section-title{
 }
 .field-input:focus{ border-color: var(--accent); }
 .field-input.mono{ font-family: var(--mono); }
+/* appearance:none supprime aussi le chevron natif des <select> : on le redessine. */
+select.field-input{
+  padding-right: 34px; cursor: pointer;
+  background-image: linear-gradient(45deg, transparent 50%, var(--fg-2) 50%),
+                    linear-gradient(135deg, var(--fg-2) 50%, transparent 50%);
+  background-position: calc(100% - 18px) calc(50% + 2px), calc(100% - 13px) calc(50% + 2px);
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+select.field-input option{ background: var(--bg-2); color: var(--fg); }
 
 /* ── Reduced motion (WCAG 2.3.3) ──────────────────────────
    Users with vestibular disorders or who set prefers-reduced-motion
-   should not see the trophy spin, ring orbit, ticker, pulse, etc. */
+   should not see the ticker, the shadow pulse, the live dot, etc. */
 @media (prefers-reduced-motion: reduce){
   *, *::before, *::after{
     animation-duration: 0.001ms !important;

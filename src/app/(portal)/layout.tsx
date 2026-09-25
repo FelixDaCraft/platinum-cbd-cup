@@ -1,8 +1,12 @@
 import type { ReactNode } from "react";
+import { unstable_cache } from "next/cache";
 import { db } from "~/server/db";
 import { PlatinumShell } from "~/components/portal/platinum";
 
-// Don't statically cache — the live status query must run per-request.
+// Le layout reste dynamique (les pages enfants lisent la base et la session),
+// mais la requête « live » ci-dessous est mémoïsée : elle tournait sinon une
+// fois par requête HTTP du portail, y compris sur /login, /contact ou les
+// pages légales qui n'en dépendent en rien.
 export const dynamic = "force-dynamic";
 
 /**
@@ -38,10 +42,25 @@ async function getLiveStatus(): Promise<"live" | "idle"> {
 }
 
 /**
+ * Version mémoïsée de getLiveStatus.
+ *
+ * L'indicateur bascule au plus quelques fois par an (ouverture des
+ * inscriptions, passage en notation) : une minute de fraîcheur est
+ * largement suffisante et supprime une requête SQL par page vue.
+ *
+ * Le tag permettra une invalidation immédiate le jour où cup.update et
+ * publishResults appelleront revalidateTag("cups") — voir le rapport.
+ */
+const getCachedLiveStatus = unstable_cache(getLiveStatus, ["portal-live-status"], {
+  revalidate: 60,
+  tags: ["cups"],
+});
+
+/**
  * Public portal layout — wraps every public-facing page in the Platinum
  * design shell (sticky topbar + page container + footer).
  */
 export default async function PortalLayout({ children }: { children: ReactNode }) {
-  const liveStatus = await getLiveStatus();
+  const liveStatus = await getCachedLiveStatus();
   return <PlatinumShell liveStatus={liveStatus}>{children}</PlatinumShell>;
 }

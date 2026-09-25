@@ -205,7 +205,12 @@ export default function JuryProfileEditPage() {
   const [saveError, setSaveError] = useState<string>("");
   const [emailChanged, setEmailChanged] = useState(false);
 
-  const { data, isLoading } = api.jury.getMyProfileForEdit.useQuery();
+  const {
+    data,
+    isLoading,
+    isError,
+    refetch,
+  } = api.jury.getMyProfileForEdit.useQuery();
   const { data: juryCups } = api.jury.getMyJuryCups.useQuery();
   const { data: myStats } = api.jury.getMyStats.useQuery();
 
@@ -403,6 +408,35 @@ export default function JuryProfileEditPage() {
         >
           [LOADING...]
         </span>
+      </div>
+    );
+  }
+
+  // Une requête en échec ne doit pas se confondre avec un espace vide :
+  // « aucune cup » est plausible et masquerait l'incident.
+  if (isError) {
+    return (
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 16,
+          minHeight: 400,
+          textAlign: "center",
+        }}
+      >
+        <span
+          role="alert"
+          className="n-font-data n-label"
+          style={{ color: "var(--n-text-secondary)", fontSize: 13 }}
+        >
+          [ERREUR] VOTRE PROFIL N&apos;A PAS PU ÊTRE CHARGÉ
+        </span>
+        <button type="button" className="n-btn-secondary text-xs" onClick={() => void refetch()}>
+          RÉESSAYER
+        </button>
       </div>
     );
   }

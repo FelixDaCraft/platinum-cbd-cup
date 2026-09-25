@@ -108,13 +108,39 @@ export const categoryRouter = createTRPCRouter({
       });
       if (!category) Errors.categoryNotFound();
 
-      // TODO: Check if products are associated
-      const productsCount = 0;
+      // products.category_id est en ON DELETE RESTRICT : sans ce compte, la
+      // suppression remonterait une erreur Postgres brute au lieu du message métier.
+      const [productsResult] = await ctx.db
+        .select({ count: count() })
+        .from(schema.products)
+        .where(eq(schema.products.categoryId, input.id));
+      const productsCount = productsResult?.count ?? 0;
 
       if (productsCount > 0) {
         throw new TRPCError({
           code: "CONFLICT",
           message: `Impossible de supprimer: ${productsCount} produit(s) inscrit(s) dans cette catégorie`,
+        });
+      }
+
+      // Les assignations de jurés et les codes d'invitation cascadent
+      // silencieusement : on prévient plutôt que de les perdre sans le dire.
+      const [assignmentsResult] = await ctx.db
+        .select({ count: count() })
+        .from(schema.juryCategoryAssignments)
+        .where(eq(schema.juryCategoryAssignments.categoryId, input.id));
+      const assignmentsCount = assignmentsResult?.count ?? 0;
+
+      const [codesResult] = await ctx.db
+        .select({ count: count() })
+        .from(schema.juryInvitationCodeCategories)
+        .where(eq(schema.juryInvitationCodeCategories.categoryId, input.id));
+      const codesCount = codesResult?.count ?? 0;
+
+      if (assignmentsCount > 0 || codesCount > 0) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: `Impossible de supprimer: ${assignmentsCount} juré(s) assigné(s) et ${codesCount} code(s) d'invitation dépendent de cette catégorie`,
         });
       }
 

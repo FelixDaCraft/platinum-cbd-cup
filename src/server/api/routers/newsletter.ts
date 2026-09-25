@@ -8,7 +8,8 @@ import { TRPCError } from "@trpc/server";
 import { eq, and, desc, sql } from "drizzle-orm";
 import {
   createTRPCRouter,
-  publicProcedure,
+  rateLimitedPublicProcedure,
+  strictRateLimitedPublicProcedure,
   organizerProcedure,
 } from "~/server/api/trpc";
 import * as schema from "~/server/db/schema";
@@ -151,7 +152,7 @@ export const newsletterRouter = createTRPCRouter({
   /**
    * Subscribe from portal (public endpoint)
    */
-  subscribe: publicProcedure
+  subscribe: strictRateLimitedPublicProcedure
     .input(
       z.object({
         email: z.string().email("Email invalide"),
@@ -159,14 +160,23 @@ export const newsletterRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      // Une seule et même réponse dans tous les cas. Trois messages distincts
+      // (« déjà inscrit », « en attente », « email envoyé ») laissaient
+      // n'importe qui vérifier si une adresse figure dans la liste : c'est de
+      // l'énumération, sur un endpoint public et anonyme.
+      const reponseUnique = {
+        success: true as const,
+        message:
+          "Si cette adresse n'est pas déjà inscrite, un email de confirmation vient de lui être envoyé.",
+      };
+
       const existing = await ctx.db.query.newsletterSubscribers.findFirst({
         where: eq(schema.newsletterSubscribers.email, input.email.toLowerCase()),
       });
 
       if (existing) {
-        if (existing.status === "active") {
-          return { success: true, message: "Vous êtes déjà inscrit à notre newsletter." };
-        }
+        // Un désabonné qui revient est remis en attente de confirmation ; un
+        // abonné actif ou déjà en attente n'appelle aucune écriture.
         if (existing.status === "unsubscribed") {
           await ctx.db
             .update(schema.newsletterSubscribers)
@@ -177,10 +187,8 @@ export const newsletterRouter = createTRPCRouter({
               updatedAt: new Date(),
             })
             .where(eq(schema.newsletterSubscribers.id, existing.id));
-
-          return { success: true, message: "Un email de confirmation vous a été envoyé." };
         }
-        return { success: true, message: "Un email de confirmation est en attente." };
+        return reponseUnique;
       }
 
       await ctx.db.insert(schema.newsletterSubscribers).values({
@@ -193,13 +201,16 @@ export const newsletterRouter = createTRPCRouter({
         source: "portal",
       });
 
-      return { success: true, message: "Un email de confirmation vous a été envoyé." };
+      return reponseUnique;
     }),
 
   /**
    * Confirm subscription (double opt-in)
+   *
+   * Limité en débit : le jeton est le seul secret protégeant l'abonnement,
+   * on ne laisse pas une IP en essayer soixante par minute.
    */
-  confirm: publicProcedure
+  confirm: rateLimitedPublicProcedure
     .input(z.object({ token: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const subscriber = await ctx.db.query.newsletterSubscribers.findFirst({
@@ -233,7 +244,7 @@ export const newsletterRouter = createTRPCRouter({
   /**
    * Unsubscribe
    */
-  unsubscribe: publicProcedure
+  unsubscribe: rateLimitedPublicProcedure
     .input(z.object({ token: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const subscriber = await ctx.db.query.newsletterSubscribers.findFirst({

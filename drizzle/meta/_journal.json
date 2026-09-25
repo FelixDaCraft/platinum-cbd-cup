@@ -1,0 +1,41 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1790258204095,
+      "tag": "0000_baseline_production",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1790258210856,
+      "tag": "0001_corrections_audit",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790258950962,
+      "tag": "0002_corrections_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790259082636,
+      "tag": "0003_renommage_tables_historiques",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790259246977,
+      "tag": "0004_checks_etats_restants",
+      "breakpoints": true
+    }
+  ]
+}

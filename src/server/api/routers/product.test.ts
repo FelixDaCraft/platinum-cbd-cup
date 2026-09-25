@@ -1,6 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { TRPCError } from "@trpc/server";
 
+// `product.updateStatus` notifie le producteur, ce qui tire
+// product-notification.service -> ~/env, dont la validation s'exécute au
+// chargement du module et échouerait ici faute de variables.
+vi.mock("~/env", () => ({
+  env: {
+    RESEND_API_KEY: "test-key",
+    EMAIL_FROM: "test@platinumcbdcup.eu",
+    BETTER_AUTH_URL: "http://localhost:3000",
+    NEXT_PUBLIC_APP_URL: "http://localhost:3000",
+    NODE_ENV: "test",
+  },
+}));
+
 // Mock auth
 vi.mock("~/lib/auth", () => ({
   auth: {
@@ -20,9 +33,58 @@ vi.mock("~/server/db", () => ({
       registrations: {
         findMany: vi.fn(),
       },
+      // organizerProcedure resolves the caller's role from `users`
+      // rather than from the session (whose cookie is cached 5 minutes).
+      users: {
+        findFirst: vi.fn(),
+      },
     },
   },
 }));
+
+/** Authenticate the caller; `role` drives what organizerProcedure decides. */
+async function signIn(role: { isAdmin?: boolean; role?: string } | null) {
+  const { auth } = await import("~/lib/auth");
+  const { db } = await import("~/server/db");
+
+  if (role === null) {
+    vi.mocked(auth.api.getSession).mockResolvedValue(null);
+    return;
+  }
+
+  vi.mocked(auth.api.getSession).mockResolvedValue({
+    user: { id: "user_123", email: "test@example.com" },
+    session: { id: "session_123" },
+  } as never);
+  vi.mocked(db.query.users.findFirst).mockResolvedValue(role as never);
+}
+
+const asOrganizer = () => signIn({ isAdmin: false, role: "organizer" });
+const asAdmin = () => signIn({ isAdmin: true, role: "producer" });
+const asProducer = () => signIn({ isAdmin: false, role: "producer" });
+const asAnonymous = () => signIn(null);
+
+async function createCaller() {
+  const { productRouter } = await import("./product");
+  const { db } = await import("~/server/db");
+
+  return productRouter.createCaller({
+    headers: new Headers(),
+    db,
+  } as never);
+}
+
+/** Run `fn` and return the tRPC error code it threw. */
+async function codeOf(fn: () => Promise<unknown>) {
+  try {
+    await fn();
+  } catch (error) {
+    expect(error).toBeInstanceOf(TRPCError);
+    return (error as TRPCError).code;
+  }
+
+  throw new Error("Expected the procedure to throw");
+}
 
 describe("Product Router", () => {
   beforeEach(() => {
@@ -31,59 +93,89 @@ describe("Product Router", () => {
 
   describe("listByCupGroupedByCategory", () => {
     it("should return UNAUTHORIZED if no session", async () => {
-      const { auth } = await import("~/lib/auth");
-      vi.mocked(auth.api.getSession).mockResolvedValue(null);
-
-      const { productRouter } = await import("./product");
-      const caller = productRouter.createCaller({
-        headers: new Headers(),
-        db: (await import("~/server/db")).db,
-      } as never);
+      await asAnonymous();
+      const caller = await createCaller();
 
       await expect(
         caller.listByCupGroupedByCategory({ cupId: "cup_123" })
       ).rejects.toThrow(TRPCError);
 
-      try {
-        await caller.listByCupGroupedByCategory({ cupId: "cup_123" });
-      } catch (error) {
-        expect((error as TRPCError).code).toBe("UNAUTHORIZED");
-      }
+      expect(
+        await codeOf(() =>
+          caller.listByCupGroupedByCategory({ cupId: "cup_123" })
+        )
+      ).toBe("UNAUTHORIZED");
     });
 
-    it("should return NOT_FOUND if cup does not exist", async () => {
+    // The procedure exposes the anonymous code <-> producer mapping, which
+    // would let a jury member lift the blind panel.
+    it("should return FORBIDDEN for an authenticated non-organizer", async () => {
+      await asProducer();
+      const caller = await createCaller();
+
+      expect(
+        await codeOf(() =>
+          caller.listByCupGroupedByCategory({ cupId: "cup_123" })
+        )
+      ).toBe("FORBIDDEN");
+    });
+
+    it("should return FORBIDDEN if the user row no longer exists", async () => {
       const { auth } = await import("~/lib/auth");
+      const { db } = await import("~/server/db");
+
       vi.mocked(auth.api.getSession).mockResolvedValue({
         user: { id: "user_123", email: "test@example.com" },
         session: { id: "session_123" },
       } as never);
+      vi.mocked(db.query.users.findFirst).mockResolvedValue(undefined as never);
+
+      const caller = await createCaller();
+
+      expect(
+        await codeOf(() =>
+          caller.listByCupGroupedByCategory({ cupId: "cup_123" })
+        )
+      ).toBe("FORBIDDEN");
+    });
+
+    it("should allow an admin whose role is not organizer", async () => {
+      await asAdmin();
+
+      const { db } = await import("~/server/db");
+      vi.mocked(db.query.cups.findFirst).mockResolvedValue({
+        id: "cup_123",
+        name: "Test Cup",
+      } as never);
+      vi.mocked(db.query.registrations.findMany).mockResolvedValue([] as never);
+
+      const caller = await createCaller();
+      const result = await caller.listByCupGroupedByCategory({ cupId: "cup_123" });
+
+      expect(result.cupId).toBe("cup_123");
+    });
+
+    it("should return NOT_FOUND if cup does not exist", async () => {
+      await asOrganizer();
 
       const { db } = await import("~/server/db");
       vi.mocked(db.query.cups.findFirst).mockResolvedValue(null as never);
 
-      const { productRouter } = await import("./product");
-      const caller = productRouter.createCaller({
-        headers: new Headers(),
-        db,
-      } as never);
+      const caller = await createCaller();
 
       await expect(
         caller.listByCupGroupedByCategory({ cupId: "nonexistent" })
       ).rejects.toThrow(TRPCError);
 
-      try {
-        await caller.listByCupGroupedByCategory({ cupId: "nonexistent" });
-      } catch (error) {
-        expect((error as TRPCError).code).toBe("NOT_FOUND");
-      }
+      expect(
+        await codeOf(() =>
+          caller.listByCupGroupedByCategory({ cupId: "nonexistent" })
+        )
+      ).toBe("NOT_FOUND");
     });
 
     it("should return products grouped by category", async () => {
-      const { auth } = await import("~/lib/auth");
-      vi.mocked(auth.api.getSession).mockResolvedValue({
-        user: { id: "user_123", email: "test@example.com" },
-        session: { id: "session_123" },
-      } as never);
+      await asOrganizer();
 
       const { db } = await import("~/server/db");
       vi.mocked(db.query.cups.findFirst).mockResolvedValue({
@@ -142,12 +234,7 @@ describe("Product Router", () => {
         },
       ] as never);
 
-      const { productRouter } = await import("./product");
-      const caller = productRouter.createCaller({
-        headers: new Headers(),
-        db,
-      } as never);
-
+      const caller = await createCaller();
       const result = await caller.listByCupGroupedByCategory({ cupId: "cup_123" });
 
       expect(result.cupId).toBe("cup_123");
@@ -170,11 +257,7 @@ describe("Product Router", () => {
     });
 
     it("should include product details with producer info", async () => {
-      const { auth } = await import("~/lib/auth");
-      vi.mocked(auth.api.getSession).mockResolvedValue({
-        user: { id: "user_123", email: "test@example.com" },
-        session: { id: "session_123" },
-      } as never);
+      await asOrganizer();
 
       const { db } = await import("~/server/db");
       vi.mocked(db.query.cups.findFirst).mockResolvedValue({
@@ -204,12 +287,7 @@ describe("Product Router", () => {
         },
       ] as never);
 
-      const { productRouter } = await import("./product");
-      const caller = productRouter.createCaller({
-        headers: new Headers(),
-        db,
-      } as never);
-
+      const caller = await createCaller();
       const result = await caller.listByCupGroupedByCategory({ cupId: "cup_123" });
 
       const product = result.categories[0]!.products[0]!;
@@ -223,11 +301,7 @@ describe("Product Router", () => {
     });
 
     it("should return empty categories array when no products exist", async () => {
-      const { auth } = await import("~/lib/auth");
-      vi.mocked(auth.api.getSession).mockResolvedValue({
-        user: { id: "user_123", email: "test@example.com" },
-        session: { id: "session_123" },
-      } as never);
+      await asOrganizer();
 
       const { db } = await import("~/server/db");
       vi.mocked(db.query.cups.findFirst).mockResolvedValue({
@@ -236,12 +310,7 @@ describe("Product Router", () => {
       } as never);
       vi.mocked(db.query.registrations.findMany).mockResolvedValue([] as never);
 
-      const { productRouter } = await import("./product");
-      const caller = productRouter.createCaller({
-        headers: new Headers(),
-        db,
-      } as never);
-
+      const caller = await createCaller();
       const result = await caller.listByCupGroupedByCategory({ cupId: "cup_123" });
 
       expect(result.totalProducts).toBe(0);
@@ -250,11 +319,7 @@ describe("Product Router", () => {
     });
 
     it("should handle products without anonymousCode", async () => {
-      const { auth } = await import("~/lib/auth");
-      vi.mocked(auth.api.getSession).mockResolvedValue({
-        user: { id: "user_123", email: "test@example.com" },
-        session: { id: "session_123" },
-      } as never);
+      await asOrganizer();
 
       const { db } = await import("~/server/db");
       vi.mocked(db.query.cups.findFirst).mockResolvedValue({
@@ -284,16 +349,45 @@ describe("Product Router", () => {
         },
       ] as never);
 
-      const { productRouter } = await import("./product");
-      const caller = productRouter.createCaller({
-        headers: new Headers(),
-        db,
-      } as never);
-
+      const caller = await createCaller();
       const result = await caller.listByCupGroupedByCategory({ cupId: "cup_123" });
 
       expect(result.categories[0]!.products[0]!.anonymousCode).toBeNull();
       expect(result.categories[0]!.products[0]!.producer.userName).toBeNull();
+    });
+  });
+
+  // Every other procedure of this router is organizer-only too: the lab
+  // analyses, the anonymous code and the terpene ranking all break the blind
+  // panel or let a competitor tamper with the competition.
+  describe("organizer-only procedures", () => {
+    it("should reject an authenticated non-organizer", async () => {
+      await asProducer();
+      const caller = await createCaller();
+
+      expect(
+        await codeOf(() => caller.rankByTerpenes({ cupId: "cup_123" }))
+      ).toBe("FORBIDDEN");
+
+      expect(
+        await codeOf(() => caller.getLabAnalysis({ productId: "prod_1" }))
+      ).toBe("FORBIDDEN");
+
+      expect(
+        await codeOf(() =>
+          caller.updateAnonymousCode({ productId: "prod_1", anonymousCode: "#A1" })
+        )
+      ).toBe("FORBIDDEN");
+
+      expect(
+        await codeOf(() => caller.deleteLabAnalysis({ productId: "prod_1" }))
+      ).toBe("FORBIDDEN");
+
+      expect(
+        await codeOf(() =>
+          caller.updateStatus({ productId: "prod_1", status: "received" })
+        )
+      ).toBe("FORBIDDEN");
     });
   });
 });

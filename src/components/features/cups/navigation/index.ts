@@ -1,1 +1,1 @@
-export { CupNavSection, type NavItem, type CupNavSectionProps } from "./cup-nav-section";
+export { CupNavSection, type NavItem } from "./cup-nav-section";

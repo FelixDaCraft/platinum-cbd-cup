@@ -141,10 +141,8 @@ export default function JuryRatingsPage() {
                               </span>
                             </td>
                             <td style={{ padding: "12px 20px", textAlign: "right" }}>
-                              <Link href={`/jury/cups/${cup.cupId}`}>
-                                <button className="n-btn-ghost" style={{ padding: "4px 12px", fontSize: "12px" }}>
-                                  Voir
-                                </button>
+                              <Link href={`/jury/cups/${cup.cupId}`} className="n-btn-ghost" style={{ padding: "4px 12px", fontSize: "12px" }}>
+                                Voir
                               </Link>
                             </td>
                           </tr>

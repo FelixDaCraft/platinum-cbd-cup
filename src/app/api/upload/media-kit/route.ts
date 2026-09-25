@@ -2,67 +2,30 @@ import { NextRequest, NextResponse } from "next/server";
 import { writeFile, mkdir } from "fs/promises";
 import { existsSync } from "fs";
 import path from "path";
-import { auth } from "~/lib/auth";
-import { headers } from "next/headers";
-import { db } from "~/server/db";
+import { requireOrganizer } from "../../_lib/route-auth";
+import { consumeUploadBudget } from "../_lib/budget";
+import { SNIFFED_TYPES, sniffType, type SniffedType } from "../_lib/file-type";
 
 // Max file size: 50MB
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
 
-// Allowed file types
-const ALLOWED_TYPES = [
-  "application/zip",
-  "application/x-zip-compressed",
-  "application/pdf",
-  "application/x-rar-compressed",
-  "application/x-7z-compressed",
-];
-
-const ALLOWED_EXTENSIONS = [".zip", ".pdf", ".rar", ".7z"];
+// Allowed file types, decided from the bytes rather than from the
+// client-declared MIME type or the file name.
+const ALLOWED_TYPES: readonly SniffedType[] = ["zip", "pdf", "rar", "7z"];
 
 // Single-tenant upload subdirectory (no per-org nesting).
 const UPLOAD_SUBDIR = "media-kit";
 
-/**
- * Authorize the caller as an organizer (or platform admin). Single-tenant:
- * we no longer have organizations/members, so the `role` column on users
- * is the source of truth.
- */
-async function requireOrganizer(userId: string): Promise<boolean> {
-  const caller = await db.query.users.findFirst({
-    where: (u, { eq }) => eq(u.id, userId),
-    columns: { role: true, isAdmin: true },
-  });
-  return Boolean(caller && (caller.role === "organizer" || caller.isAdmin));
-}
-
 export async function POST(request: NextRequest) {
   try {
-    // Check authentication
-    const reqHeaders = await headers();
-    const session = await auth.api.getSession({
-      headers: reqHeaders,
-    });
-
-    if (!session?.user?.id) {
-      return NextResponse.json(
-        { error: "Non autorise" },
-        { status: 401 }
-      );
-    }
-
-    if (!(await requireOrganizer(session.user.id))) {
-      return NextResponse.json(
-        { error: "Permission refusee" },
-        { status: 403 }
-      );
-    }
+    const caller = await requireOrganizer();
+    if (caller instanceof NextResponse) return caller;
 
     // Parse form data
     const formData = await request.formData();
-    const file = formData.get("file") as File | null;
+    const file = formData.get("file");
 
-    if (!file) {
+    if (!(file instanceof File)) {
       return NextResponse.json(
         { error: "Aucun fichier fourni" },
         { status: 400 }
@@ -77,12 +40,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate file type (mime OR extension)
-    const fileExtension = path.extname(file.name).toLowerCase();
-    if (
-      !ALLOWED_EXTENSIONS.includes(fileExtension) &&
-      !ALLOWED_TYPES.includes(file.type)
-    ) {
+    // Le kit média pèse jusqu'à 50 Mo : sans budget partagé avec les autres
+    // routes d'upload, une boucle de POST sature le disque de l'hôte.
+    const budget = consumeUploadBudget(
+      caller.userId,
+      caller.isOrganizer,
+      file.size
+    );
+    if (!budget.allowed) {
+      return NextResponse.json(
+        { error: "Trop d'uploads. Reessayez plus tard." },
+        {
+          status: 429,
+          headers: { "Retry-After": String(budget.retryAfter ?? 60) },
+        }
+      );
+    }
+
+    // Convert file to buffer and validate its real type
+    const bytes = await file.arrayBuffer();
+    const buffer = Buffer.from(bytes);
+    const sniffed = sniffType(buffer);
+    if (!sniffed || !ALLOWED_TYPES.includes(sniffed)) {
       return NextResponse.json(
         { error: "Type de fichier non autorise. Utilisez ZIP, PDF, RAR ou 7Z" },
         { status: 400 }
@@ -95,17 +74,16 @@ export async function POST(request: NextRequest) {
       await mkdir(uploadDir, { recursive: true });
     }
 
-    // Generate unique filename
+    // Generate unique filename. The stored extension comes from the sniffed
+    // type, not from the name the client sent.
     const timestamp = Date.now();
     const sanitizedName = file.name
-      .replace(/[^a-zA-Z0-9.-]/g, "_")
+      .replace(/\.[^.]+$/, "")
+      .replace(/[^a-zA-Z0-9-]/g, "_")
       .substring(0, 100);
-    const fileName = `${timestamp}-${sanitizedName}`;
+    const fileName = `${timestamp}-${sanitizedName}.${SNIFFED_TYPES[sniffed].extension}`;
     const filePath = path.join(uploadDir, fileName);
 
-    // Convert file to buffer and save
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
     await writeFile(filePath, buffer);
 
     // Generate public URL
@@ -128,25 +106,8 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    // Check authentication
-    const reqHeaders = await headers();
-    const session = await auth.api.getSession({
-      headers: reqHeaders,
-    });
-
-    if (!session?.user?.id) {
-      return NextResponse.json(
-        { error: "Non autorise" },
-        { status: 401 }
-      );
-    }
-
-    if (!(await requireOrganizer(session.user.id))) {
-      return NextResponse.json(
-        { error: "Permission refusee" },
-        { status: 403 }
-      );
-    }
+    const caller = await requireOrganizer();
+    if (caller instanceof NextResponse) return caller;
 
     const { searchParams } = new URL(request.url);
     const fileUrl = searchParams.get("url");
@@ -158,8 +119,22 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // Verify the file belongs to the media-kit directory
-    if (!fileUrl.includes(`/uploads/${UPLOAD_SUBDIR}/`)) {
+    // Verify the file really resolves inside the media-kit directory.
+    // A substring test is not enough: `/uploads/media-kit/../../../server.js`
+    // contains the expected prefix but path.join collapses the `..` segments
+    // and escapes the folder. Resolve first, then compare the absolute path.
+    const mediaKitRoot = path.resolve(
+      process.cwd(),
+      "public",
+      "uploads",
+      UPLOAD_SUBDIR
+    );
+    const filePath = path.resolve(
+      process.cwd(),
+      "public",
+      fileUrl.replace(/^\//, "")
+    );
+    if (!filePath.startsWith(mediaKitRoot + path.sep)) {
       return NextResponse.json(
         { error: "Acces refuse a ce fichier" },
         { status: 403 }
@@ -167,7 +142,6 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Delete the file
-    const filePath = path.join(process.cwd(), "public", fileUrl);
     const { unlink } = await import("fs/promises");
 
     try {

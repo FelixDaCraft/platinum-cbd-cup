@@ -119,15 +119,19 @@ export default function CupRegistrationsPage() {
   const [selectedRegistration, setSelectedRegistration] = useState<Registration | null>(null);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
 
-  const { data: cup, isLoading: isCupLoading } = api.cup.getById.useQuery({ id: cupId });
+  const { data: cup, isLoading: isCupLoading, isError: isCupError } = api.cup.getById.useQuery({ id: cupId });
 
   const { data: categories = [] } = api.category.list.useQuery(
     { cupId },
     { enabled: !!cup }
   );
 
-  const { data: registrations = [], isLoading: isRegistrationsLoading } =
-    api.registration.listByCup.useQuery(
+  const {
+    data: registrations = [],
+    isLoading: isRegistrationsLoading,
+    isError: isRegistrationsError,
+    refetch: refetchRegistrations,
+  } = api.registration.listByCup.useQuery(
       {
         cupId,
         status: statusFilter !== "all" ? (statusFilter as RegistrationStatus) : undefined,
@@ -166,6 +170,21 @@ export default function CupRegistrationsPage() {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <span style={{ fontFamily: "'Space Mono', monospace", color: "var(--n-text-secondary)" }}>[LOADING...]</span>
+      </div>
+    );
+  }
+
+  // Sans cela, une erreur serveur affichait « 0 inscription » : l'organisateur
+  // aurait pu croire à une absence réelle d'inscrits.
+  if (isCupError || isRegistrationsError) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4 text-center">
+        <span role="alert" style={{ fontFamily: "'Space Mono', monospace", fontSize: "13px", letterSpacing: "0.08em", color: "var(--n-text-secondary)" }}>
+          [ERREUR] LES INSCRIPTIONS N&apos;ONT PAS PU ÊTRE CHARGÉES
+        </span>
+        <button type="button" className="n-btn-secondary text-xs" onClick={() => void refetchRegistrations()}>
+          RÉESSAYER
+        </button>
       </div>
     );
   }

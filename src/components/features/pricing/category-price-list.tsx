@@ -19,6 +19,8 @@ interface CategoryPriceListProps {
   currency: Currency;
   cupId: string;
   onEditCategory: (category: CategoryPrice) => void;
+  /** Faux quand la cup est terminée : la surcharge n'est plus modifiable. */
+  canEdit?: boolean;
 }
 
 export function CategoryPriceList({
@@ -27,6 +29,7 @@ export function CategoryPriceList({
   currency,
   cupId,
   onEditCategory,
+  canEdit = true,
 }: CategoryPriceListProps) {
   if (categories.length === 0) {
     return (
@@ -96,19 +99,22 @@ export function CategoryPriceList({
                   variant="ghost"
                   size="icon"
                   onClick={() => onEditCategory(category)}
+                  disabled={!canEdit}
                   className="h-8 w-8 text-muted-foreground hover:text-foreground"
                 >
                   <Edit2 className="h-4 w-4" />
-                  <span className="sr-only">Modifier le prix</span>
+                  <span className="sr-only">Modifier le prix de {category.name}</span>
                 </Button>
-                <Link href={`/dashboard/cups/${cupId}/config/categories/${category.categoryId}`}>
+                <Link
+                  href={`/dashboard/cups/${cupId}/config/categories/${category.categoryId}/criteria`}
+                >
                   <Button
                     variant="ghost"
                     size="icon"
                     className="h-8 w-8 text-muted-foreground hover:text-foreground"
                   >
                     <ChevronRight className="h-4 w-4" />
-                    <span className="sr-only">Voir la catégorie</span>
+                    <span className="sr-only">Voir les critères de {category.name}</span>
                   </Button>
                 </Link>
               </div>

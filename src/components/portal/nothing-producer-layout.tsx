@@ -35,7 +35,11 @@ const nothingCss = `
   --n-surface-raised: #1A1A1A;
   --n-border: #222222;
   --n-border-visible: #333333;
-  --n-text-disabled: #666666;
+  /* #666666 ne donnait que 3.66:1 sur --n-black, sous le seuil WCAG AA (4.5:1),
+     alors que ce token porte de l'information (libellés de stats, en-têtes de
+     tableau, "[LOADING...]") et pas seulement des éléments désactivés.
+     #858585 = 5.70:1 sur #000, 5.12:1 sur --n-surface, 4.72:1 sur --n-surface-raised. */
+  --n-text-disabled: #858585;
   --n-text-secondary: #999999;
   --n-text-primary: #E8E8E8;
   --n-text-display: #FFFFFF;
@@ -129,6 +133,25 @@ const nothingCss = `
 .nothing-producer ::-webkit-scrollbar { width: 4px; }
 .nothing-producer ::-webkit-scrollbar-track { background: transparent; }
 .nothing-producer ::-webkit-scrollbar-thumb { background: var(--n-border-visible); border-radius: 2px; }
+
+/* Lien d'évitement : hors écran tant qu'il n'a pas le focus. */
+.nothing-producer .n-skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 100;
+  padding: 10px 16px;
+  font-family: 'Space Mono', monospace;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  background-color: var(--n-surface-raised);
+  color: var(--n-text-display);
+  border: 1px solid var(--n-border-visible);
+}
+.nothing-producer .n-skip-link:focus {
+  left: 8px;
+  top: 8px;
+}
 `;
 
 // ─── Navigation ─────────────────────────────────────────────────────────────
@@ -142,7 +165,7 @@ interface NavItem {
 const producerNavItems: NavItem[] = [
   { href: "/producer", label: "ACCUEIL", icon: Home },
   { href: "/producer/registrations", label: "INSCRIPTIONS", icon: Trophy },
-  { href: "/producer/results", label: "RESULTATS", icon: TrendingUp },
+  { href: "/producer/results", label: "RÉSULTATS", icon: TrendingUp },
   { href: "/producer/labels", label: "DISTINCTIONS", icon: Award },
   { href: "/producer/widget", label: "WIDGET", icon: Code },
   { href: "/producer/profile", label: "PROFIL", icon: Building2 },
@@ -185,7 +208,7 @@ function NothingProdSidebar() {
       {/* Header */}
       <div className={cn("flex items-center gap-3 p-4 border-b", isCollapsed && "justify-center")} style={{ borderColor: "var(--n-border)" }}>
         {theme.logoUrl ? (
-          <img src={theme.logoUrl} alt={organization.name} className="h-10 w-10 rounded-lg object-contain p-1" style={{ backgroundColor: "var(--n-surface)" }} />
+          <img src={theme.logoUrl} alt={organization.name} width={40} height={40} decoding="async" className="h-10 w-10 rounded-lg object-contain p-1" style={{ backgroundColor: "var(--n-surface)" }} />
         ) : (
           <div className="flex h-10 w-10 items-center justify-center rounded-lg" style={{ backgroundColor: "var(--n-surface)" }}>
             <Package className="h-5 w-5" style={{ color: "var(--n-text-secondary)" }} strokeWidth={1.5} />
@@ -200,7 +223,7 @@ function NothingProdSidebar() {
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 overflow-y-auto p-3 space-y-1">
+      <nav aria-label="Navigation producteur" className="flex-1 overflow-y-auto p-3 space-y-1">
         {!isCollapsed && <p className="n-label px-3 mb-3" style={{ color: "var(--n-text-disabled)" }}>NAVIGATION</p>}
         {producerNavItems.map((item) => {
           const active = isActive(item.href);
@@ -208,6 +231,7 @@ function NothingProdSidebar() {
           return (
             <Link
               key={item.href} href={item.href}
+              aria-current={active ? "page" : undefined}
               className={cn("flex items-center gap-3 px-3 py-2.5 rounded-none text-sm transition-all duration-200 relative", isCollapsed && "justify-center px-2")}
               style={{ color: active ? "var(--n-text-display)" : "var(--n-text-disabled)", fontFamily: "'Space Mono', monospace", fontSize: "12px", letterSpacing: "0.06em" }}
               title={isCollapsed ? item.label : undefined}
@@ -250,7 +274,7 @@ function NothingProdSidebar() {
                 <p className="text-xs font-medium truncate" style={{ color: "var(--n-text-primary)" }}>{session.user.name ?? "Utilisateur"}</p>
                 <p className="text-[10px] truncate" style={{ color: "var(--n-text-disabled)" }}>{session.user.email}</p>
               </div>
-              <button onClick={handleLogout} className="p-2" style={{ color: "var(--n-text-disabled)" }} title="Deconnexion">
+              <button onClick={handleLogout} className="p-2" style={{ color: "var(--n-text-disabled)" }} title="Déconnexion">
                 <LogOut className="h-4 w-4" strokeWidth={1.5} />
               </button>
             </div>
@@ -281,7 +305,7 @@ function NothingProdBottomNav() {
   const items: NavItem[] = [
     { href: "/producer", label: "ACCUEIL", icon: Home },
     { href: "/producer/registrations", label: "INSCRIPTIONS", icon: Trophy },
-    { href: "/producer/results", label: "RESULTATS", icon: TrendingUp },
+    { href: "/producer/results", label: "RÉSULTATS", icon: TrendingUp },
     { href: "/producer/labels", label: "DISTINCTIONS", icon: Award },
     { href: "/producer/profile", label: "PROFIL", icon: Building2 },
   ];
@@ -292,14 +316,14 @@ function NothingProdBottomNav() {
   };
 
   return (
-    <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 border-t safe-area-bottom"
+    <nav aria-label="Navigation producteur (mobile)" className="lg:hidden fixed bottom-0 left-0 right-0 z-50 border-t safe-area-bottom"
       style={{ backgroundColor: "var(--n-black)", borderColor: "var(--n-border)" }}>
       <div className="flex items-center justify-around px-2 py-1">
         {items.map((item) => {
           const active = isActive(item.href);
           const Icon = item.icon;
           return (
-            <Link key={item.href} href={item.href} className="flex flex-col items-center justify-center min-w-[64px] py-2 px-3">
+            <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} className="flex flex-col items-center justify-center min-w-[64px] py-2 px-3">
               <div className="relative flex items-center justify-center w-10 h-7">
                 <Icon className="h-5 w-5" strokeWidth={active ? 2 : 1.5} style={{ color: active ? "var(--n-text-display)" : "var(--n-text-disabled)" }} />
                 {active && <div className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full" style={{ backgroundColor: "var(--n-text-display)" }} />}
@@ -320,12 +344,17 @@ function NothingProdBottomNav() {
 
 export function NothingProducerLayout({ children }: { children: React.ReactNode }) {
   return (
-    <PWAWrapper portal="producer">
+    <PWAWrapper>
       <style dangerouslySetInnerHTML={{ __html: nothingCss }} />
       <div className="nothing-producer min-h-screen">
+        {/* Premier élément focusable : permet de sauter la barre latérale,
+            répétée à l'identique sur chaque écran. */}
+        <a href="#contenu-principal" className="n-skip-link">
+          Aller au contenu
+        </a>
         <NothingProdSidebar />
         <div className="lg:pl-64 transition-all duration-200">
-          <main className="min-h-screen">
+          <main id="contenu-principal" tabIndex={-1} className="min-h-screen">
             <div className="container mx-auto px-4 lg:px-8 py-8 pb-24 lg:pb-8">
               {children}
             </div>

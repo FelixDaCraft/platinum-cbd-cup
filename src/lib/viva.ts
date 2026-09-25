@@ -14,6 +14,17 @@ import { env } from "~/env";
  *  - `VIVA_SOURCE_CODE` — the payment source created in the Viva dashboard.
  *    The success / failure redirect URLs are configured *on that source*, not
  *    per order, so they live in the Viva back-office rather than here.
+ *
+ * URLs à poser sur la source de paiement, dans le back-office Viva :
+ *
+ *  - succès  : `<APP_URL>/cups/{cupId}/register/success`
+ *  - échec   : `<APP_URL>/cups/{cupId}/register/cancel`
+ *  - webhook : `<APP_URL>/api/webhooks/viva`
+ *
+ * Viva ajoute lui-même ses paramètres (`t` = transaction id, `s` = order code)
+ * aux deux URLs de redirection. Le `{cupId}` n'étant pas connu de Viva, la
+ * source doit pointer vers la cup en cours d'inscription ; à défaut, faire
+ * pointer les redirections vers `/producer/registrations`.
  */
 
 interface VivaEndpoints {

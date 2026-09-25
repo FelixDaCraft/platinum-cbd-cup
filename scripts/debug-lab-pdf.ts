@@ -27,9 +27,10 @@ const content = await page.getTextContent();
 
 type Row = { str: string; x: number; y: number; w: number };
 const items: Row[] = content.items
-  .filter((it: unknown): it is { str: string; transform: number[]; width?: number } => {
-    return typeof it === "object" && it !== null && "str" in it;
-  })
+  // content.items mêle TextItem et TextMarkedContent ; l'opérateur `in`
+  // discrimine l'union là où un prédicat sur `unknown` faisait perdre le
+  // typage (et faisait échouer le typecheck une fois scripts/ inclus).
+  .flatMap((it) => ("str" in it ? [it] : []))
   .map((it) => ({
     str: it.str,
     x: it.transform[4] ?? 0,

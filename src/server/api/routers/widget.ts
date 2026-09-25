@@ -5,8 +5,12 @@
 
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { eq, and, or, isNotNull, lte, desc } from "drizzle-orm";
-import { createTRPCRouter, protectedProcedure, publicProcedure } from "~/server/api/trpc";
+import { eq, and, or, isNotNull, lte, desc, inArray } from "drizzle-orm";
+import {
+  createTRPCRouter,
+  producerProcedure,
+  rateLimitedPublicProcedure,
+} from "~/server/api/trpc";
 import { producers } from "~/server/db/schema/producers";
 import { registrations } from "~/server/db/schema/registrations";
 import { products } from "~/server/db/schema/products";
@@ -19,7 +23,7 @@ export const widgetRouter = createTRPCRouter({
    * Get producer medals for public widget display
    * No authentication required - public endpoint
    */
-  getProducerMedals: publicProcedure
+  getProducerMedals: rateLimitedPublicProcedure
     .input(
       z.object({
         producerId: z.string(),
@@ -82,36 +86,53 @@ export const widgetRouter = createTRPCRouter({
         }>;
       }> = [];
 
-      for (const reg of producerRegistrations) {
-        const productsWithDistinctions = await ctx.db
-          .select({
-            id: products.id,
-            name: products.name,
-            finalScore: products.finalScore,
-            categoryRank: products.categoryRank,
-            categoryName: categories.name,
-            labelId: cupLabels.id,
-            labelName: cupLabels.name,
-            labelColor: cupLabels.color,
-            labelIcon: cupLabels.icon,
-          })
-          .from(products)
-          .innerJoin(categories, eq(products.categoryId, categories.id))
-          .leftJoin(cupLabels, eq(products.labelId, cupLabels.id))
-          .where(
-            and(
-              eq(products.registrationId, reg.registrationId),
-              eq(products.excludedFromResults, false),
-              // Disqualified products never appear in the producer widget.
-              eq(products.disqualified, false),
-              // Product has a label OR is on podium (rank 1, 2, or 3)
-              or(
-                isNotNull(products.labelId),
-                and(isNotNull(products.categoryRank), lte(products.categoryRank, 3))
+      // Une seule requête pour toutes les inscriptions : ce widget est chargé
+      // depuis des sites tiers, sans trafic maîtrisé.
+      const registrationIds = producerRegistrations.map((r) => r.registrationId);
+
+      const allDistinctions = registrationIds.length
+        ? await ctx.db
+            .select({
+              registrationId: products.registrationId,
+              id: products.id,
+              name: products.name,
+              finalScore: products.finalScore,
+              categoryRank: products.categoryRank,
+              categoryName: categories.name,
+              labelId: cupLabels.id,
+              labelName: cupLabels.name,
+              labelColor: cupLabels.color,
+              labelIcon: cupLabels.icon,
+            })
+            .from(products)
+            .innerJoin(categories, eq(products.categoryId, categories.id))
+            .leftJoin(cupLabels, eq(products.labelId, cupLabels.id))
+            .where(
+              and(
+                inArray(products.registrationId, registrationIds),
+                eq(products.excludedFromResults, false),
+                // Disqualified products never appear in the producer widget.
+                eq(products.disqualified, false),
+                // Product has a label OR is on podium (rank 1, 2, or 3)
+                or(
+                  isNotNull(products.labelId),
+                  and(isNotNull(products.categoryRank), lte(products.categoryRank, 3))
+                )
               )
             )
-          )
-          .orderBy(desc(products.finalScore));
+            .orderBy(desc(products.finalScore))
+        : [];
+
+      const distinctionsByRegistration = new Map<string, typeof allDistinctions>();
+      for (const row of allDistinctions) {
+        const bucket = distinctionsByRegistration.get(row.registrationId) ?? [];
+        bucket.push(row);
+        distinctionsByRegistration.set(row.registrationId, bucket);
+      }
+
+      for (const reg of producerRegistrations) {
+        const productsWithDistinctions =
+          distinctionsByRegistration.get(reg.registrationId) ?? [];
 
         if (productsWithDistinctions.length > 0) {
           medals.push({
@@ -185,18 +206,11 @@ export const widgetRouter = createTRPCRouter({
    * Get widget embed code for the current producer
    * Requires authentication
    */
-  getEmbedCode: protectedProcedure.query(async ({ ctx }) => {
-    // Get producer profile
-    const producer = await ctx.db.query.producers.findFirst({
-      where: eq(producers.userId, ctx.userId),
-    });
-
-    if (!producer) {
-      throw new TRPCError({
-        code: "NOT_FOUND",
-        message: "Profil producteur non trouvé",
-      });
-    }
+  getEmbedCode: producerProcedure.query(async ({ ctx }) => {
+    // `producerProcedure` porte la garde « ce compte a bien un profil
+    // producteur » : une redefinition locale de plus en divergeait par son
+    // code d'erreur.
+    const { producer } = ctx;
 
     // Generate base URL for widget
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://platinumcbdcup.eu";

@@ -12,7 +12,8 @@ import {
   calculateWeightedScore,
 } from "~/lib/validations/criteria";
 
-// Mock auth
+vi.mock("nanoid", () => ({ nanoid: vi.fn(() => "test_criterion_id") }));
+
 vi.mock("~/lib/auth", () => ({
   auth: {
     api: {
@@ -21,48 +22,76 @@ vi.mock("~/lib/auth", () => ({
   },
 }));
 
-// Mock database for integration tests
-vi.mock("~/server/db", () => ({
-  db: {
-    query: {
-      categories: { findFirst: vi.fn() },
-      ratingCriteria: { findFirst: vi.fn(), findMany: vi.fn() },
+/**
+ * État de la base simulée (voir category.test.ts pour le détail du montage).
+ *
+ * ~/server/db/schema n'est délibérément PAS simulé : le routeur passe les
+ * tables réelles à `eq()` de drizzle-orm, qui a besoin de vraies colonnes.
+ * L'ancien `vi.mock("~/server/db/schema")` est ce qui rendait impossible
+ * l'appel du routeur, d'où des tests qui se contentaient de recopier la
+ * règle métier.
+ */
+const dbState = vi.hoisted(() => ({
+  selectResults: [] as unknown[][],
+  updates: [] as Record<string, unknown>[],
+  deleted: [] as true[],
+  inserted: [] as unknown[],
+}));
+
+const { selectResults, updates, deleted, inserted } = dbState;
+
+vi.mock("~/server/db", () => {
+  const selectChain = () => {
+    const chain = {
+      from: () => chain,
+      where: () => Promise.resolve(dbState.selectResults.shift() ?? []),
+    };
+    return chain;
+  };
+
+  return {
+    db: {
+      query: {
+        users: { findFirst: vi.fn() },
+        cups: { findFirst: vi.fn() },
+        categories: { findFirst: vi.fn(), findMany: vi.fn() },
+        ratingCriteria: { findFirst: vi.fn(), findMany: vi.fn() },
+      },
+      select: selectChain,
+      insert: () => ({
+        values: (values: unknown) => {
+          dbState.inserted.push(values);
+          return { returning: () => Promise.resolve([values]) };
+        },
+      }),
+      update: () => ({
+        set: (values: Record<string, unknown>) => {
+          dbState.updates.push(values);
+          return {
+            where: () => ({
+              returning: () => Promise.resolve([values]),
+              then: (resolve: (v: unknown) => unknown) =>
+                Promise.resolve(undefined).then(resolve),
+            }),
+          };
+        },
+      }),
+      delete: () => ({
+        where: () => {
+          dbState.deleted.push(true);
+          return Promise.resolve(undefined);
+        },
+      }),
     },
-    insert: vi.fn(() => ({
-      values: vi.fn(() => ({
-        returning: vi.fn(),
-      })),
-    })),
-    update: vi.fn(() => ({
-      set: vi.fn(() => ({
-        where: vi.fn(() => ({
-          returning: vi.fn(),
-        })),
-      })),
-    })),
-    delete: vi.fn(() => ({
-      where: vi.fn(),
-    })),
-    select: vi.fn(() => ({
-      from: vi.fn(() => ({
-        where: vi.fn(),
-      })),
-    })),
-  },
-}));
+  };
+});
 
-// Mock schema
-vi.mock("~/server/db/schema", () => ({
-  ratingCriteria: { id: "id", categoryId: "category_id" },
-  categories: { id: "id", cupId: "cup_id" },
-  cups: { id: "id", organizationId: "organization_id" },
-  members: { id: "id" },
-}));
-
-// Mock nanoid
-vi.mock("nanoid", () => ({
-  nanoid: vi.fn(() => "test_criterion_id"),
-}));
+beforeEach(() => {
+  selectResults.length = 0;
+  updates.length = 0;
+  deleted.length = 0;
+  inserted.length = 0;
+});
 
 describe("Criteria Router", () => {
   describe("Input Validation - createCriterionSchema", () => {
@@ -391,331 +420,351 @@ describe("Criteria Router", () => {
     });
   });
 
-  describe("Business Logic - Modification After Publication", () => {
-    it("should block modification when cup is in rating phase", () => {
-      const cupStatus: string = "rating";
 
-      const shouldBlock = cupStatus === "rating" || cupStatus === "completed";
-
-      expect(shouldBlock).toBe(true);
-    });
-
-    it("should block modification when cup is completed", () => {
-      const cupStatus: string = "completed";
-
-      const shouldBlock = cupStatus === "rating" || cupStatus === "completed";
-
-      expect(shouldBlock).toBe(true);
-    });
-
-    it("should allow modification when cup is draft", () => {
-      const cupStatus: string = "draft";
-
-      const shouldBlock = cupStatus === "rating" || cupStatus === "completed";
-
-      expect(shouldBlock).toBe(false);
-    });
-
-    it("should allow modification when cup is published", () => {
-      const cupStatus: string = "published";
-
-      const shouldBlock = cupStatus === "rating" || cupStatus === "completed";
-
-      expect(shouldBlock).toBe(false);
-    });
-
-    it("should allow modification when cup is registration_closed", () => {
-      const cupStatus: string = "registration_closed";
-
-      const shouldBlock = cupStatus === "rating" || cupStatus === "completed";
-
-      expect(shouldBlock).toBe(false);
-    });
-  });
-
-  describe("Business Logic - Multi-tenancy Validation", () => {
-    it("validates criterion belongs to user organization via category -> cup", () => {
-      const criterionCategoryOrganizationId = "org-1";
-      const memberOrganizationId = "org-1";
-
-      expect(criterionCategoryOrganizationId).toBe(memberOrganizationId);
-    });
-
-    it("detects cross-tenant access attempt", () => {
-      const criterionCategoryOrganizationId: string = "org-1";
-      const attackerOrganizationId: string = "org-2";
-
-      expect(criterionCategoryOrganizationId).not.toBe(attackerOrganizationId);
-      // Router would throw FORBIDDEN
-    });
-  });
-
-  describe("Business Logic - sortOrder Calculation", () => {
-    it("calculates next sortOrder correctly for empty list", () => {
-      const existingOrders: number[] = [];
-      const maxOrder = Math.max(...existingOrders, -1);
-      const nextOrder = maxOrder + 1;
-
-      expect(nextOrder).toBe(0);
-    });
-
-    it("calculates next sortOrder correctly for existing criteria", () => {
-      const existingOrders = [0, 1, 2];
-      const maxOrder = Math.max(...existingOrders, -1);
-      const nextOrder = maxOrder + 1;
-
-      expect(nextOrder).toBe(3);
-    });
-
-    it("handles non-sequential sortOrders", () => {
-      const existingOrders = [0, 2, 5];
-      const maxOrder = Math.max(...existingOrders, -1);
-      const nextOrder = maxOrder + 1;
-
-      expect(nextOrder).toBe(6);
-    });
-  });
-
-  describe("Business Logic - Duplication Edge Cases", () => {
-    it("validates both categories belong to the same cup", () => {
-      const sourceCupId = "cup-1";
-      const targetCupId = "cup-1";
-
-      expect(sourceCupId).toBe(targetCupId);
-    });
-
-    it("detects duplication between different cups (should be rejected)", () => {
-      const sourceCupId: string = "cup-1";
-      const targetCupId: string = "cup-2";
-
-      expect(sourceCupId).not.toBe(targetCupId);
-      // Router would throw BAD_REQUEST
-    });
-
-    it("handles duplication to empty category", () => {
-      const targetCriteriaCount = 0;
-      const sourceCriteria = [
-        { id: "1", sortOrder: 0 },
-        { id: "2", sortOrder: 1 },
-      ];
-      const baseOrder = targetCriteriaCount;
-
-      const newSortOrders = sourceCriteria.map((_, index) => baseOrder + index);
-
-      expect(newSortOrders).toEqual([0, 1]);
-    });
-
-    it("handles duplication to category with existing criteria", () => {
-      const targetCriteriaCount = 3;
-      const sourceCriteria = [
-        { id: "1", sortOrder: 0 },
-        { id: "2", sortOrder: 1 },
-      ];
-      const baseOrder = targetCriteriaCount;
-
-      const newSortOrders = sourceCriteria.map((_, index) => baseOrder + index);
-
-      expect(newSortOrders).toEqual([3, 4]);
-    });
-
-    it("returns 0 duplicated when source has no criteria", () => {
-      const sourceCriteria: unknown[] = [];
-      const duplicatedCount = sourceCriteria.length;
-
-      expect(duplicatedCount).toBe(0);
-    });
-  });
-
-  describe("Authorization Checks", () => {
-    it("identifies when no session exists", async () => {
+  // ---------------------------------------------------------------------
+  // Procédures du routeur
+  //
+  // Remplace les blocs « Business Logic - … », « Multi-tenancy Validation »
+  // et « Integration - … » d'origine : aucun n'importait criteria.ts, tous
+  // recopiaient la règle dans le test avant de la comparer à elle-même. Les
+  // critères et leurs coefficients déterminent le classement final : une
+  // modification en pleine notation fausserait le palmarès.
+  // ---------------------------------------------------------------------
+  describe("Procédures", () => {
+    async function signIn(row: { isAdmin?: boolean; role?: string } | null) {
       const { auth } = await import("~/lib/auth");
-      vi.mocked(auth.api.getSession).mockResolvedValueOnce(null);
+      const { db } = await import("~/server/db");
 
-      const session = await auth.api.getSession({ headers: new Headers() });
-
-      expect(session).toBeNull();
-      // Router would throw UNAUTHORIZED
-    });
-  });
-
-  describe("Integration - assertCriteriaEditable helper", () => {
-    // Import the actual helper function behavior
-    const assertCriteriaEditable = (cupStatus: string): void => {
-      if (cupStatus === "rating" || cupStatus === "completed") {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "Impossible de modifier les critères pendant ou après la phase de notation",
-        });
+      if (row === null) {
+        vi.mocked(auth.api.getSession).mockResolvedValue(null);
+        return;
       }
-    };
 
-    it("throws TRPCError when cup is in rating phase", () => {
-      expect(() => assertCriteriaEditable("rating")).toThrow(TRPCError);
-      expect(() => assertCriteriaEditable("rating")).toThrow(
-        "Impossible de modifier les critères pendant ou après la phase de notation"
-      );
-    });
+      vi.mocked(auth.api.getSession).mockResolvedValue({
+        user: { id: "user-1", email: "test@example.com" },
+        session: { id: "session-1" },
+      } as never);
+      vi.mocked(db.query.users.findFirst).mockResolvedValue(row as never);
+    }
 
-    it("throws TRPCError when cup is completed", () => {
-      expect(() => assertCriteriaEditable("completed")).toThrow(TRPCError);
-    });
+    const asOrganizer = () => signIn({ isAdmin: false, role: "organizer" });
+    const asProducer = () => signIn({ isAdmin: false, role: "producer" });
+    const asAnonymous = () => signIn(null);
 
-    it("does not throw when cup is draft", () => {
-      expect(() => assertCriteriaEditable("draft")).not.toThrow();
-    });
+    /** Catégorie rattachée à une cup du statut demandé. */
+    function categoryWithCup(status: string, overrides: Record<string, unknown> = {}) {
+      return {
+        id: "cat-1",
+        name: "Indoor",
+        cupId: "cup-1",
+        cup: { id: "cup-1", status, ratingScale: "0-20" },
+        ...overrides,
+      };
+    }
 
-    it("does not throw when cup is published", () => {
-      expect(() => assertCriteriaEditable("published")).not.toThrow();
-    });
+    async function createCaller() {
+      const { criteriaRouter } = await import("../criteria");
+      const { db } = await import("~/server/db");
 
-    it("does not throw when cup is registration_closed", () => {
-      expect(() => assertCriteriaEditable("registration_closed")).not.toThrow();
-    });
+      return criteriaRouter.createCaller({ headers: new Headers(), db } as never);
+    }
 
-    it("throws with correct error code BAD_REQUEST", () => {
+    async function codeOf(fn: () => Promise<unknown>) {
       try {
-        assertCriteriaEditable("rating");
-        expect.fail("Should have thrown");
+        await fn();
       } catch (error) {
         expect(error).toBeInstanceOf(TRPCError);
-        expect((error as TRPCError).code).toBe("BAD_REQUEST");
+        return (error as TRPCError).code;
       }
-    });
-  });
+      throw new Error("La procédure aurait dû lever une erreur");
+    }
 
-  describe("Integration - Router Authorization Flow", () => {
     beforeEach(() => {
       vi.clearAllMocks();
     });
 
-    it("returns UNAUTHORIZED when no session for getCategoryCriteria", async () => {
-      const { auth } = await import("~/lib/auth");
-      vi.mocked(auth.api.getSession).mockResolvedValue(null);
+    it("refuse un appelant anonyme sur chaque procédure", async () => {
+      await asAnonymous();
+      const caller = await createCaller();
 
-      const session = await auth.api.getSession({ headers: new Headers() });
-      expect(session).toBeNull();
-      // In actual router, this would throw UNAUTHORIZED
-    });
-  });
-
-  describe("Integration - Duplication Same-Cup Constraint", () => {
-    it("validates both categories belong to same cup", () => {
-      // Simulate the duplication check logic
-      const sourceCategory = {
-        id: "source_cat",
-        cupId: "cup_1",
-        name: "Source",
-      };
-      const targetCategory = {
-        id: "target_cat",
-        cupId: "cup_2", // Different cup!
-        name: "Target",
-      };
-
-      // Should be rejected - different cups
-      expect(sourceCategory.cupId).not.toBe(targetCategory.cupId);
+      expect(
+        await codeOf(() => caller.getCategoryCriteria({ categoryId: "cat-1" }))
+      ).toBe("UNAUTHORIZED");
+      expect(
+        await codeOf(() => caller.create({ categoryId: "cat-1", name: "Arôme" }))
+      ).toBe("UNAUTHORIZED");
+      expect(await codeOf(() => caller.delete({ criterionId: "cri-1" }))).toBe(
+        "UNAUTHORIZED"
+      );
+      expect(
+        await codeOf(() =>
+          caller.reorder({ categoryId: "cat-1", criterionIds: ["cri-1"] })
+        )
+      ).toBe("UNAUTHORIZED");
+      expect(
+        await codeOf(() => caller.initializeDefaultCriteria({ categoryId: "cat-1" }))
+      ).toBe("UNAUTHORIZED");
     });
 
-    it("allows duplication when categories belong to same cup", () => {
-      // Simulate the duplication check logic
-      const sourceCategory = {
-        id: "source_cat",
-        cupId: "cup_1",
-        name: "Source",
-      };
-      const targetCategory = {
-        id: "target_cat",
-        cupId: "cup_1", // Same cup!
-        name: "Target",
-      };
+    it("refuse un producteur authentifié sur chaque procédure", async () => {
+      await asProducer();
+      const caller = await createCaller();
 
-      // Should be allowed - same cup
-      expect(sourceCategory.cupId).toBe(targetCategory.cupId);
-    });
-  });
-
-  describe("Integration - Create Criterion sortOrder", () => {
-    it("calculates sortOrder as max + 1 for existing criteria", () => {
-      // Simulate the sortOrder calculation logic
-      const existingCriteria = [
-        { id: "c1", sortOrder: 0, name: "A", coefficient: 1 },
-        { id: "c2", sortOrder: 1, name: "B", coefficient: 2 },
-        { id: "c3", sortOrder: 2, name: "C", coefficient: 1 },
-      ];
-
-      const maxOrder = Math.max(...existingCriteria.map((c) => c.sortOrder), -1);
-      const nextOrder = maxOrder + 1;
-
-      expect(nextOrder).toBe(3);
+      expect(
+        await codeOf(() => caller.getCategoryCriteria({ categoryId: "cat-1" }))
+      ).toBe("FORBIDDEN");
+      expect(
+        await codeOf(() => caller.create({ categoryId: "cat-1", name: "Arôme" }))
+      ).toBe("FORBIDDEN");
+      expect(await codeOf(() => caller.delete({ criterionId: "cri-1" }))).toBe(
+        "FORBIDDEN"
+      );
+      expect(inserted).toHaveLength(0);
+      expect(deleted).toHaveLength(0);
     });
 
-    it("starts at 0 for empty category", () => {
-      // Simulate the sortOrder calculation logic for empty list
-      const existingCriteria: { sortOrder: number }[] = [];
+    it("renvoie NOT_FOUND quand la catégorie n'existe pas", async () => {
+      await asOrganizer();
+      const { db } = await import("~/server/db");
+      vi.mocked(db.query.categories.findFirst).mockResolvedValue(undefined as never);
 
-      const maxOrder = Math.max(...existingCriteria.map((c) => c.sortOrder), -1);
-      const nextOrder = maxOrder + 1;
-
-      expect(nextOrder).toBe(0);
-    });
-  });
-
-  describe("Integration - Initialize Default Criteria", () => {
-    it("skips initialization when criteria already exist", () => {
-      // Simulate the initialization check logic
-      const existingCriteria = [
-        { id: "existing", name: "Existing", coefficient: 1, sortOrder: 0 },
-      ];
-
-      // Should not create new criteria
-      const shouldSkip = existingCriteria.length > 0;
-      expect(shouldSkip).toBe(true);
+      const caller = await createCaller();
+      expect(
+        await codeOf(() => caller.getCategoryCriteria({ categoryId: "inconnue" }))
+      ).toBe("NOT_FOUND");
     });
 
-    it("creates default criteria for empty category", () => {
-      // Simulate the initialization check logic
-      const existingCriteria: unknown[] = [];
-      const shouldCreate = existingCriteria.length === 0;
+    it("expose canEdit=false dès que la notation a commencé", async () => {
+      await asOrganizer();
+      const { db } = await import("~/server/db");
+      vi.mocked(db.query.ratingCriteria.findMany).mockResolvedValue([] as never);
 
-      expect(shouldCreate).toBe(true);
-      expect(DEFAULT_CRITERIA).toHaveLength(4);
-    });
-  });
+      const caller = await createCaller();
 
-  describe("Integration - Reorder Validation", () => {
-    it("validates all criterion IDs belong to category", () => {
-      const existingCriteria = [
-        { id: "c1", categoryId: "cat1" },
-        { id: "c2", categoryId: "cat1" },
-        { id: "c3", categoryId: "cat1" },
-      ];
-      const existingIds = new Set(existingCriteria.map((c) => c.id));
+      vi.mocked(db.query.categories.findFirst).mockResolvedValue(
+        categoryWithCup("draft") as never
+      );
+      await expect(
+        caller.getCategoryCriteria({ categoryId: "cat-1" })
+      ).resolves.toMatchObject({ canEdit: true });
 
-      // Valid reorder
-      const validOrder = ["c1", "c3", "c2"];
-      const allValid = validOrder.every((id) => existingIds.has(id));
-      expect(allValid).toBe(true);
-
-      // Invalid reorder (includes ID from different category)
-      const invalidOrder = ["c1", "c3", "c_different"];
-      const allInvalid = invalidOrder.every((id) => existingIds.has(id));
-      expect(allInvalid).toBe(false);
+      vi.mocked(db.query.categories.findFirst).mockResolvedValue(
+        categoryWithCup("rating") as never
+      );
+      await expect(
+        caller.getCategoryCriteria({ categoryId: "cat-1" })
+      ).resolves.toMatchObject({ canEdit: false });
     });
 
-    it("validates all category criteria are included in reorder", () => {
-      const existingCriteria = [
-        { id: "c1", categoryId: "cat1" },
-        { id: "c2", categoryId: "cat1" },
-        { id: "c3", categoryId: "cat1" },
-      ];
+    it.each(["rating", "completed"])(
+      "refuse toute modification de critère quand la cup est en %s",
+      async (status) => {
+        await asOrganizer();
+        const { db } = await import("~/server/db");
+        vi.mocked(db.query.categories.findFirst).mockResolvedValue(
+          categoryWithCup(status) as never
+        );
+        vi.mocked(db.query.ratingCriteria.findFirst).mockResolvedValue({
+          id: "cri-1",
+          categoryId: "cat-1",
+          category: categoryWithCup(status),
+        } as never);
 
-      // Valid - includes all 3 criteria
-      const validOrder = ["c1", "c3", "c2"];
-      expect(validOrder.length).toBe(existingCriteria.length);
+        const caller = await createCaller();
 
-      // Invalid - missing one criterion
-      const invalidOrder = ["c1", "c3"];
-      expect(invalidOrder.length).not.toBe(existingCriteria.length);
+        expect(
+          await codeOf(() =>
+            caller.create({ categoryId: "cat-1", name: "Arôme", coefficient: 2 })
+          )
+        ).toBe("BAD_REQUEST");
+        expect(
+          await codeOf(() => caller.update({ criterionId: "cri-1", name: "Arôme" }))
+        ).toBe("BAD_REQUEST");
+        expect(await codeOf(() => caller.delete({ criterionId: "cri-1" }))).toBe(
+          "BAD_REQUEST"
+        );
+        expect(
+          await codeOf(() =>
+            caller.reorder({ categoryId: "cat-1", criterionIds: ["cri-1"] })
+          )
+        ).toBe("BAD_REQUEST");
+        expect(
+          await codeOf(() => caller.initializeDefaultCriteria({ categoryId: "cat-1" }))
+        ).toBe("BAD_REQUEST");
+
+        expect(inserted).toHaveLength(0);
+        expect(updates).toHaveLength(0);
+        expect(deleted).toHaveLength(0);
+      }
+    );
+
+    it.each(["draft", "published", "registration_closed"])(
+      "autorise la suppression d'un critère quand la cup est en %s",
+      async (status) => {
+        await asOrganizer();
+        const { db } = await import("~/server/db");
+        vi.mocked(db.query.ratingCriteria.findFirst).mockResolvedValue({
+          id: "cri-1",
+          categoryId: "cat-1",
+          category: categoryWithCup(status),
+        } as never);
+
+        const caller = await createCaller();
+        await expect(caller.delete({ criterionId: "cri-1" })).resolves.toEqual({
+          success: true,
+        });
+        expect(deleted).toHaveLength(1);
+      }
+    );
+
+    it("refuse un réordonnancement incomplet ou contenant un critère étranger", async () => {
+      await asOrganizer();
+      const { db } = await import("~/server/db");
+      vi.mocked(db.query.categories.findFirst).mockResolvedValue(
+        categoryWithCup("draft") as never
+      );
+      vi.mocked(db.query.ratingCriteria.findMany).mockResolvedValue([
+        { id: "cri-1" },
+        { id: "cri-2" },
+      ] as never);
+
+      const caller = await createCaller();
+
+      // Critère étranger à la catégorie.
+      expect(
+        await codeOf(() =>
+          caller.reorder({ categoryId: "cat-1", criterionIds: ["cri-1", "cri-3"] })
+        )
+      ).toBe("BAD_REQUEST");
+
+      // Liste partielle : réordonner sans tout inclure laisserait des rangs
+      // en double.
+      expect(
+        await codeOf(() =>
+          caller.reorder({ categoryId: "cat-1", criterionIds: ["cri-1"] })
+        )
+      ).toBe("BAD_REQUEST");
+
+      expect(updates).toHaveLength(0);
+    });
+
+    it("applique le rang de chaque critère selon sa position", async () => {
+      await asOrganizer();
+      const { db } = await import("~/server/db");
+      vi.mocked(db.query.categories.findFirst).mockResolvedValue(
+        categoryWithCup("draft") as never
+      );
+      vi.mocked(db.query.ratingCriteria.findMany).mockResolvedValue([
+        { id: "cri-1" },
+        { id: "cri-2" },
+        { id: "cri-3" },
+      ] as never);
+
+      const caller = await createCaller();
+      await caller.reorder({
+        categoryId: "cat-1",
+        criterionIds: ["cri-3", "cri-1", "cri-2"],
+      });
+
+      expect(updates.map((u) => u.sortOrder)).toEqual([0, 1, 2]);
+    });
+
+    it("n'initialise pas deux fois les critères par défaut", async () => {
+      await asOrganizer();
+      const { db } = await import("~/server/db");
+      vi.mocked(db.query.categories.findFirst).mockResolvedValue(
+        categoryWithCup("draft") as never
+      );
+      vi.mocked(db.query.ratingCriteria.findMany).mockResolvedValue([
+        { id: "cri-1" },
+      ] as never);
+
+      const caller = await createCaller();
+      const result = await caller.initializeDefaultCriteria({ categoryId: "cat-1" });
+
+      expect(result.created).toBe(0);
+      expect(inserted).toHaveLength(0);
+    });
+
+    it("crée les critères par défaut sur une catégorie vide", async () => {
+      await asOrganizer();
+      const { db } = await import("~/server/db");
+      vi.mocked(db.query.categories.findFirst).mockResolvedValue(
+        categoryWithCup("draft") as never
+      );
+      vi.mocked(db.query.ratingCriteria.findMany).mockResolvedValue([] as never);
+
+      const caller = await createCaller();
+      const result = await caller.initializeDefaultCriteria({ categoryId: "cat-1" });
+
+      expect(result.created).toBe(DEFAULT_CRITERIA.length);
+      expect(inserted).toHaveLength(1);
+    });
+
+    // Dupliquer d'une cup vers une autre mélangerait deux barèmes : le
+    // routeur doit refuser, quel que soit le statut des deux cups.
+    it("refuse une duplication entre deux cups différentes", async () => {
+      await asOrganizer();
+      const { db } = await import("~/server/db");
+      vi.mocked(db.query.categories.findFirst)
+        .mockResolvedValueOnce(categoryWithCup("draft", { id: "cat-1" }) as never)
+        .mockResolvedValueOnce(
+          categoryWithCup("draft", { id: "cat-9", cupId: "cup-2" }) as never
+        );
+
+      const caller = await createCaller();
+      expect(
+        await codeOf(() =>
+          caller.duplicateFromCategory({
+            sourceCategoryId: "cat-1",
+            targetCategoryId: "cat-9",
+          })
+        )
+      ).toBe("BAD_REQUEST");
+      expect(inserted).toHaveLength(0);
+    });
+
+    it("duplique les critères à la suite de ceux déjà présents dans la cible", async () => {
+      await asOrganizer();
+      const { db } = await import("~/server/db");
+      vi.mocked(db.query.categories.findFirst)
+        .mockResolvedValueOnce(categoryWithCup("draft", { id: "cat-1" }) as never)
+        .mockResolvedValueOnce(categoryWithCup("draft", { id: "cat-2" }) as never);
+      vi.mocked(db.query.ratingCriteria.findMany).mockResolvedValue([
+        { id: "cri-1", name: "Arôme", description: null, coefficient: 2, sortOrder: 0 },
+        { id: "cri-2", name: "Goût", description: null, coefficient: 3, sortOrder: 1 },
+      ] as never);
+      // La catégorie cible contient déjà 2 critères.
+      selectResults.push([{ count: 2 }]);
+
+      const caller = await createCaller();
+      const result = await caller.duplicateFromCategory({
+        sourceCategoryId: "cat-1",
+        targetCategoryId: "cat-2",
+      });
+
+      expect(result.duplicated).toBe(2);
+      const copied = inserted[0] as { sortOrder: number; categoryId: string }[];
+      expect(copied.map((c) => c.sortOrder)).toEqual([2, 3]);
+      expect(copied.every((c) => c.categoryId === "cat-2")).toBe(true);
+    });
+
+    it("ne duplique rien quand la catégorie source est vide", async () => {
+      await asOrganizer();
+      const { db } = await import("~/server/db");
+      vi.mocked(db.query.categories.findFirst)
+        .mockResolvedValueOnce(categoryWithCup("draft", { id: "cat-1" }) as never)
+        .mockResolvedValueOnce(categoryWithCup("draft", { id: "cat-2" }) as never);
+      vi.mocked(db.query.ratingCriteria.findMany).mockResolvedValue([] as never);
+
+      const caller = await createCaller();
+      await expect(
+        caller.duplicateFromCategory({
+          sourceCategoryId: "cat-1",
+          targetCategoryId: "cat-2",
+        })
+      ).resolves.toEqual({ duplicated: 0 });
+      expect(inserted).toHaveLength(0);
     });
   });
 });

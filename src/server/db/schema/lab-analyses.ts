@@ -8,6 +8,7 @@ import {
   index,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
+import { generateId } from "./id";
 import { products } from "./products";
 import { users } from "./auth";
 
@@ -33,7 +34,9 @@ export type StoredCompoundRow = {
 export const labAnalyses = pgTable(
   "lab_analyses",
   {
-    id: text("id").primaryKey(), // nanoid
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => generateId()),
 
     // 1 analysis per product — the unique index enforces "overwrite on
     // re-upload" at the DB level.
@@ -79,8 +82,8 @@ export const labAnalyses = pgTable(
     uploadedBy: text("uploaded_by").references(() => users.id, {
       onDelete: "set null",
     }),
-    uploadedAt: timestamp("uploaded_at").notNull().defaultNow(),
-    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+    uploadedAt: timestamp("uploaded_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 
     // Parser version — lets us re-parse old uploads if we fix the parser.
     parserVersion: integer("parser_version").notNull().default(1),
@@ -88,7 +91,8 @@ export const labAnalyses = pgTable(
   (table) => [
     // Ranking by terpenes within a cup/category hits this index.
     index("lab_analyses_terpenes_total_idx").on(table.terpenesTotal),
-    index("lab_analyses_product_id_idx").on(table.productId),
+    // Pas d'index sur `product_id` : le .unique() de la colonne en crée déjà un.
+    index("lab_analyses_uploaded_by_idx").on(table.uploadedBy),
   ],
 );
 

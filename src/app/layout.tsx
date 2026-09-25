@@ -1,7 +1,7 @@
 import "~/styles/globals.css";
 
 import { type Metadata } from "next";
-import { Geist } from "next/font/google";
+import { Geist, Geist_Mono, Inter } from "next/font/google";
 
 import { Providers } from "~/components/providers";
 
@@ -91,6 +91,9 @@ const PORTAL_CONTEXT: PortalContextValue = {
 };
 
 export const metadata: Metadata = {
+  // Sans elle, Next résout toute image Open Graph relative contre
+  // http://localhost:3000 (avertissement au build, carte de partage cassée).
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"),
   title: {
     default: ORGANIZATION_NAME,
     template: `%s | ${ORGANIZATION_NAME}`,
@@ -154,6 +157,46 @@ const geist = Geist({
 });
 
 /**
+ * Inter et Geist Mono — les deux familles du design system Platinum.
+ *
+ * Elles arrivaient par un <link rel="stylesheet"> vers fonts.googleapis.com :
+ * une résolution DNS + un handshake TLS vers un tiers, bloquants avant le
+ * premier rendu. next/font les auto-héberge, génère le @font-face à la
+ * compilation et pose lui-même les <link rel="preload"> sur les .woff2.
+ *
+ * Les deux sont chargées en fonte variable (aucun `weight` déclaré) : un seul
+ * fichier couvre toute la plage 100-900 utilisée par le design system, là où
+ * l'ancienne feuille Google en téléchargeait une par graisse.
+ */
+const inter = Inter({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-inter",
+});
+
+const geistMono = Geist_Mono({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-geist-mono",
+});
+
+/**
+ * Branche les familles auto-hébergées sur les variables du design system.
+ *
+ * platinumCSS déclare `--sans: "Inter", …` et `--mono: "Geist Mono", …` avec
+ * les noms littéraux des polices Google. Cette surcharge doit être injectée
+ * APRÈS platinumCSS (même spécificité, la dernière règle gagne). Les noms
+ * littéraux restent en repli : si une autre feuille charge encore Inter,
+ * le rendu est identique.
+ */
+const fontVariablesCss = `
+:root{
+  --sans: var(--font-inter), "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --mono: var(--font-geist-mono), "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+`.trim();
+
+/**
  * Generate CSS style string from variables
  */
 function generateStyleString(cssVariables: Record<string, string>): string {
@@ -180,19 +223,31 @@ ${PORTAL_THEME.customCss ? sanitizeCustomCss(PORTAL_THEME.customCss) : ""}
 `.trim();
 
   return (
-    <html lang="fr" suppressHydrationWarning className={geist.variable}>
+    <html
+      lang="fr"
+      suppressHydrationWarning
+      className={`${geist.variable} ${inter.variable} ${geistMono.variable}`}
+    >
       <head>
-        {/* Google Fonts — Geist Mono + Inter (Louize Display served from public/fonts) */}
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        {/* Louize Display — police d'affichage de tous les H1 du portail.
+            Déclarée en @font-face à l'intérieur de platinumCSS, elle n'est
+            donc découverte qu'après l'analyse de ce bloc : sans preload, les
+            titres s'affichaient d'abord en serif système puis basculaient
+            (FOUT + décalage de mise en page). */}
         <link
-          href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@300;400;500;600&family=Inter:wght@300;400;500;600;700&display=swap"
-          rel="stylesheet"
+          rel="preload"
+          as="font"
+          type="font/ttf"
+          href="/fonts/LouizeDisplay-BoldItalic.ttf"
+          crossOrigin="anonymous"
         />
       </head>
       <body data-theme="dark" data-density="regular" data-matrix="on">
         {/* Platinum design-system CSS — :root vars, all utility classes, animations */}
         <style dangerouslySetInnerHTML={{ __html: platinumCSS }} />
+
+        {/* Familles auto-hébergées branchées sur --sans / --mono (après platinumCSS) */}
+        <style dangerouslySetInnerHTML={{ __html: fontVariablesCss }} />
 
         {/* Portal CSS variables (kept for components that consume --portal-* vars) */}
         <style dangerouslySetInnerHTML={{ __html: portalRootCss }} />

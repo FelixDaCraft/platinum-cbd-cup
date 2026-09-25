@@ -29,7 +29,12 @@ export default function SponsorsSettingsPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingSponsor, setEditingSponsor] = useState<string | null>(null);
 
-  const { data: sponsors, isLoading, refetch } = api.sponsors.list.useQuery();
+  const {
+    data: sponsors,
+    isLoading,
+    isError,
+    refetch,
+  } = api.sponsors.list.useQuery();
   const deleteMutation = api.sponsors.delete.useMutation({
     onSuccess: () => {
       void refetch();
@@ -47,6 +52,21 @@ export default function SponsorsSettingsPage() {
           <h1 style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: "20px", textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: 700, color: "var(--n-text-display)" }}>Sponsors</h1>
           <p style={{ fontFamily: "'Space Mono', monospace", color: "var(--n-text-secondary)", marginTop: "4px" }}>[LOADING...]</p>
         </div>
+      </div>
+    );
+  }
+
+  // Une requête en échec ne doit pas se confondre avec une page vide :
+  // un écran « aucune donnée » masquerait l'incident.
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4 text-center">
+        <span role="alert" className="n-label" style={{ color: "var(--n-text-secondary)" }}>
+          [ERREUR] LA LISTE DES SPONSORS N&apos;A PAS PU ÊTRE CHARGÉE
+        </span>
+        <button type="button" className="n-btn-secondary text-xs" onClick={() => void refetch()}>
+          RÉESSAYER
+        </button>
       </div>
     );
   }

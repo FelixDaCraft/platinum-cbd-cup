@@ -14,7 +14,7 @@ interface PageProps {
 export default function EditArticlePage({ params }: PageProps) {
   const { articleId } = use(params);
 
-  const { data: article, isLoading } = api.articles.get.useQuery({
+  const { data: article, isLoading, isError, refetch } = api.articles.get.useQuery({
     id: articleId,
   });
 
@@ -22,6 +22,20 @@ export default function EditArticlePage({ params }: PageProps) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <span className="n-font-data" style={{ color: "var(--n-text-secondary)" }}>[LOADING...]</span>
+      </div>
+    );
+  }
+
+  // Une erreur serveur ne doit pas être présentée comme une absence de donnée.
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4 text-center">
+        <span role="alert" style={{ fontFamily: "'Space Mono', monospace", fontSize: "13px", letterSpacing: "0.08em", color: "var(--n-text-secondary)" }}>
+          [ERREUR] CET ARTICLE N&apos;A PAS PU ÊTRE CHARGÉ
+        </span>
+        <button type="button" className="n-btn-secondary text-xs" onClick={() => void refetch()}>
+          RÉESSAYER
+        </button>
       </div>
     );
   }

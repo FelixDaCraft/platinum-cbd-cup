@@ -34,7 +34,7 @@ const statusConfig: Record<
     className: "bg-secondary text-secondary-foreground",
   },
   received: {
-    label: "Recu",
+    label: "Reçu",
     className: "bg-blue-500 text-white",
   },
   rating: {
@@ -42,7 +42,7 @@ const statusConfig: Record<
     className: "bg-amber-500 text-white",
   },
   rated: {
-    label: "Note",
+    label: "Noté",
     className: "bg-green-500 text-white",
   },
 };

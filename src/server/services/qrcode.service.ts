@@ -1,11 +1,17 @@
 import QRCode from "qrcode";
 
+import { getPortalBaseUrl } from "./app-url";
+
 /**
- * QR Code generation service for CupMetrics
+ * QR Code generation service for Platinum CBD Cup
  *
  * Generates QR codes for:
  * - Product reception (colis): Producer scans to identify product for shipment
  * - Product notation: Jury scans to access rating interface
+ *
+ * Les URL encodées sont imprimées sur des étiquettes : elles doivent pointer
+ * vers les routes réelles de l'app (/dashboard/receipt, /jury/rate), sinon le
+ * QR code est inutilisable et il faut réimprimer.
  */
 
 export interface QRCodeOptions {
@@ -84,8 +90,7 @@ export async function generateQRCodeSVG(
  * This is the QR code that producers put on their shipping boxes
  */
 export function buildProductReceptionUrl(productId: string, cupId: string): string {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-  return `${baseUrl}/receipt/${cupId}/product/${productId}`;
+  return `${getPortalBaseUrl()}/dashboard/receipt/${cupId}/product/${productId}`;
 }
 
 /**
@@ -93,8 +98,7 @@ export function buildProductReceptionUrl(productId: string, cupId: string): stri
  * This is the QR code that jurys scan to access the rating interface
  */
 export function buildProductNotationUrl(productId: string, cupId: string): string {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-  return `${baseUrl}/rate/${cupId}/product/${productId}`;
+  return `${getPortalBaseUrl()}/jury/rate/${cupId}/product/${productId}`;
 }
 
 /**

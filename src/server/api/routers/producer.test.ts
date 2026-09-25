@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { TRPCError } from "@trpc/server";
 
 import {
   siretSchema,
@@ -8,7 +9,8 @@ import {
   producerLogoUpdateSchema,
 } from "~/lib/validations/producer";
 
-// Mock auth
+vi.mock("nanoid", () => ({ nanoid: () => "test-producer-id" }));
+
 vi.mock("~/lib/auth", () => ({
   auth: {
     api: {
@@ -17,17 +19,57 @@ vi.mock("~/lib/auth", () => ({
   },
 }));
 
+// La génération de PDF ouvre @react-pdf/renderer et lit la base : hors sujet
+// ici, où l'on vérifie les gardes qui décident si on y arrive un jour.
+vi.mock("~/server/services/results-pdf.service", () => ({
+  generateProductSynthesisPdf: vi.fn(async () => ({
+    filename: "synthese.pdf",
+    buffer: Buffer.from("pdf"),
+  })),
+  generateProducerSynthesisPdf: vi.fn(async () => ({
+    filename: "synthese-globale.pdf",
+    buffer: Buffer.from("pdf"),
+  })),
+  getProductResultsForPdf: vi.fn(),
+}));
+
+/** État de la base simulée (voir category.test.ts pour le détail du montage). */
+const dbState = vi.hoisted(() => ({
+  updates: [] as Record<string, unknown>[],
+}));
+
+const { updates } = dbState;
+
+vi.mock("~/server/db", () => ({
+  db: {
+    query: {
+      users: { findFirst: vi.fn() },
+      producers: { findFirst: vi.fn(), findMany: vi.fn() },
+      cups: { findFirst: vi.fn() },
+      registrations: { findFirst: vi.fn(), findMany: vi.fn() },
+      products: { findFirst: vi.fn(), findMany: vi.fn() },
+    },
+    update: () => ({
+      set: (values: Record<string, unknown>) => {
+        dbState.updates.push(values);
+        return {
+          where: () => ({ returning: () => Promise.resolve([values]) }),
+        };
+      },
+    }),
+  },
+}));
+
+beforeEach(() => {
+  updates.length = 0;
+});
+
 // Test data fixtures
 const mockUser = {
   id: "user-123",
   email: "producer@example.com",
   name: "Producer Name",
   emailVerified: true,
-};
-
-const mockSession = {
-  user: mockUser,
-  session: { id: "session-123" },
 };
 
 const mockProducer = {
@@ -41,6 +83,7 @@ const mockProducer = {
   createdAt: new Date(),
   updatedAt: new Date(),
 };
+
 
 describe("Producer Router", () => {
   beforeEach(() => {
@@ -285,12 +328,30 @@ describe("Producer Router", () => {
   });
 
   describe("Input Validation - producerLogoUpdateSchema", () => {
-    it("accepts valid logo URL", () => {
+    it("accepts a logo uploaded on the site", () => {
+      const result = producerLogoUpdateSchema.safeParse({
+        logo: "/uploads/logos/acme.png",
+      });
+
+      expect(result.success).toBe(true);
+    });
+
+    // Les URL externes sont refusées : `next/image` ne sert plus que les
+    // domaines listés dans next.config.js, un logo distant renverrait 400.
+    it("rejects an external logo URL", () => {
       const result = producerLogoUpdateSchema.safeParse({
         logo: "https://example.com/logo.png",
       });
 
-      expect(result.success).toBe(true);
+      expect(result.success).toBe(false);
+    });
+
+    it("rejects a path traversal attempt", () => {
+      const result = producerLogoUpdateSchema.safeParse({
+        logo: "/uploads/../../etc/passwd",
+      });
+
+      expect(result.success).toBe(false);
     });
 
     it("accepts empty logo (to clear it)", () => {
@@ -318,715 +379,315 @@ describe("Producer Router", () => {
     });
   });
 
-  describe("Authorization Checks", () => {
-    it("identifies when no session exists", async () => {
+  // ---------------------------------------------------------------------
+  // Procédures du routeur
+  //
+  // Remplace les blocs « Business Logic », « Notification Preferences » et
+  // « Story 8.8 / 8.9 » d'origine : ils simulaient auth.api.getSession puis
+  // recopiaient la règle dans le test sans jamais appeler producer.ts. Ce
+  // sont pourtant les gardes les plus sensibles du routeur — un producteur
+  // ne doit voir ni les produits ni les notes d'un concurrent.
+  // ---------------------------------------------------------------------
+  describe("Procédures", () => {
+    async function signIn(userId: string | null) {
       const { auth } = await import("~/lib/auth");
-      vi.mocked(auth.api.getSession).mockResolvedValueOnce(null);
 
-      const session = await auth.api.getSession({ headers: new Headers() });
-
-      expect(session).toBeNull();
-      // Router would throw UNAUTHORIZED
-    });
-
-    it("returns valid session when authenticated", async () => {
-      const { auth } = await import("~/lib/auth");
-      vi.mocked(auth.api.getSession).mockResolvedValueOnce(mockSession as never);
-
-      const session = await auth.api.getSession({ headers: new Headers() });
-
-      expect(session).not.toBeNull();
-      expect(session?.user.id).toBe("user-123");
-    });
-  });
-
-  describe("Business Logic - Profile Existence Check", () => {
-    it("identifies new user without producer profile", () => {
-      const existingProducer = undefined;
-      const hasProfile = !!existingProducer;
-
-      expect(hasProfile).toBe(false);
-    });
-
-    it("identifies existing user with producer profile", () => {
-      const existingProducer = mockProducer;
-      const hasProfile = !!existingProducer;
-
-      expect(hasProfile).toBe(true);
-    });
-  });
-
-  describe("Business Logic - Role Exclusion", () => {
-    it("blocks organizer from becoming producer", () => {
-      const memberRecord = {
-        id: "member-1",
-        userId: "user-123",
-        organizationId: "org-1",
-        role: "owner" as const,
-      };
-
-      const isOrganizer = !!memberRecord;
-
-      expect(isOrganizer).toBe(true);
-      // Router would throw CONFLICT
-    });
-
-    it("allows non-organizer to become producer", () => {
-      const memberRecord = undefined;
-      const isOrganizer = !!memberRecord;
-
-      expect(isOrganizer).toBe(false);
-    });
-  });
-
-  describe("Business Logic - Profile Update", () => {
-    it("converts empty SIRET to null for storage", () => {
-      const inputSiret = "";
-      const storedSiret = inputSiret || null;
-
-      expect(storedSiret).toBeNull();
-    });
-
-    it("preserves valid SIRET for storage", () => {
-      const inputSiret = "12345678901234";
-      const storedSiret = inputSiret || null;
-
-      expect(storedSiret).toBe("12345678901234");
-    });
-
-    it("converts empty website to null for storage", () => {
-      const inputWebsite = "";
-      const storedWebsite = inputWebsite || null;
-
-      expect(storedWebsite).toBeNull();
-    });
-
-    it("preserves valid website for storage", () => {
-      const inputWebsite = "https://example.com";
-      const storedWebsite = inputWebsite || null;
-
-      expect(storedWebsite).toBe("https://example.com");
-    });
-  });
-
-  describe("Business Logic - getProfile Response", () => {
-    it("combines producer data with session user data", () => {
-      const producer = mockProducer;
-      const user = mockUser;
-
-      const profileResponse = {
-        ...producer,
-        email: user.email,
-        name: user.name,
-      };
-
-      expect(profileResponse.companyName).toBe(mockProducer.companyName);
-      expect(profileResponse.email).toBe(mockUser.email);
-      expect(profileResponse.name).toBe(mockUser.name);
-    });
-
-    it("returns null when no producer profile exists", () => {
-      const producer = undefined;
-      const profileResponse = producer ?? null;
-
-      expect(profileResponse).toBeNull();
-    });
-  });
-
-  describe("Notification Preferences", () => {
-    it("validates boolean input for notifyOnProductStatusChange", () => {
-      const { z } = require("zod");
-      const schema = z.object({
-        notifyOnProductStatusChange: z.boolean(),
-      });
-
-      // Valid: true
-      expect(schema.safeParse({ notifyOnProductStatusChange: true }).success).toBe(true);
-
-      // Valid: false
-      expect(schema.safeParse({ notifyOnProductStatusChange: false }).success).toBe(true);
-
-      // Invalid: string
-      expect(schema.safeParse({ notifyOnProductStatusChange: "true" }).success).toBe(false);
-
-      // Invalid: number
-      expect(schema.safeParse({ notifyOnProductStatusChange: 1 }).success).toBe(false);
-
-      // Invalid: missing
-      expect(schema.safeParse({}).success).toBe(false);
-    });
-
-    it("correctly updates notification preference to false", () => {
-      const currentPreference = true;
-      const newPreference = false;
-
-      const updateData = {
-        notifyOnProductStatusChange: newPreference,
-        updatedAt: new Date(),
-      };
-
-      expect(updateData.notifyOnProductStatusChange).toBe(false);
-      expect(updateData.notifyOnProductStatusChange).not.toBe(currentPreference);
-    });
-
-    it("correctly updates notification preference to true", () => {
-      const currentPreference = false;
-      const newPreference = true;
-
-      const updateData = {
-        notifyOnProductStatusChange: newPreference,
-        updatedAt: new Date(),
-      };
-
-      expect(updateData.notifyOnProductStatusChange).toBe(true);
-      expect(updateData.notifyOnProductStatusChange).not.toBe(currentPreference);
-    });
-
-    it("default notification preference should be true", () => {
-      const defaultValue = true;
-      const newProducerPreference = defaultValue;
-
-      expect(newProducerPreference).toBe(true);
-    });
-
-    it("getProfile response includes notifyOnProductStatusChange", () => {
-      // Simulate getProfile response structure
-      const producer = {
-        ...mockProducer,
-        notifyOnProductStatusChange: true,
-      };
-      const user = mockUser;
-
-      const profileResponse = {
-        ...producer,
-        email: user.email,
-        name: user.name,
-      };
-
-      expect(profileResponse).toHaveProperty("notifyOnProductStatusChange");
-      expect(profileResponse.notifyOnProductStatusChange).toBe(true);
-    });
-
-    it("getProfile response includes notifyOnProductStatusChange when false", () => {
-      const producer = {
-        ...mockProducer,
-        notifyOnProductStatusChange: false,
-      };
-      const user = mockUser;
-
-      const profileResponse = {
-        ...producer,
-        email: user.email,
-        name: user.name,
-      };
-
-      expect(profileResponse.notifyOnProductStatusChange).toBe(false);
-    });
-  });
-
-  // Story 8.8 - Accès Producteur à sa Synthèse PDF
-  describe("Story 8.8 - getCupResults", () => {
-    const mockCup = {
-      id: "cup-123",
-      name: "Concours 2025",
-      resultsPublishedAt: new Date("2025-01-15"),
-    };
-
-    const mockCupNotPublished = {
-      id: "cup-456",
-      name: "Concours En Cours",
-      resultsPublishedAt: null,
-    };
-
-    const mockRegistration = {
-      id: "reg-123",
-      cupId: "cup-123",
-      producerId: "producer-123",
-      status: "confirmed" as const,
-    };
-
-    const mockProducts = [
-      {
-        id: "prod-1",
-        name: "Cidre Bio",
-        categoryName: "Cidres",
-        finalScore: "85.5",
-        categoryRank: 1,
-        label: { name: "Or", color: "#FFD700" },
-      },
-      {
-        id: "prod-2",
-        name: "Pommeau",
-        categoryName: "Autres",
-        finalScore: "72.0",
-        categoryRank: 3,
-        label: null,
-      },
-    ];
-
-    it("validates cupId input as required string", () => {
-      const { z } = require("zod");
-      const schema = z.object({ cupId: z.string() });
-
-      expect(schema.safeParse({ cupId: "cup-123" }).success).toBe(true);
-      expect(schema.safeParse({ cupId: "" }).success).toBe(true); // empty string is valid
-      expect(schema.safeParse({}).success).toBe(false); // missing cupId
-      expect(schema.safeParse({ cupId: 123 }).success).toBe(false); // wrong type
-    });
-
-    it("returns resultsPublished=false when cup results not published", () => {
-      const cup = mockCupNotPublished;
-      const resultsPublished = !!cup.resultsPublishedAt;
-
-      expect(resultsPublished).toBe(false);
-    });
-
-    it("returns resultsPublished=true when cup results are published", () => {
-      const cup = mockCup;
-      const resultsPublished = !!cup.resultsPublishedAt;
-
-      expect(resultsPublished).toBe(true);
-    });
-
-    it("formats product response correctly when results are published", () => {
-      const products = mockProducts.map((p) => ({
-        id: p.id,
-        name: p.name,
-        categoryName: p.categoryName,
-        finalScore: p.finalScore ? parseFloat(p.finalScore) : null,
-        categoryRank: p.categoryRank,
-        label: p.label
-          ? { name: p.label.name, color: p.label.color }
-          : null,
-        canDownloadPdf: p.finalScore !== null,
-      }));
-
-      expect(products).toHaveLength(2);
-      expect(products[0]!.finalScore).toBe(85.5);
-      expect(products[0]!.canDownloadPdf).toBe(true);
-      expect(products[0]!.label).toEqual({ name: "Or", color: "#FFD700" });
-      expect(products[1]!.label).toBeNull();
-    });
-
-    it("determines canDownloadSynthesis from products with scores", () => {
-      const products = mockProducts;
-      const canDownloadSynthesis = products.some((p) => p.finalScore !== null);
-
-      expect(canDownloadSynthesis).toBe(true);
-    });
-
-    it("returns empty products array when results not published", () => {
-      const cup = mockCupNotPublished;
-      const resultsPublished = !!cup.resultsPublishedAt;
-
-      const response = resultsPublished ? mockProducts : [];
-
-      expect(response).toEqual([]);
-    });
-  });
-
-  describe("Story 8.8 - downloadProductPdf", () => {
-    const mockProduct = {
-      id: "prod-123",
-      name: "Cidre Bio",
-      finalScore: "85.5",
-      registration: {
-        producerId: "producer-123",
-        cup: {
-          resultsPublishedAt: new Date("2025-01-15"),
-        },
-      },
-    };
-
-    const mockProductNoScore = {
-      id: "prod-456",
-      name: "Cidre En Attente",
-      finalScore: null,
-      registration: {
-        producerId: "producer-123",
-        cup: {
-          resultsPublishedAt: new Date("2025-01-15"),
-        },
-      },
-    };
-
-    const mockProductUnpublished = {
-      id: "prod-789",
-      name: "Cidre Nouveau",
-      finalScore: "78.0",
-      registration: {
-        producerId: "producer-123",
-        cup: {
-          resultsPublishedAt: null,
-        },
-      },
-    };
-
-    it("validates productId input as required string", () => {
-      const { z } = require("zod");
-      const schema = z.object({ productId: z.string() });
-
-      expect(schema.safeParse({ productId: "prod-123" }).success).toBe(true);
-      expect(schema.safeParse({}).success).toBe(false);
-    });
-
-    it("verifies product ownership - allows own product", () => {
-      const product = mockProduct;
-      const currentProducerId = "producer-123";
-      const isOwner = product.registration.producerId === currentProducerId;
-
-      expect(isOwner).toBe(true);
-    });
-
-    it("verifies product ownership - blocks other producer's product", () => {
-      const product = mockProduct;
-      const currentProducerId = "producer-456";
-      const isOwner = product.registration.producerId === currentProducerId;
-
-      expect(isOwner).toBe(false);
-      // Router would throw FORBIDDEN
-    });
-
-    it("checks if results are published", () => {
-      const product = mockProduct;
-      const isPublished = !!product.registration.cup.resultsPublishedAt;
-
-      expect(isPublished).toBe(true);
-    });
-
-    it("blocks download when results not published", () => {
-      const product = mockProductUnpublished;
-      const isPublished = !!product.registration.cup.resultsPublishedAt;
-
-      expect(isPublished).toBe(false);
-      // Router would throw PRECONDITION_FAILED
-    });
-
-    it("checks if product has results", () => {
-      const product = mockProduct;
-      const hasResults = !!product.finalScore;
-
-      expect(hasResults).toBe(true);
-    });
-
-    it("blocks download when product has no score", () => {
-      const product = mockProductNoScore;
-      const hasResults = !!product.finalScore;
-
-      expect(hasResults).toBe(false);
-      // Router would throw PRECONDITION_FAILED
-    });
-
-    it("returns PDF response with correct structure", () => {
-      const pdfResult = {
-        success: true,
-        filename: "synthese_cidre-bio_2025.pdf",
-        pdfBase64: "JVBERi0xLjQK...",
-        mimeType: "application/pdf",
-      };
-
-      expect(pdfResult.success).toBe(true);
-      expect(pdfResult.filename).toContain(".pdf");
-      expect(pdfResult.mimeType).toBe("application/pdf");
-    });
-  });
-
-  describe("Story 8.8 - downloadRegistrationPdf", () => {
-    const mockRegistration = {
-      id: "reg-123",
-      producerId: "producer-123",
-      cup: {
-        resultsPublishedAt: new Date("2025-01-15"),
-      },
-      products: [
-        { id: "prod-1", finalScore: "85.5" },
-        { id: "prod-2", finalScore: "72.0" },
-      ],
-    };
-
-    const mockRegistrationNoResults = {
-      id: "reg-456",
-      producerId: "producer-123",
-      cup: {
-        resultsPublishedAt: new Date("2025-01-15"),
-      },
-      products: [
-        { id: "prod-3", finalScore: null },
-        { id: "prod-4", finalScore: null },
-      ],
-    };
-
-    const mockRegistrationUnpublished = {
-      id: "reg-789",
-      producerId: "producer-123",
-      cup: {
-        resultsPublishedAt: null,
-      },
-      products: [
-        { id: "prod-5", finalScore: "80.0" },
-      ],
-    };
-
-    it("validates registrationId input as required string", () => {
-      const { z } = require("zod");
-      const schema = z.object({ registrationId: z.string() });
-
-      expect(schema.safeParse({ registrationId: "reg-123" }).success).toBe(true);
-      expect(schema.safeParse({}).success).toBe(false);
-    });
-
-    it("verifies registration ownership - allows own registration", () => {
-      const registration = mockRegistration;
-      const currentProducerId = "producer-123";
-      const isOwner = registration.producerId === currentProducerId;
-
-      expect(isOwner).toBe(true);
-    });
-
-    it("verifies registration ownership - blocks other producer's registration", () => {
-      const registration = mockRegistration;
-      const currentProducerId = "producer-456";
-      const isOwner = registration.producerId === currentProducerId;
-
-      expect(isOwner).toBe(false);
-      // Router would throw FORBIDDEN
-    });
-
-    it("checks if results are published", () => {
-      const registration = mockRegistration;
-      const isPublished = !!registration.cup.resultsPublishedAt;
-
-      expect(isPublished).toBe(true);
-    });
-
-    it("blocks download when results not published", () => {
-      const registration = mockRegistrationUnpublished;
-      const isPublished = !!registration.cup.resultsPublishedAt;
-
-      expect(isPublished).toBe(false);
-      // Router would throw PRECONDITION_FAILED
-    });
-
-    it("checks if any products have results", () => {
-      const registration = mockRegistration;
-      const hasResults = registration.products.some((p) => p.finalScore !== null);
-
-      expect(hasResults).toBe(true);
-    });
-
-    it("blocks download when no products have scores", () => {
-      const registration = mockRegistrationNoResults;
-      const hasResults = registration.products.some((p) => p.finalScore !== null);
-
-      expect(hasResults).toBe(false);
-      // Router would throw PRECONDITION_FAILED
-    });
-
-    it("returns synthesis PDF response with correct structure", () => {
-      const pdfResult = {
-        success: true,
-        filename: "synthese_producteur_concours2025.pdf",
-        pdfBase64: "JVBERi0xLjQK...",
-        mimeType: "application/pdf",
-      };
-
-      expect(pdfResult.success).toBe(true);
-      expect(pdfResult.filename).toContain("synthese");
-      expect(pdfResult.filename).toContain(".pdf");
-      expect(pdfResult.mimeType).toBe("application/pdf");
-    });
-  });
-
-  // Story 8.9 - Consultation Detaillee des Notes par Producteur
-  describe("Story 8.9 - getProductDetailedResults", () => {
-    const mockProductWithResults = {
-      id: "prod-123",
-      name: "Cidre Bio",
-      finalScore: "85.5",
-      registration: {
-        producerId: "producer-123",
-        cup: {
-          name: "Concours 2025",
-          resultsPublishedAt: new Date("2025-01-15"),
-        },
-      },
-    };
-
-    const mockDetailedResults = {
-      productId: "prod-123",
-      productName: "Cidre Bio",
-      anonymousCode: "#A1",
-      categoryName: "Cidres",
-      finalScore: 85.5,
-      categoryRank: 1,
-      totalInCategory: 10,
-      label: { name: "Or", color: "#FFD700" },
-      criteriaScores: [
-        { criterionName: "Aspect visuel", coefficient: 2, productScore: 8.5, categoryAverage: 7.2 },
-        { criterionName: "Arome", coefficient: 3, productScore: 9.0, categoryAverage: 7.8 },
-        { criterionName: "Gout", coefficient: 5, productScore: 8.2, categoryAverage: 7.5 },
-      ],
-      cupName: "Concours 2025",
-    };
-
-    it("validates productId input as required string", () => {
-      const { z } = require("zod");
-      const schema = z.object({ productId: z.string() });
-
-      expect(schema.safeParse({ productId: "prod-123" }).success).toBe(true);
-      expect(schema.safeParse({}).success).toBe(false);
-    });
-
-    it("verifies product ownership before returning results", () => {
-      const product = mockProductWithResults;
-      const currentProducerId = "producer-123";
-      const isOwner = product.registration.producerId === currentProducerId;
-
-      expect(isOwner).toBe(true);
-    });
-
-    it("blocks access to other producer's product results", () => {
-      const product = mockProductWithResults;
-      const currentProducerId = "producer-456";
-      const isOwner = product.registration.producerId === currentProducerId;
-
-      expect(isOwner).toBe(false);
-      // Router would throw FORBIDDEN
-    });
-
-    it("checks if results are published before returning", () => {
-      const product = mockProductWithResults;
-      const isPublished = !!product.registration.cup.resultsPublishedAt;
-
-      expect(isPublished).toBe(true);
-    });
-
-    it("returns detailed criteria scores with category comparison", () => {
-      const results = mockDetailedResults;
-
-      expect(results.criteriaScores).toHaveLength(3);
-      expect(results.criteriaScores[0]!.criterionName).toBe("Aspect visuel");
-      expect(results.criteriaScores[0]!.productScore).toBe(8.5);
-      expect(results.criteriaScores[0]!.categoryAverage).toBe(7.2);
-      expect(results.criteriaScores[0]!.coefficient).toBe(2);
-    });
-
-    it("includes category rank and total in response", () => {
-      const results = mockDetailedResults;
-
-      expect(results.categoryRank).toBe(1);
-      expect(results.totalInCategory).toBe(10);
-    });
-
-    it("includes label information if awarded", () => {
-      const results = mockDetailedResults;
-
-      expect(results.label).toEqual({ name: "Or", color: "#FFD700" });
-    });
-  });
-
-  describe("Story 8.9 - getProductsComparison", () => {
-    const mockComparisonProducts = [
-      {
-        productId: "prod-1",
-        productName: "Cidre Bio",
-        categoryName: "Cidres",
-        finalScore: 85.5,
-        label: { name: "Or", color: "#FFD700" },
-        criteriaScores: [
-          { criterionName: "Aspect visuel", coefficient: 2, productScore: 8.5, categoryAverage: 7.2 },
-          { criterionName: "Arome", coefficient: 3, productScore: 9.0, categoryAverage: 7.8 },
-        ],
-      },
-      {
-        productId: "prod-2",
-        productName: "Cidre Brut",
-        categoryName: "Cidres",
-        finalScore: 78.0,
-        label: null,
-        criteriaScores: [
-          { criterionName: "Aspect visuel", coefficient: 2, productScore: 7.5, categoryAverage: 7.2 },
-          { criterionName: "Arome", coefficient: 3, productScore: 8.0, categoryAverage: 7.8 },
-        ],
-      },
-    ];
-
-    it("validates productIds input as array of strings", () => {
-      const { z } = require("zod");
-      const schema = z.object({
-        productIds: z.array(z.string()).min(2).max(10),
-      });
-
-      expect(schema.safeParse({ productIds: ["p1", "p2"] }).success).toBe(true);
-      expect(schema.safeParse({ productIds: ["p1"] }).success).toBe(false); // min 2
-      expect(schema.safeParse({ productIds: [] }).success).toBe(false);
-    });
-
-    it("requires at least 2 products with results for comparison", () => {
-      const productsWithResults = mockComparisonProducts.filter((p) => p.finalScore !== null);
-
-      expect(productsWithResults.length).toBeGreaterThanOrEqual(2);
-    });
-
-    it("builds criteria comparison across products", () => {
-      const criteriaMap = new Map<string, { scores: Array<{ productName: string; productScore: number | null }> }>();
-
-      for (const product of mockComparisonProducts) {
-        for (const criterion of product.criteriaScores) {
-          if (!criteriaMap.has(criterion.criterionName)) {
-            criteriaMap.set(criterion.criterionName, { scores: [] });
-          }
-          criteriaMap.get(criterion.criterionName)!.scores.push({
-            productName: product.productName,
-            productScore: criterion.productScore,
-          });
-        }
+      if (userId === null) {
+        vi.mocked(auth.api.getSession).mockResolvedValue(null);
+        return;
       }
 
-      expect(criteriaMap.size).toBe(2); // "Aspect visuel" and "Arome"
-      expect(criteriaMap.get("Aspect visuel")!.scores).toHaveLength(2);
+      vi.mocked(auth.api.getSession).mockResolvedValue({
+        user: { ...mockUser, id: userId },
+        session: { id: "session-123" },
+      } as never);
+    }
+
+    const asProducer = () => signIn(mockUser.id);
+    const asAnonymous = () => signIn(null);
+
+    /** Le profil producteur que le routeur résoudra depuis la session. */
+    async function withProducerProfile(profile: unknown) {
+      const { db } = await import("~/server/db");
+      vi.mocked(db.query.producers.findFirst).mockResolvedValue(profile as never);
+    }
+
+    async function createCaller() {
+      const { producerRouter } = await import("./producer");
+      const { db } = await import("~/server/db");
+
+      return producerRouter.createCaller({ headers: new Headers(), db } as never);
+    }
+
+    async function codeOf(fn: () => Promise<unknown>) {
+      try {
+        await fn();
+      } catch (error) {
+        expect(error).toBeInstanceOf(TRPCError);
+        return (error as TRPCError).code;
+      }
+      throw new Error("La procédure aurait dû lever une erreur");
+    }
+
+    beforeEach(() => {
+      vi.clearAllMocks();
     });
 
-    it("includes all product summaries in response", () => {
-      const response = {
-        products: mockComparisonProducts.map((p) => ({
-          productId: p.productId,
-          productName: p.productName,
-          categoryName: p.categoryName,
-          finalScore: p.finalScore,
-          label: p.label,
-        })),
-        criteriaComparison: [],
-      };
+    it("refuse un appelant anonyme sur chaque procédure", async () => {
+      await asAnonymous();
+      const caller = await createCaller();
 
-      expect(response.products).toHaveLength(2);
-      expect(response.products[0]!.productName).toBe("Cidre Bio");
-      expect(response.products[1]!.productName).toBe("Cidre Brut");
+      expect(await codeOf(() => caller.getProfile())).toBe("UNAUTHORIZED");
+      expect(await codeOf(() => caller.hasProfile())).toBe("UNAUTHORIZED");
+      expect(await codeOf(() => caller.getCupResults({ cupId: "cup-1" }))).toBe(
+        "UNAUTHORIZED"
+      );
+      expect(
+        await codeOf(() => caller.downloadProductPdf({ productId: "prod-1" }))
+      ).toBe("UNAUTHORIZED");
+      expect(
+        await codeOf(() => caller.getProductDetailedResults({ productId: "prod-1" }))
+      ).toBe("UNAUTHORIZED");
+      expect(
+        await codeOf(() =>
+          caller.updateNotificationPreferences({ notifyOnProductStatusChange: false })
+        )
+      ).toBe("UNAUTHORIZED");
+      expect(updates).toHaveLength(0);
     });
 
-    it("verifies all products belong to the same producer", () => {
-      const products = [
-        { registration: { producerId: "producer-123" } },
-        { registration: { producerId: "producer-123" } },
-      ];
-      const currentProducerId = "producer-123";
+    it("refuse un organisateur sur la liste globale des producteurs quand il n'en est pas un", async () => {
+      await asProducer();
+      const { db } = await import("~/server/db");
+      // organizerProcedure lit le rôle dans `users`, pas dans la session.
+      vi.mocked(db.query.users.findFirst).mockResolvedValue({
+        isAdmin: false,
+        role: "producer",
+      } as never);
 
-      const allOwned = products.every((p) => p.registration.producerId === currentProducerId);
-
-      expect(allOwned).toBe(true);
+      const caller = await createCaller();
+      expect(await codeOf(() => caller.listByOrganization())).toBe("FORBIDDEN");
     });
 
-    it("blocks comparison if any product belongs to different producer", () => {
-      const products = [
-        { registration: { producerId: "producer-123" } },
-        { registration: { producerId: "producer-456" } },
-      ];
-      const currentProducerId = "producer-123";
+    it("renvoie null quand l'utilisateur connecté n'a pas de profil producteur", async () => {
+      await asProducer();
+      await withProducerProfile(undefined);
 
-      const allOwned = products.every((p) => p.registration.producerId === currentProducerId);
+      const caller = await createCaller();
+      await expect(caller.getProfile()).resolves.toBeNull();
+      await expect(caller.hasProfile()).resolves.toBe(false);
+    });
 
-      expect(allOwned).toBe(false);
-      // Router would throw FORBIDDEN
+    it("combine le profil producteur et l'utilisateur de session", async () => {
+      await asProducer();
+      await withProducerProfile(mockProducer);
+
+      const caller = await createCaller();
+      const profile = await caller.getProfile();
+
+      expect(profile).toMatchObject({
+        id: mockProducer.id,
+        companyName: mockProducer.companyName,
+      });
+      await expect(caller.hasProfile()).resolves.toBe(true);
+    });
+
+    it("renvoie NOT_FOUND sur les résultats quand le profil producteur manque", async () => {
+      await asProducer();
+      await withProducerProfile(undefined);
+
+      const caller = await createCaller();
+      expect(await codeOf(() => caller.getCupResults({ cupId: "cup-1" }))).toBe(
+        "NOT_FOUND"
+      );
+      expect(
+        await codeOf(() => caller.downloadProductPdf({ productId: "prod-1" }))
+      ).toBe("NOT_FOUND");
+    });
+
+    // Le cœur du sujet : un producteur qui devine l'identifiant du produit
+    // d'un concurrent ne doit obtenir ni PDF ni détail de notes.
+    it("refuse le PDF d'un produit appartenant à un autre producteur", async () => {
+      await asProducer();
+      await withProducerProfile({ id: "producer-123" });
+
+      const { db } = await import("~/server/db");
+      vi.mocked(db.query.products.findFirst).mockResolvedValue({
+        id: "prod-1",
+        finalScore: 17,
+        registration: {
+          producerId: "producer-999",
+          cup: { id: "cup-1", resultsPublishedAt: new Date() },
+        },
+      } as never);
+
+      const caller = await createCaller();
+      expect(
+        await codeOf(() => caller.downloadProductPdf({ productId: "prod-1" }))
+      ).toBe("FORBIDDEN");
+
+      const { generateProductSynthesisPdf } = await import(
+        "~/server/services/results-pdf.service"
+      );
+      expect(generateProductSynthesisPdf).not.toHaveBeenCalled();
+    });
+
+    it("renvoie NOT_FOUND pour un produit inexistant", async () => {
+      await asProducer();
+      await withProducerProfile({ id: "producer-123" });
+
+      const { db } = await import("~/server/db");
+      vi.mocked(db.query.products.findFirst).mockResolvedValue(undefined as never);
+
+      const caller = await createCaller();
+      expect(
+        await codeOf(() => caller.downloadProductPdf({ productId: "inconnu" }))
+      ).toBe("NOT_FOUND");
+    });
+
+    // Publier les résultats est une décision de l'organisateur : tant qu'elle
+    // n'est pas prise, aucun producteur ne doit pouvoir extraire son score.
+    it("refuse le PDF tant que les résultats de la cup ne sont pas publiés", async () => {
+      await asProducer();
+      await withProducerProfile({ id: "producer-123" });
+
+      const { db } = await import("~/server/db");
+      vi.mocked(db.query.products.findFirst).mockResolvedValue({
+        id: "prod-1",
+        finalScore: 17,
+        registration: {
+          producerId: "producer-123",
+          cup: { id: "cup-1", resultsPublishedAt: null },
+        },
+      } as never);
+
+      const caller = await createCaller();
+      expect(
+        await codeOf(() => caller.downloadProductPdf({ productId: "prod-1" }))
+      ).toBe("PRECONDITION_FAILED");
+
+      const { generateProductSynthesisPdf } = await import(
+        "~/server/services/results-pdf.service"
+      );
+      expect(generateProductSynthesisPdf).not.toHaveBeenCalled();
+    });
+
+    it("refuse le PDF d'un produit sans note finale", async () => {
+      await asProducer();
+      await withProducerProfile({ id: "producer-123" });
+
+      const { db } = await import("~/server/db");
+      vi.mocked(db.query.products.findFirst).mockResolvedValue({
+        id: "prod-1",
+        finalScore: null,
+        registration: {
+          producerId: "producer-123",
+          cup: { id: "cup-1", resultsPublishedAt: new Date() },
+        },
+      } as never);
+
+      const caller = await createCaller();
+      expect(
+        await codeOf(() => caller.downloadProductPdf({ productId: "prod-1" }))
+      ).toBe("PRECONDITION_FAILED");
+    });
+
+    it("génère le PDF d'un produit noté d'une cup publiée, au producteur propriétaire", async () => {
+      await asProducer();
+      await withProducerProfile({ id: "producer-123" });
+
+      const { db } = await import("~/server/db");
+      vi.mocked(db.query.products.findFirst).mockResolvedValue({
+        id: "prod-1",
+        finalScore: 17,
+        registration: {
+          producerId: "producer-123",
+          cup: { id: "cup-1", resultsPublishedAt: new Date() },
+        },
+      } as never);
+
+      const caller = await createCaller();
+      const result = await caller.downloadProductPdf({ productId: "prod-1" });
+
+      expect(result).toMatchObject({
+        success: true,
+        filename: "synthese.pdf",
+        mimeType: "application/pdf",
+      });
+      expect(result.pdfBase64).toBe(Buffer.from("pdf").toString("base64"));
+    });
+
+    it("refuse le détail des notes d'un produit appartenant à un autre producteur", async () => {
+      await asProducer();
+      await withProducerProfile({ id: "producer-123" });
+
+      const { db } = await import("~/server/db");
+      vi.mocked(db.query.products.findFirst).mockResolvedValue({
+        id: "prod-1",
+        finalScore: 17,
+        registration: {
+          producerId: "producer-999",
+          cup: { id: "cup-1", resultsPublishedAt: new Date() },
+        },
+      } as never);
+
+      const caller = await createCaller();
+      expect(
+        await codeOf(() => caller.getProductDetailedResults({ productId: "prod-1" }))
+      ).toBe("FORBIDDEN");
+    });
+
+    it("refuse la synthèse d'une inscription appartenant à un autre producteur", async () => {
+      await asProducer();
+      await withProducerProfile({ id: "producer-123" });
+
+      const { db } = await import("~/server/db");
+      vi.mocked(db.query.registrations.findFirst).mockResolvedValue({
+        id: "reg-1",
+        producerId: "producer-999",
+        cup: { id: "cup-1", resultsPublishedAt: new Date() },
+        products: [{ id: "prod-1", finalScore: 17 }],
+      } as never);
+
+      const caller = await createCaller();
+      expect(
+        await codeOf(() => caller.downloadRegistrationPdf({ registrationId: "reg-1" }))
+      ).toBe("FORBIDDEN");
+
+      const { generateProducerSynthesisPdf } = await import(
+        "~/server/services/results-pdf.service"
+      );
+      expect(generateProducerSynthesisPdf).not.toHaveBeenCalled();
+    });
+
+    it("enregistre la préférence de notification telle qu'elle est envoyée", async () => {
+      await asProducer();
+      await withProducerProfile(mockProducer);
+
+      const caller = await createCaller();
+
+      await caller.updateNotificationPreferences({
+        notifyOnProductStatusChange: false,
+      });
+      expect(updates.at(-1)).toMatchObject({ notifyOnProductStatusChange: false });
+
+      await caller.updateNotificationPreferences({
+        notifyOnProductStatusChange: true,
+      });
+      expect(updates.at(-1)).toMatchObject({ notifyOnProductStatusChange: true });
+    });
+
+    it("refuse de changer la préférence sans profil producteur", async () => {
+      await asProducer();
+      await withProducerProfile(undefined);
+
+      const caller = await createCaller();
+      expect(
+        await codeOf(() =>
+          caller.updateNotificationPreferences({ notifyOnProductStatusChange: false })
+        )
+      ).toBe("NOT_FOUND");
+      expect(updates).toHaveLength(0);
     });
   });
 });

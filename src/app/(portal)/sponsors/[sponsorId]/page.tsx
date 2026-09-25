@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
 import { notFound } from "next/navigation";
@@ -5,9 +6,46 @@ import { eq } from "drizzle-orm";
 import { db } from "~/server/db";
 import * as schema from "~/server/db/schema";
 import { Eyebrow, Pill } from "~/components/portal/platinum";
+import { baseUrl, imagePartage } from "../../_lib/seo";
 
 interface Props {
   params: Promise<{ sponsorId: string }>;
+}
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { sponsorId } = await params;
+
+  const sponsor = await db.query.sponsors.findFirst({
+    where: eq(schema.sponsors.id, sponsorId),
+    columns: { name: true, description: true, logo: true },
+  });
+
+  if (!sponsor) {
+    return { title: "Partenaire introuvable", robots: { index: false, follow: false } };
+  }
+
+  const url = `${baseUrl()}/sponsors/${sponsorId}`;
+  const description =
+    sponsor.description ?? `${sponsor.name}, partenaire de la Platinum CBD Cup.`;
+  // Le logo est stocké en chemin relatif (/uploads/…) : Open Graph exige un absolu.
+  const image = sponsor.logo
+    ? sponsor.logo.startsWith("http")
+      ? sponsor.logo
+      : `${baseUrl()}${sponsor.logo}`
+    : null;
+
+  return {
+    title: sponsor.name,
+    description,
+    alternates: { canonical: url },
+    openGraph: {
+      type: "profile",
+      title: sponsor.name,
+      description,
+      url,
+      images: imagePartage(image, sponsor.name),
+    },
+  };
 }
 
 export default async function SponsorDetailPage({ params }: Props) {

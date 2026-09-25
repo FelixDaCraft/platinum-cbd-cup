@@ -6,8 +6,10 @@ import {
   getCategoryColor,
 } from "~/server/db/schema/articles";
 import { Eyebrow } from "~/components/portal/platinum";
+import { canonical } from "../_lib/seo";
 
 export const metadata = {
+  alternates: { canonical: canonical("/articles") },
   title: "Articles",
   description:
     "Actualités, interviews et analyses autour de la Platinum CBD Cup.",

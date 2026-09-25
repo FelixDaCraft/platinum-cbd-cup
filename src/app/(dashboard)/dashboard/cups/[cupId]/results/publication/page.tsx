@@ -1,6 +1,7 @@
 "use client";
 
 import { useParams } from "next/navigation";
+import Link from "next/link";
 import {
   Eye,
   EyeOff,
@@ -206,6 +207,18 @@ export default function PublicationPage() {
               Vous devez clôturer la phase de notation avant de pouvoir publier
               les résultats. La cup doit être en statut &quot;Terminée&quot;.
             </p>
+            <Link
+              href={`/dashboard/cups/${cupId}/results/live`}
+              className="n-label"
+              style={{
+                display: "inline-block",
+                marginTop: "8px",
+                color: "var(--n-accent)",
+                textDecoration: "underline",
+              }}
+            >
+              Verrouiller les notations →
+            </Link>
           </div>
         </div>
       )}

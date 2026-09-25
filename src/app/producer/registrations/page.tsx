@@ -88,7 +88,12 @@ export default function ProducerRegistrationsPage() {
   const searchParams = useSearchParams();
   const filter = searchParams.get("filter");
 
-  const { data: registrations, isLoading } = api.registration.listMyRegistrations.useQuery();
+  const {
+    data: registrations,
+    isLoading,
+    isError,
+    refetch,
+  } = api.registration.listMyRegistrations.useQuery();
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
   const [downloadingPdf, setDownloadingPdf] = useState<string | null>(null);
 
@@ -159,6 +164,21 @@ export default function ProducerRegistrationsPage() {
         style={{ color: "var(--n-text-disabled)" }}
       >
         <span className="n-font-data text-sm tracking-widest">[LOADING...]</span>
+      </div>
+    );
+  }
+
+  // Une requête en échec ne doit pas se confondre avec une liste vide :
+  // « vous n'avez rien » est plausible et masquerait l'incident.
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4 text-center">
+        <span role="alert" className="n-font-data text-sm tracking-widest" style={{ color: "var(--n-text-secondary)" }}>
+          [ERREUR] VOS INSCRIPTIONS N&apos;ONT PAS PU ÊTRE CHARGÉES
+        </span>
+        <button type="button" className="n-btn-secondary text-xs" onClick={() => void refetch()}>
+          RÉESSAYER
+        </button>
       </div>
     );
   }
@@ -344,10 +364,8 @@ export default function ProducerRegistrationsPage() {
                           )}
                         </p>
                       </div>
-                      <Link href={`/cups/${registration.cup.id}/register`}>
-                        <button className="n-btn-primary text-xs">
-                          FINALISER LE PAIEMENT
-                        </button>
+                      <Link href={`/cups/${registration.cup.id}/register`} className="n-btn-primary text-xs">
+                        FINALISER LE PAIEMENT
                       </Link>
                     </div>
                   </div>
@@ -384,11 +402,7 @@ export default function ProducerRegistrationsPage() {
               <p className="text-sm mb-6" style={{ color: "var(--n-text-disabled)" }}>
                 Inscrivez-vous a une competition pour commencer.
               </p>
-              <Link href="/cups">
-                <button className="n-btn-secondary text-xs">
-                  DECOUVRIR LES COMPETITIONS
-                </button>
-              </Link>
+              <Link href="/cups" className="n-btn-secondary text-xs">DECOUVRIR LES COMPETITIONS</Link>
             </div>
           ) : (
             <div className="space-y-3">
@@ -694,10 +708,8 @@ export default function ProducerRegistrationsPage() {
                     <div className="flex items-center gap-2 shrink-0">
                       {hasResults && (
                         <>
-                          <Link href="/producer/results">
-                            <button className="n-btn-ghost text-xs" style={{ padding: "8px 12px" }}>
-                              RESULTATS
-                            </button>
+                          <Link href="/producer/results" className="n-btn-ghost text-xs" style={{ padding: "8px 12px" }}>
+                            RESULTATS
                           </Link>
                           <button
                             className="n-btn-secondary text-xs"
@@ -743,11 +755,7 @@ export default function ProducerRegistrationsPage() {
             <p className="text-sm mb-6" style={{ color: "var(--n-text-disabled)" }}>
               Vous n&apos;avez pas encore participe a une competition.
             </p>
-            <Link href="/cups">
-              <button className="n-btn-secondary text-xs">
-                DECOUVRIR LES COMPETITIONS
-              </button>
-            </Link>
+            <Link href="/cups" className="n-btn-secondary text-xs">DECOUVRIR LES COMPETITIONS</Link>
           </div>
         )}
       </div>

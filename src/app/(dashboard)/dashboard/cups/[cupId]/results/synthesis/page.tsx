@@ -77,7 +77,12 @@ export default function SynthesisPage() {
     isRunning: boolean;
   } | null>(null);
 
-  const { data: pdfSettings, isLoading: loadingSettings } = api.results.getPdfSettings.useQuery(
+  const {
+    data: pdfSettings,
+    isLoading: loadingSettings,
+    isError: settingsError,
+    refetch: refetchSettings,
+  } = api.results.getPdfSettings.useQuery(
     { cupId },
     { enabled: !!cupId }
   );
@@ -89,8 +94,12 @@ export default function SynthesisPage() {
     }
   }, [pdfSettings]);
 
-  const { data: emailStatusData, isLoading: loadingEmailStatus, refetch: refetchEmailStatus } =
-    api.results.getEmailSendStatus.useQuery(
+  const {
+    data: emailStatusData,
+    isLoading: loadingEmailStatus,
+    isError: emailStatusError,
+    refetch: refetchEmailStatus,
+  } = api.results.getEmailSendStatus.useQuery(
       { cupId, status: statusFilter },
       { enabled: !!cupId }
     );
@@ -271,6 +280,21 @@ export default function SynthesisPage() {
         >
           [LOADING...]
         </span>
+      </div>
+    );
+  }
+
+  // Une requête en échec ne doit pas se confondre avec une page vide :
+  // un écran « aucune donnée » masquerait l'incident.
+  if (settingsError) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4 text-center">
+        <span role="alert" className="n-label" style={{ color: "var(--n-text-secondary)" }}>
+          [ERREUR] LES PARAMÈTRES PDF N&apos;ONT PAS PU ÊTRE CHARGÉS
+        </span>
+        <button type="button" className="n-btn-secondary text-xs" onClick={() => void refetchSettings()}>
+          RÉESSAYER
+        </button>
       </div>
     );
   }
@@ -609,6 +633,28 @@ export default function SynthesisPage() {
                     [LOADING...]
                   </span>
                 </div>
+              ) : emailStatusError ? (
+                <div style={{ textAlign: "center", padding: "48px 0" }}>
+                  <p
+                    role="alert"
+                    style={{
+                      fontFamily: "'Space Mono', monospace",
+                      fontSize: "13px",
+                      color: "var(--n-text-secondary)",
+                      letterSpacing: "0.06em",
+                    }}
+                  >
+                    [ERREUR] STATUT D&apos;ENVOI INDISPONIBLE
+                  </p>
+                  <button
+                    type="button"
+                    className="n-btn-secondary text-xs"
+                    style={{ marginTop: "12px" }}
+                    onClick={() => void refetchEmailStatus()}
+                  >
+                    RÉESSAYER
+                  </button>
+                </div>
               ) : emailStatus.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "48px 0" }}>
                   <p
@@ -895,6 +941,28 @@ export default function SynthesisPage() {
                   >
                     [LOADING...]
                   </span>
+                </div>
+              ) : emailStatusError ? (
+                <div style={{ textAlign: "center", padding: "48px 0" }}>
+                  <p
+                    role="alert"
+                    style={{
+                      fontFamily: "'Space Mono', monospace",
+                      fontSize: "13px",
+                      color: "var(--n-text-secondary)",
+                      letterSpacing: "0.06em",
+                    }}
+                  >
+                    [ERREUR] STATUT D&apos;ENVOI INDISPONIBLE
+                  </p>
+                  <button
+                    type="button"
+                    className="n-btn-secondary text-xs"
+                    style={{ marginTop: "12px" }}
+                    onClick={() => void refetchEmailStatus()}
+                  >
+                    RÉESSAYER
+                  </button>
                 </div>
               ) : emailStatus.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "48px 0" }}>

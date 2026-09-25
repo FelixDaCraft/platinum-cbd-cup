@@ -431,10 +431,10 @@ function CompoundTable({
         <table className="w-full text-xs">
           <thead className="bg-muted/20 text-muted-foreground">
             <tr>
-              <th className="px-2 py-1 text-left font-normal">Abr.</th>
-              <th className="px-2 py-1 text-left font-normal">Composé</th>
-              <th className="px-2 py-1 text-right font-normal">%</th>
-              <th className="px-2 py-1 text-left font-normal">Arômes</th>
+              <th scope="col" className="px-2 py-1 text-left font-normal">Abr.</th>
+              <th scope="col" className="px-2 py-1 text-left font-normal">Composé</th>
+              <th scope="col" className="px-2 py-1 text-right font-normal">%</th>
+              <th scope="col" className="px-2 py-1 text-left font-normal">Arômes</th>
             </tr>
           </thead>
           <tbody>

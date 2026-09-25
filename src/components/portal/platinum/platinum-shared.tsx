@@ -240,55 +240,6 @@ export function Ticker({ items }: TickerProps) {
 }
 
 // ---------------------------------------------------------------------------
-// CodeChip
-// ---------------------------------------------------------------------------
-
-interface CodeChipProps {
-  code: string;
-  score?: number | null;
-  rank: number;
-}
-
-/**
- * Strain/category code swatch — shows zero-padded rank, anonymized code, optional score.
- */
-export function CodeChip({ code, score, rank }: CodeChipProps) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
-        border: "1px solid var(--line)",
-        borderRadius: 10,
-        padding: "10px 12px",
-        fontFamily: "var(--mono)",
-        fontSize: 12,
-      }}
-    >
-      <span
-        style={{
-          color: "var(--fg-3)",
-          fontSize: 10,
-          letterSpacing: ".1em",
-        }}
-      >
-        {String(rank).padStart(2, "0")}
-      </span>
-      <span style={{ color: "var(--fg)", fontWeight: 500 }}>{code}</span>
-      {score != null && (
-        <span
-          style={{ marginLeft: "auto", color: "var(--accent)" }}
-          className="tabular"
-        >
-          {score.toFixed(1)}
-        </span>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Field
 // ---------------------------------------------------------------------------
 
@@ -301,6 +252,12 @@ interface FieldProps {
   mono?: boolean;
   type?: string;
   required?: boolean;
+  /** Nom du champ — indispensable à l'autoremplissage du navigateur. */
+  name?: string;
+  /** Jeton autocomplete HTML ("name", "email", "organization"…). */
+  autoComplete?: string;
+  /** Message d'erreur de validation, annoncé via aria-describedby. */
+  error?: string;
 }
 
 /**
@@ -316,7 +273,16 @@ export function Field({
   mono = false,
   type = "text",
   required = false,
+  name,
+  autoComplete,
+  error,
 }: FieldProps) {
+  // Identifiants dérivés du name pour relier input, aide et erreur ; sans
+  // name on retombe sur l'association implicite du <label> parent.
+  const hintId = name && hint ? `${name}-hint` : undefined;
+  const errorId = name && error ? `${name}-error` : undefined;
+  const describedBy = [errorId, hintId].filter(Boolean).join(" ") || undefined;
+
   return (
     <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
       <span
@@ -332,8 +298,12 @@ export function Field({
       </span>
       <input
         type={type}
+        name={name}
+        autoComplete={autoComplete}
         required={required}
         aria-required={required || undefined}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={describedBy}
         value={value ?? ""}
         onChange={(e) => onChange?.(e.target.value)}
         placeholder={placeholder}
@@ -342,11 +312,24 @@ export function Field({
           (e.target as HTMLInputElement).style.borderColor = "var(--accent)";
         }}
         onBlur={(e) => {
-          (e.target as HTMLInputElement).style.borderColor = "var(--line-strong)";
+          (e.target as HTMLInputElement).style.borderColor = error
+            ? "var(--danger)"
+            : "var(--line-strong)";
         }}
+        style={error ? { borderColor: "var(--danger)" } : undefined}
       />
+      {error && (
+        <span
+          id={errorId}
+          className="mono"
+          style={{ fontSize: 10.5, letterSpacing: ".08em", color: "var(--danger)" }}
+        >
+          {error}
+        </span>
+      )}
       {hint && (
         <span
+          id={hintId}
           className="mono fg3"
           style={{ fontSize: 10, letterSpacing: ".08em" }}
         >
@@ -364,104 +347,41 @@ export function Field({
 interface CheckProps {
   on: boolean;
   onClick: () => void;
+  /**
+   * Id de l'élément qui porte le libellé visible. Inutile quand la case est
+   * déjà enveloppée dans un <label> : celui-ci nomme l'input nativement.
+   */
+  labelledBy?: string;
+  /** Libellé accessible quand aucun texte visible n'est associable. */
+  ariaLabel?: string;
 }
 
 /**
- * 18×18 checkbox primitive. Accent-filled when on, hairline border when off.
+ * Case à cocher 18×18, remplie à l'accent quand cochée, filet fin sinon.
+ *
+ * C'est un vrai <input type="checkbox"> rendu transparent au-dessus du carré
+ * décoratif : un <label> parent redirige donc ses clics vers lui (cliquer le
+ * texte « J'accepte… » coche la case), le clavier et les lecteurs d'écran
+ * fonctionnent nativement. L'ancienne version — un <span role="checkbox"> —
+ * n'était pas labellisable : le texte du label restait inerte.
+ *
+ * L'apparence est portée par `.pt-check` dans platinumCSS (état `:checked`,
+ * anneau de focus `:focus-visible`). La cible tactile fait 24px, avec une
+ * marge négative pour ne pas décaler les mises en page existantes.
  */
-export function Check({ on, onClick }: CheckProps) {
+export function Check({ on, onClick, labelledBy, ariaLabel }: CheckProps) {
   return (
-    <span
-      role="checkbox"
-      aria-checked={on}
-      onClick={onClick}
-      style={{
-        width: 18,
-        height: 18,
-        borderRadius: 5,
-        flexShrink: 0,
-        border: `1px solid ${on ? "var(--accent)" : "var(--line-strong)"}`,
-        background: on ? "var(--accent)" : "transparent",
-        display: "grid",
-        placeItems: "center",
-        color: "#002a00",
-        fontSize: 12,
-        cursor: "pointer",
-        transition: "border-color .15s ease, background .15s ease",
-      }}
-    >
-      {on && "✓"}
+    <span className="pt-check">
+      <input
+        type="checkbox"
+        checked={on}
+        onChange={onClick}
+        aria-labelledby={labelledBy}
+        aria-label={ariaLabel}
+      />
+      <span className="pt-check-box" aria-hidden="true">
+        {on && "✓"}
+      </span>
     </span>
   );
 }
-
-// ---------------------------------------------------------------------------
-// LabelBadge
-// ---------------------------------------------------------------------------
-
-type LabelValue = "PLATINUM" | "GOLD" | "SILVER" | "BRONZE";
-
-interface LabelBadgeProps {
-  label: LabelValue;
-}
-
-const LABEL_COLORS: Record<
-  LabelValue,
-  { bg: string; fg: string; bd: string }
-> = {
-  PLATINUM: {
-    bg: "var(--accent-dim)",
-    fg: "var(--accent)",
-    bd: "var(--accent)",
-  },
-  GOLD: {
-    bg: "transparent",
-    fg: "var(--fg)",
-    bd: "var(--line-strong)",
-  },
-  SILVER: {
-    bg: "transparent",
-    fg: "var(--fg-2)",
-    bd: "var(--line)",
-  },
-  BRONZE: {
-    bg: "transparent",
-    fg: "var(--fg-3)",
-    bd: "var(--line)",
-  },
-};
-
-/**
- * Award label badge — PLATINUM / GOLD / SILVER / BRONZE.
- * Ported from page-results.jsx LabelBadge.
- */
-export function LabelBadge({ label }: LabelBadgeProps) {
-  const c = LABEL_COLORS[label] ?? LABEL_COLORS.SILVER;
-  return (
-    <span
-      style={{
-        display: "inline-block",
-        padding: "5px 10px",
-        borderRadius: 999,
-        fontSize: 10,
-        letterSpacing: ".12em",
-        fontFamily: "var(--mono)",
-        color: c.fg,
-        border: `1px solid ${c.bd}`,
-        background: c.bg,
-      }}
-    >
-      {label}
-    </span>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Legacy named exports for backward compat with index.ts
-// (previously PtPill, PtEyebrow, etc.)
-// ---------------------------------------------------------------------------
-export { Pill as PtPill };
-export { Eyebrow as PtEyebrow };
-export { Countdown as PtCountdown };
-export { Ticker as PtTicker };
-export { CodeChip as PtCodeChip };

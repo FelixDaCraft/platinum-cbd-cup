@@ -1,3 +1,5 @@
+import type { Metadata } from "next";
+import { unstable_cache } from "next/cache";
 import Link from "next/link";
 import { eq, desc, isNotNull, and, asc } from "drizzle-orm";
 import { db } from "~/server/db";
@@ -5,10 +7,16 @@ import * as schema from "~/server/db/schema";
 import {
   Eyebrow,
   Pill,
-  GeometricEmblem,
 } from "~/components/portal/platinum";
 import { MobilePalmaresBackdrop } from "~/components/portal/mobile/mobile-palmares-backdrop";
+import { DesktopEmblem } from "../_components/desktop-emblem";
 import { RankingRow } from "./_components/ranking-row";
+import {
+  PORTAL_CACHE_TAGS,
+  PORTAL_REVALIDATE,
+  reviveCupDates,
+} from "../_lib/cache";
+import { canonical, OG_IMAGE_PAR_DEFAUT } from "../_lib/seo";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -114,6 +122,49 @@ async function fetchPublishedCups() {
     orderBy: (c, { desc: d }) => [d(c.eventDate), d(c.createdAt)],
   });
 }
+
+/**
+ * Le palmarès est la page la plus coûteuse du portail — cinq requêtes par
+ * affichage — pour des données figées entre deux publications de résultats.
+ * Chaque lecteur est mémoïsé une minute ; `unstable_cache` intègre les
+ * arguments (l'identifiant d'édition) à sa clé, les éditions ne se mélangent
+ * donc pas.
+ */
+const PALMARES_CACHE = {
+  revalidate: PORTAL_REVALIDATE,
+  tags: [PORTAL_CACHE_TAGS.cups, PORTAL_CACHE_TAGS.results],
+};
+
+const getCachedPublishedCups = unstable_cache(
+  fetchPublishedCups,
+  ["palmares-published-cups"],
+  PALMARES_CACHE,
+);
+
+const getCachedCupLabels = unstable_cache(
+  (cupId: string) => fetchCupLabels(cupId),
+  ["palmares-cup-labels"],
+  PALMARES_CACHE,
+);
+
+const getCachedCategories = unstable_cache(
+  (cupId: string) => fetchCategories(cupId),
+  ["palmares-categories"],
+  PALMARES_CACHE,
+);
+
+const getCachedPublicJuries = unstable_cache(
+  (cupId: string) => fetchPublicJuries(cupId),
+  ["palmares-public-juries"],
+  PALMARES_CACHE,
+);
+
+const getCachedCupProducts = unstable_cache(
+  (cup: { id: string; ratingScale: string | null }) =>
+    fetchPublishedCupProducts(cup),
+  ["palmares-cup-products"],
+  PALMARES_CACHE,
+);
 
 interface PublicJury {
   id: string;
@@ -260,13 +311,36 @@ async function fetchProducts(
 // Page
 // ---------------------------------------------------------------------------
 
+/**
+ * Canonique sans paramètre : ?edition=… et ?cat=… ne sont que des filtres
+ * d'affichage d'un même palmarès, les indexer créerait du contenu dupliqué.
+ * `metadataBase` n'étant pas défini, on construit l'absolu comme dans
+ * robots.ts et sitemap.ts.
+ */
+export const metadata: Metadata = {
+  title: "Palmarès",
+  description:
+    "Le palmarès complet de la Platinum CBD Cup : lauréats, médailles et classements par catégorie de chaque édition.",
+  alternates: {
+    canonical: canonical("/palmares"),
+  },
+  openGraph: {
+    type: "website",
+    title: "Palmarès — Platinum CBD Cup",
+    description:
+      "Lauréats, médailles et classements par catégorie de chaque édition de la Platinum CBD Cup.",
+    url: canonical("/palmares"),
+    images: [OG_IMAGE_PAR_DEFAUT],
+  },
+};
+
 export default async function PalmaresPage({
   searchParams,
 }: {
   searchParams: Promise<{ edition?: string; cat?: string }>;
 }) {
   const sp = await searchParams;
-  const cups = await fetchPublishedCups();
+  const cups = (await getCachedPublishedCups()).map(reviveCupDates);
 
   const headerSection = (
     <section style={{ paddingTop: 40, paddingBottom: 32 }}>
@@ -343,10 +417,16 @@ export default async function PalmaresPage({
   const hideScores = selectedYear === "2023";
 
   const [labels, allCategories, allProducts, publicJuries] = await Promise.all([
-    fetchCupLabels(selectedCup.id),
-    fetchCategories(selectedCup.id),
-    fetchPublishedCupProducts(selectedCup),
-    fetchPublicJuries(selectedCup.id),
+    getCachedCupLabels(selectedCup.id),
+    getCachedCategories(selectedCup.id),
+    // Seuls l'identifiant et l'échelle entrent dans la clé de cache : passer
+    // la ligne entière y ferait entrer `updatedAt` et invaliderait tout à la
+    // moindre écriture sur la cup.
+    getCachedCupProducts({
+      id: selectedCup.id,
+      ratingScale: selectedCup.ratingScale,
+    }),
+    getCachedPublicJuries(selectedCup.id),
   ]);
 
   // Public results policy depends on the cup's jury model:
@@ -595,7 +675,10 @@ export default async function PalmaresPage({
           pointerEvents: "none",
         }}
       >
-        <GeometricEmblem size={735} tiltZ={-0.18} interactive={false} />
+        {/* Monté uniquement au-dessus de 881px : masquer ce canvas via
+            .palmares-desktop-emblem{display:none} laissait un second contexte
+            WebGL vivant sous MobilePalmaresBackdrop. */}
+        <DesktopEmblem size={735} tiltZ={-0.18} interactive={false} />
       </div>
 
       {/* Mobile-only fixed full-viewport 3D backdrop. Returns null above

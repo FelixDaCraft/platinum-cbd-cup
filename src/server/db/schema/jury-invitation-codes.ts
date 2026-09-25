@@ -1,5 +1,6 @@
-import { pgTable, text, timestamp, index, unique } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { pgTable, text, timestamp, index, unique, check } from "drizzle-orm/pg-core";
+import { relations, sql } from "drizzle-orm";
+import { generateId } from "./id";
 import { cups } from "./cups";
 import { categories } from "./categories";
 import { users } from "./auth";
@@ -22,7 +23,9 @@ export type JuryCodeStatus = (typeof juryCodeStatusEnum)[number];
 export const juryInvitationCodes = pgTable(
   "jury_invitation_codes",
   {
-    id: text("id").primaryKey(), // nanoid generated
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => generateId()),
     cupId: text("cup_id")
       .notNull()
       .references(() => cups.id, { onDelete: "cascade" }),
@@ -36,18 +39,20 @@ export const juryInvitationCodes = pgTable(
     activatedByUserId: text("activated_by_user_id").references(() => users.id, {
       onDelete: "set null",
     }),
-    activatedAt: timestamp("activated_at"),
+    activatedAt: timestamp("activated_at", { withTimezone: true }),
     // Expiration date (typically the cup's ratingEndAt)
-    expiresAt: timestamp("expires_at"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
     // Metadata
-    createdAt: timestamp("created_at").notNull().defaultNow(),
-    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     index("jury_invitation_codes_cup_id_idx").on(table.cupId),
-    index("jury_invitation_codes_code_idx").on(table.code),
+    // Pas d'index sur `code` : le .unique() de la colonne en crée déjà un.
     index("jury_invitation_codes_status_idx").on(table.status),
     index("jury_invitation_codes_destination_idx").on(table.destination),
+    index("jury_invitation_codes_activated_by_user_id_idx").on(table.activatedByUserId),
+    check("jury_invitation_codes_status_check", sql`${table.status} in ('pending', 'activated', 'revoked', 'expired')`),
   ]
 );
 
@@ -58,7 +63,9 @@ export const juryInvitationCodes = pgTable(
 export const juryInvitationCodeCategories = pgTable(
   "jury_invitation_code_categories",
   {
-    id: text("id").primaryKey(), // nanoid generated
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => generateId()),
     codeId: text("code_id")
       .notNull()
       .references(() => juryInvitationCodes.id, { onDelete: "cascade" }),

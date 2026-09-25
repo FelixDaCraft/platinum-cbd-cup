@@ -55,7 +55,7 @@ export function QRCodeDisplay({
         <DialogHeader>
           <DialogTitle>QR Code - {anonymousCode ?? productName}</DialogTitle>
           <DialogDescription>
-            Ce QR code permet d&apos;identifier le produit lors de la reception du colis.
+            Ce QR code permet d&apos;identifier le produit lors de la réception du colis.
           </DialogDescription>
         </DialogHeader>
 
@@ -78,6 +78,9 @@ export function QRCodeDisplay({
               <img
                 src={data.qrCodeDataUrl}
                 alt={`QR Code pour ${anonymousCode ?? productName}`}
+                width={256}
+                height={256}
+                decoding="async"
                 className="h-64 w-64 rounded-lg border bg-white p-2"
               />
 
@@ -90,7 +93,7 @@ export function QRCodeDisplay({
 
               <Button onClick={handleDownload} className="w-full gap-2">
                 <Download className="h-4 w-4" />
-                Telecharger le QR Code
+                Télécharger le QR Code
               </Button>
             </>
           )}

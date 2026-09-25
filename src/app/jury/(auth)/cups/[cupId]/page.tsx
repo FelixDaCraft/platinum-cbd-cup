@@ -68,9 +68,7 @@ export default function PortalJuryCupPage() {
           <p className="n-font-body" style={{ color: "var(--n-text-secondary)", fontSize: "14px", marginBottom: "24px" }}>
             {error.message}
           </p>
-          <Link href="/jury">
-            <button className="n-btn-secondary">Retour au dashboard</button>
-          </Link>
+          <Link href="/jury" className="n-btn-secondary">Retour au dashboard</Link>
         </div>
       </div>
     );

@@ -67,8 +67,18 @@ function StatusTag({ status }: { status: "draft" | "published" }) {
 export default function PressEditorPage() {
   const utils = api.useUtils();
   const { data: settings, isLoading: settingsLoading } = api.press.getSettings.useQuery();
-  const { data: releases, isLoading: releasesLoading } = api.press.listReleases.useQuery();
-  const { data: images, isLoading: imagesLoading } = api.press.listImages.useQuery();
+  const {
+    data: releases,
+    isLoading: releasesLoading,
+    isError: releasesError,
+    refetch: refetchReleases,
+  } = api.press.listReleases.useQuery();
+  const {
+    data: images,
+    isLoading: imagesLoading,
+    isError: imagesError,
+    refetch: refetchImages,
+  } = api.press.listImages.useQuery();
 
   // ── Settings local state ──────────────────────────────────────────
   const [mediaKitUrl, setMediaKitUrl] = useState("");
@@ -86,10 +96,12 @@ export default function PressEditorPage() {
       setMediaKitFileName(settings.mediaKitFileName ?? "");
       setPressEmail(settings.pressEmail ?? "");
       setPressPhone(settings.pressPhone ?? "");
-      setShowPressReleases(settings.showPressReleases !== "false");
-      setShowGallery(settings.showGallery !== "false");
-      setShowMediaKit(settings.showMediaKit !== "false");
-      setShowContact(settings.showContact !== "false");
+      // Ces drapeaux sont des booléens en base depuis 0001_corrections_audit :
+      // les comparer à la chaîne "false" rendait toutes les sections visibles.
+      setShowPressReleases(settings.showPressReleases ?? true);
+      setShowGallery(settings.showGallery ?? true);
+      setShowMediaKit(settings.showMediaKit ?? true);
+      setShowContact(settings.showContact ?? true);
     }
   }, [settings]);
 
@@ -336,6 +348,24 @@ export default function PressEditorPage() {
           >
             [LOADING...]
           </p>
+        ) : releasesError ? (
+          // Sans ce cas, une erreur serveur se lit « rien à afficher ».
+          <div className="flex flex-col items-center gap-3" style={{ padding: "24px 0" }}>
+            <p
+              role="alert"
+              style={{
+                fontFamily: "'Space Mono', monospace",
+                fontSize: 12,
+                color: "var(--n-text-secondary)",
+                textAlign: "center",
+              }}
+            >
+              [ERREUR] LES COMMUNIQUÉS N&apos;ONT PAS PU ÊTRE CHARGÉS
+            </p>
+            <button type="button" className="n-btn-secondary text-xs" onClick={() => void refetchReleases()}>
+              RÉESSAYER
+            </button>
+          </div>
         ) : !releases || releases.length === 0 ? (
           <p
             style={{
@@ -436,6 +466,24 @@ export default function PressEditorPage() {
           >
             [LOADING...]
           </p>
+        ) : imagesError ? (
+          // Sans ce cas, une erreur serveur se lit « rien à afficher ».
+          <div className="flex flex-col items-center gap-3" style={{ padding: "24px 0" }}>
+            <p
+              role="alert"
+              style={{
+                fontFamily: "'Space Mono', monospace",
+                fontSize: 12,
+                color: "var(--n-text-secondary)",
+                textAlign: "center",
+              }}
+            >
+              [ERREUR] LA GALERIE N&apos;A PAS PU ÊTRE CHARGÉE
+            </p>
+            <button type="button" className="n-btn-secondary text-xs" onClick={() => void refetchImages()}>
+              RÉESSAYER
+            </button>
+          </div>
         ) : !images || images.length === 0 ? (
           <p
             style={{

@@ -1,4 +1,17 @@
 /**
+ * ATTENTION — les noms de tables ci-dessous sont ceux de CupMetrics. Depuis,
+ * la migration 0003 a renommé les trois tables d'archives côté cible :
+ * `cupmetrics_historical_*` y est devenu `historical_*`. Le script suppose un
+ * nom identique des deux côtés : le rejouer tel quel échouerait sur ces trois
+ * tables. Il faudrait une table de correspondance source → cible.
+ *
+ * MIGRATION ONE-SHOT — DÉJÀ EXÉCUTÉE (2 organisateurs, 70 jurés, 68
+ * producteurs sont en production). Conservée uniquement comme trace de ce
+ * qui a été transféré ; elle n'a plus à être rejouée. Elle écrit dans
+ * TARGET_DATABASE_URL et sait tronquer les tables cibles, donc un
+ * déclenchement accidentel détruirait la base de prod : l'exécution exige
+ * désormais CONFIRM_ONE_SHOT_MIGRATION=1 en plus des trois URLs.
+ *
  * Migrate the "Platinum CBD Cup" organization data from the multi-tenant
  * CupMetrics v2 Neon database into the single-tenant Platinum CBD Cup
  * Postgres instance.
@@ -34,6 +47,16 @@ const TARGET_DATABASE_URL = process.env.TARGET_DATABASE_URL;
 const PLATINUM_ORG_ID = process.env.PLATINUM_ORG_ID;
 const DRY_RUN = process.env.DRY_RUN === "1";
 const TRUNCATE_TARGET = process.env.TRUNCATE_TARGET === "1";
+
+// Garde-fou : la migration a déjà eu lieu. Sans opt-in explicite on refuse
+// de toucher à TARGET_DATABASE_URL, qui pointe sur la base de production.
+if (process.env.CONFIRM_ONE_SHOT_MIGRATION !== "1") {
+  throw new Error(
+    "Migration one-shot déjà exécutée en production. Relancer détruirait ou " +
+      "dupliquerait les données existantes. Pour forcer, définir " +
+      "CONFIRM_ONE_SHOT_MIGRATION=1 après une sauvegarde pg_dump de la cible.",
+  );
+}
 
 if (!SOURCE_DATABASE_URL) throw new Error("SOURCE_DATABASE_URL is required");
 if (!TARGET_DATABASE_URL) throw new Error("TARGET_DATABASE_URL is required");

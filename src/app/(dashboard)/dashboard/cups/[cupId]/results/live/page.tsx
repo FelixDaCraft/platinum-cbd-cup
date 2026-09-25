@@ -8,13 +8,14 @@ import {
   CategoryProgress,
   JuryProgress,
   LiveLeaderboard,
+  RatingsLockPanel,
 } from "~/components/features/cups/scoring";
 
 export default function LiveTrackingPage() {
   const params = useParams();
   const cupId = params.cupId as string;
 
-  const { data: cup, isLoading } = api.cup.getById.useQuery({ id: cupId });
+  const { data: cup, isLoading, isError, refetch } = api.cup.getById.useQuery({ id: cupId });
 
   if (isLoading) {
     return (
@@ -29,6 +30,20 @@ export default function LiveTrackingPage() {
         >
           [LOADING...]
         </span>
+      </div>
+    );
+  }
+
+  // Une erreur serveur ne doit pas être présentée comme une absence de donnée.
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4 text-center">
+        <span role="alert" style={{ fontFamily: "'Space Mono', monospace", fontSize: "13px", letterSpacing: "0.08em", color: "var(--n-text-secondary)" }}>
+          [ERREUR] CETTE CUP N&apos;A PAS PU ÊTRE CHARGÉE
+        </span>
+        <button type="button" className="n-btn-secondary text-xs" onClick={() => void refetch()}>
+          RÉESSAYER
+        </button>
       </div>
     );
   }
@@ -91,6 +106,9 @@ export default function LiveTrackingPage() {
         </div>
       ) : (
         <>
+          {/* Clôture de la phase de notation */}
+          <RatingsLockPanel cupId={cupId} />
+
           {/* Global Progress */}
           <GlobalProgress cupId={cupId} />
 

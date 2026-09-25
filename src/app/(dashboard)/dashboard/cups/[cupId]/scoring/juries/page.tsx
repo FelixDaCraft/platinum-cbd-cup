@@ -102,13 +102,28 @@ export default function JuriesPage() {
   const utils = api.useUtils();
 
   // Queries
-  const { data: cup, isLoading: cupLoading } = api.cup.getById.useQuery({ id: cupId });
-  const { data: invitations, isLoading: invitationsLoading } = api.jury.listInvitations.useQuery({
+  const {
+    data: cup,
+    isLoading: cupLoading,
+    isError: cupError,
+    refetch: refetchCup,
+  } = api.cup.getById.useQuery({ id: cupId });
+  const {
+    data: invitations,
+    isLoading: invitationsLoading,
+    isError: invitationsError,
+    refetch: refetchInvitations,
+  } = api.jury.listInvitations.useQuery({
     cupId,
     status: "all",
   });
   const { data: stats } = api.jury.getInvitationStats.useQuery({ cupId });
-  const { data: allJuries, isLoading: juriesLoading } = api.jury.listJuries.useQuery({ cupId, includeInactive: true });
+  const {
+    data: allJuries,
+    isLoading: juriesLoading,
+    isError: juriesError,
+    refetch: refetchJuries,
+  } = api.jury.listJuries.useQuery({ cupId, includeInactive: true });
 
   const juries = useMemo(() => allJuries?.filter((j) => j.isActive) ?? [], [allJuries]);
   const inactiveJuries = useMemo(() => allJuries?.filter((j) => !j.isActive) ?? [], [allJuries]);
@@ -487,6 +502,21 @@ export default function JuriesPage() {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <p className="n-font-body text-[var(--n-text-secondary)]">[LOADING...]</p>
+      </div>
+    );
+  }
+
+  // Une requête en échec ne doit pas se confondre avec une page vide :
+  // un écran « aucune donnée » masquerait l'incident.
+  if (cupError || invitationsError || juriesError) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4 text-center">
+        <span role="alert" className="n-label" style={{ color: "var(--n-text-secondary)" }}>
+          [ERREUR] LE JURY DE CETTE CUP N&apos;A PAS PU ÊTRE CHARGÉ
+        </span>
+        <button type="button" className="n-btn-secondary text-xs" onClick={() => { void refetchCup(); void refetchInvitations(); void refetchJuries(); }}>
+          RÉESSAYER
+        </button>
       </div>
     );
   }

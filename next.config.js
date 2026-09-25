@@ -12,6 +12,9 @@ const config = {
   // or just build inside the Dockerfile (Linux handles symlinks fine).
   output: process.env.NEXT_STANDALONE === "0" ? undefined : "standalone",
 
+  // Don't advertise the framework.
+  poweredByHeader: false,
+
   // pdfjs-dist ships its own Node polyfills (DOMMatrix, etc.) inside the
   // legacy build. When bundled by webpack for Next.js server routes those
   // polyfills get tree-shaken, causing `ReferenceError: DOMMatrix is not
@@ -33,6 +36,11 @@ const config = {
     ],
   },
   images: {
+    // /_next/image is public and unauthenticated: every host listed here is
+    // a host anyone can make the server fetch and re-encode with sharp.
+    // Keep it to the domains we actually serve images from — user uploads
+    // are stored locally and referenced by a relative /uploads/ path, so
+    // they need no entry at all.
     remotePatterns: [
       { protocol: "https", hostname: "platinumcbdcup.eu" },
       { protocol: "https", hostname: "*.platinumcbdcup.eu" },
@@ -40,11 +48,9 @@ const config = {
       { protocol: "https", hostname: "*.aynn.fr" },
       { protocol: "https", hostname: "localhost" },
       { protocol: "http", hostname: "localhost" },
-      { protocol: "https", hostname: "res.cloudinary.com" },
-      { protocol: "https", hostname: "images.unsplash.com" },
-      // User-uploaded images (producer logos, etc.)
-      { protocol: "https", hostname: "**" },
     ],
+    // Bound the on-disk optimizer cache churn.
+    minimumCacheTTL: 60 * 60 * 24 * 30,
   },
   allowedDevOrigins: [
     "platinumcbdcup.eu",
@@ -81,10 +87,6 @@ const config = {
             value: "DENY",
           },
           {
-            key: "X-XSS-Protection",
-            value: "1; mode=block",
-          },
-          {
             key: "Referrer-Policy",
             value: "strict-origin-when-cross-origin",
           },
@@ -93,15 +95,18 @@ const config = {
             value: "camera=(), microphone=(), geolocation=()",
           },
           {
-            // Defense-in-depth CSP. 'unsafe-inline'/'unsafe-eval' are kept
-            // because Next.js inline-hydrates and Three.js evaluates shaders.
+            // Defense-in-depth CSP. 'unsafe-inline' is kept because Next.js
+            // inline-hydrates. 'wasm-unsafe-eval' is the narrow replacement
+            // for 'unsafe-eval': the 3D emblem GLB is EXT_meshopt-compressed
+            // and its decoder is a WebAssembly module, which CSP3 gates —
+            // shaders are compiled by WebGL and never needed eval.
             // The real wins are object-src/base-uri/form-action/frame-ancestors
             // (blocks plugin injection, base-tag hijacking, form exfiltration,
             // and clickjacking).
             key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+              "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'",
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
               "font-src 'self' data: https://fonts.gstatic.com",
               "img-src 'self' data: blob: https:",
@@ -133,10 +138,6 @@ const config = {
             value: "nosniff",
           },
           {
-            key: "X-XSS-Protection",
-            value: "1; mode=block",
-          },
-          {
             key: "Referrer-Policy",
             value: "strict-origin-when-cross-origin",
           },
@@ -155,8 +156,12 @@ const config = {
         source: "/(.*)",
         headers: [
           {
+            // `preload` n'a aucun effet tant que platinumcbdcup.eu n'est pas
+            // soumis sur hstspreload.org : le jeton est la condition d'entrée,
+            // pas l'inscription elle-même. Le déclarer maintenant évite un
+            // second passage en production le jour de la soumission.
             key: "Strict-Transport-Security",
-            value: "max-age=31536000; includeSubDomains",
+            value: "max-age=31536000; includeSubDomains; preload",
           },
         ],
         // Note: HSTS will be applied but browsers ignore it for localhost

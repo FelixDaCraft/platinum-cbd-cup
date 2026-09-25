@@ -48,3 +48,11 @@ yarn-error.log*
 # BMAD (development only)
 _bmad
 _bmad-output
+
+# Simulation locale et téléversements du poste de dev : ce dossier a déjà
+# contenu un pg_dump de production. Rien de tout cela n'a à entrer dans le
+# contexte de build, ni dans la couche builder mise en cache sur le runner.
+.local-sim
+public/uploads
+*.dump
+*.sql.gz

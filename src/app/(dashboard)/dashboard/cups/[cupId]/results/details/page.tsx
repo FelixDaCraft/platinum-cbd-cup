@@ -39,7 +39,7 @@ export default function ResultsDetailsPage() {
   const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
 
-  const { data: results, isLoading } = api.results.getDetailedResults.useQuery(
+  const { data: results, isLoading, isError, refetch } = api.results.getDetailedResults.useQuery(
     {
       cupId,
       categoryId: selectedCategory !== "all" ? selectedCategory : undefined,
@@ -78,6 +78,20 @@ export default function ResultsDetailsPage() {
         >
           [LOADING...]
         </span>
+      </div>
+    );
+  }
+
+  // Une erreur serveur ne doit pas être présentée comme une absence de donnée.
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4 text-center">
+        <span role="alert" style={{ fontFamily: "'Space Mono', monospace", fontSize: "13px", letterSpacing: "0.08em", color: "var(--n-text-secondary)" }}>
+          [ERREUR] LES RÉSULTATS DÉTAILLÉS N&apos;ONT PAS PU ÊTRE CHARGÉS
+        </span>
+        <button type="button" className="n-btn-secondary text-xs" onClick={() => void refetch()}>
+          RÉESSAYER
+        </button>
       </div>
     );
   }

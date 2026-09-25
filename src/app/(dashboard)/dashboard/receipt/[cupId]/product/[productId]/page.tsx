@@ -107,11 +107,11 @@ export default function ProductReceiptPage() {
               Le produit a été marqué comme reçu avec succès.
             </p>
             <div className="flex flex-col gap-2 pt-4">
-              <Link href={`/dashboard/cups/${cupId}/products`}>
-                <Button className="w-full n-btn-primary">
+              <Button asChild className="w-full n-btn-primary">
+                <Link href={`/dashboard/cups/${cupId}/products`}>
                   Voir tous les produits
-                </Button>
-              </Link>
+                </Link>
+              </Button>
               <Button
                 variant="outline"
                 className="w-full"
@@ -147,11 +147,11 @@ export default function ProductReceiptPage() {
               Ce produit a déjà été reçu et traité.
             </p>
             <div className="flex flex-col gap-2 pt-4">
-              <Link href={`/dashboard/cups/${cupId}/products`}>
-                <Button className="w-full">
+              <Button asChild className="w-full">
+                <Link href={`/dashboard/cups/${cupId}/products`}>
                   Voir tous les produits
-                </Button>
-              </Link>
+                </Link>
+              </Button>
             </div>
           </div>
         </div>
@@ -172,12 +172,12 @@ export default function ProductReceiptPage() {
               Vérifiez que le QR code est valide et que vous avez les droits d&apos;accès.
             </p>
             <div className="flex flex-col gap-2 pt-4">
-              <Link href={`/dashboard/cups/${cupId}/products`}>
-                <Button variant="outline" className="w-full gap-2">
+              <Button asChild variant="outline" className="w-full gap-2">
+                <Link href={`/dashboard/cups/${cupId}/products`}>
                   <ArrowLeft className="h-4 w-4" />
                   Retour aux produits
-                </Button>
-              </Link>
+                </Link>
+              </Button>
             </div>
           </div>
         </div>
@@ -241,11 +241,11 @@ export default function ProductReceiptPage() {
               )}
             </Button>
 
-            <Link href={`/dashboard/cups/${cupId}/products`}>
-              <Button variant="ghost" className="w-full">
+            <Button asChild variant="ghost" className="w-full">
+              <Link href={`/dashboard/cups/${cupId}/products`}>
                 Annuler
-              </Button>
-            </Link>
+              </Link>
+            </Button>
           </div>
         </div>
       )}

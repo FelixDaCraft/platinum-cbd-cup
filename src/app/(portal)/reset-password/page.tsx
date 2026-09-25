@@ -17,7 +17,6 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
-import { motion } from "framer-motion";
 
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -128,15 +127,32 @@ function ResetPasswordCard() {
 
         if (result.error) {
           const code = (result.error.code ?? "").toUpperCase();
+          const status = result.error.status ?? 0;
+
           if (code.includes("TOKEN")) {
             toast.error(
               "Ce lien a expiré ou a déjà été utilisé. Demandez-en un nouveau."
             );
             return;
           }
+
+          if (code.includes("PASSWORD_TOO_SHORT") || code.includes("PASSWORD_TOO_LONG")) {
+            toast.error(
+              "Ce mot de passe ne respecte pas les règles de longueur attendues."
+            );
+            return;
+          }
+
+          if (status === 429) {
+            toast.error("Trop de tentatives. Veuillez réessayer plus tard.");
+            return;
+          }
+
+          // Ne jamais afficher `result.error.message` : Better Auth renvoie
+          // des libellés techniques en anglais.
+          console.error("[ResetPassword] Échec de la réinitialisation", result.error);
           toast.error(
-            result.error.message ??
-              "Impossible de réinitialiser le mot de passe. Veuillez réessayer."
+            "Impossible de réinitialiser le mot de passe. Veuillez réessayer."
           );
           return;
         }
@@ -162,13 +178,12 @@ function ResetPasswordCard() {
   const inputErrorClass =
     "border-destructive focus:border-destructive focus:ring-destructive/20";
 
+  // Animation d'apparition en CSS (tw-animate-css) plutôt qu'en JS :
+  // framer-motion pesait ~70 Ko compressés dans le premier chargement des
+  // quatre pages d'authentification — celles que les jurés et producteurs
+  // ouvrent en premier — pour une simple apparition.
   const card = (children: React.ReactNode) => (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, ease: "easeOut" }}
-      className="w-full max-w-md relative z-10"
-    >
+    <div className="w-full max-w-md relative z-10 animate-in fade-in slide-in-from-bottom-5 duration-500 ease-out">
       <div className="bg-card/80 backdrop-blur-xl rounded-2xl border border-border/50 shadow-2xl shadow-black/5 overflow-hidden">
         <div
           className="h-1 w-full"
@@ -178,7 +193,7 @@ function ResetPasswordCard() {
         />
         <div className="p-8 sm:p-10">{children}</div>
       </div>
-    </motion.div>
+    </div>
   );
 
   const header = (title: string, subtitle: string) => (

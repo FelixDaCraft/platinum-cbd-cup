@@ -7,8 +7,6 @@ const createMockDb = () => ({
     cups: {
       findFirst: vi.fn().mockResolvedValue({
         id: "cup_123",
-        paymentProvider: null,
-        paymentConfigEncrypted: null,
         defaultPricePerProduct: null,
       }),
     },

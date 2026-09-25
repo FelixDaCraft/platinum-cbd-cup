@@ -23,13 +23,28 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "~/components/ui/accordion";
+import { ImageUpload } from "~/components/ui/image-upload";
 import { api } from "~/trpc/react";
 
 const optionalUrl = z.union([z.string().url("URL invalide"), z.literal("")]).optional();
 
+// Le logo doit etre televerse sur le site : l'optimiseur d'images ne sert plus
+// que nos domaines, une URL externe s'afficherait en 400 (cf. sponsors router).
+const uploadPath = z
+  .union([
+    z
+      .string()
+      .regex(
+        /^\/uploads\/[A-Za-z0-9._\/-]+$/,
+        "Le logo doit être téléversé sur le site"
+      ),
+    z.literal(""),
+  ])
+  .optional();
+
 const formSchema = z.object({
   name: z.string().min(1, "Le nom est requis"),
-  logo: optionalUrl,
+  logo: uploadPath,
   description: z.string().optional(),
   website: optionalUrl,
   facebook: optionalUrl,
@@ -113,8 +128,10 @@ export function SponsorForm({ sponsorId, onSuccess, onCancel }: SponsorFormProps
     };
 
     const data = {
+      // Toujours envoye, meme vide : c'est ainsi que le bouton « Supprimer »
+      // de la zone d'upload efface le logo (le routeur transforme "" en null).
       name: values.name,
-      logo: values.logo || undefined,
+      logo: values.logo ?? "",
       description: values.description || undefined,
       website: values.website || undefined,
       socialLinks,
@@ -161,11 +178,21 @@ export function SponsorForm({ sponsorId, onSuccess, onCancel }: SponsorFormProps
             name="logo"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Logo (URL)</FormLabel>
+                <FormLabel>Logo</FormLabel>
                 <FormControl>
-                  <Input placeholder="https://..." {...field} />
+                  <ImageUpload
+                    value={field.value ?? ""}
+                    onChange={field.onChange}
+                    folder="logos"
+                    placeholder="Glissez le logo du sponsor"
+                    aspectRatio="square"
+                    objectFit="contain"
+                    maxSize={2}
+                  />
                 </FormControl>
-                <FormDescription>URL vers l'image du logo</FormDescription>
+                <FormDescription>
+                  JPG, PNG, WebP ou GIF, converti automatiquement en WebP
+                </FormDescription>
                 <FormMessage />
               </FormItem>
             )}

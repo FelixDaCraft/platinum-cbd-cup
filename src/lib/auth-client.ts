@@ -7,6 +7,11 @@ export const authClient = createAuthClient({
 
 export const { signIn, signOut, signUp, useSession } = authClient;
 
+// Renvoi du lien de confirmation : appelable sans session (l'endpoint reste
+// neutre pour une adresse inconnue), utilisé par /login quand la connexion
+// est refusée avec EMAIL_NOT_VERIFIED.
+export const sendVerificationEmail = authClient.sendVerificationEmail;
+
 // Password functions
 export const forgetPassword = authClient.requestPasswordReset;
 export const resetPassword = authClient.resetPassword;

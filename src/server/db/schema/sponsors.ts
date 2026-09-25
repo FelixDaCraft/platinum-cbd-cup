@@ -1,5 +1,6 @@
-import { relations } from "drizzle-orm";
-import { pgTable, text, timestamp, json } from "drizzle-orm/pg-core";
+import { relations, sql } from "drizzle-orm";
+import { pgTable, text, timestamp, jsonb, integer, index, check } from "drizzle-orm/pg-core";
+import { cups } from "./cups";
 
 /**
  * Social links structure for sponsors
@@ -32,11 +33,11 @@ export const sponsors = pgTable("sponsors", {
   logo: text("logo"), // URL to logo image
   description: text("description"),
   website: text("website"),
-  socialLinks: json("social_links").$type<SponsorSocialLinks>().default({}),
-  gallery: json("gallery").$type<string[]>().default([]), // Array of image URLs
-  testimonials: json("testimonials").$type<SponsorTestimonial[]>().default([]),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  socialLinks: jsonb("social_links").$type<SponsorSocialLinks>().default({}),
+  gallery: jsonb("gallery").$type<string[]>().default([]), // Array of image URLs
+  testimonials: jsonb("testimonials").$type<SponsorTestimonial[]>().default([]),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const sponsorsRelations = relations(sponsors, ({ many }) => ({
@@ -53,21 +54,38 @@ export type SponsorTier = (typeof sponsorTierEnum)[number];
  * Cup sponsors junction table - Associates sponsors with cups
  * Includes tier level and display order
  */
-export const cupSponsors = pgTable("cup_sponsors", {
-  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-  cupId: text("cup_id").notNull(),
-  sponsorId: text("sponsor_id")
-    .notNull()
-    .references(() => sponsors.id, { onDelete: "cascade" }),
-  tier: text("tier").$type<SponsorTier>().notNull().default("bronze"),
-  displayOrder: text("display_order").notNull().default("0"), // String for sorting
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-});
+export const cupSponsors = pgTable(
+  "cup_sponsors",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    cupId: text("cup_id")
+      .notNull()
+      .references(() => cups.id, { onDelete: "cascade" }),
+    sponsorId: text("sponsor_id")
+      .notNull()
+      .references(() => sponsors.id, { onDelete: "cascade" }),
+    tier: text("tier").$type<SponsorTier>().notNull().default("bronze"),
+    // Entier, et non texte : en `text` le tri est lexicographique et le 10e
+    // sponsor s'affichait avant le 2e sur la page publique.
+    displayOrder: integer("display_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // La page publique et l'admin listent les sponsors d'une cup.
+    index("cup_sponsors_cup_id_idx").on(table.cupId),
+    index("cup_sponsors_sponsor_id_idx").on(table.sponsorId),
+    check("cup_sponsors_tier_check", sql`${table.tier} in ('bronze', 'silver', 'gold', 'platinum')`),
+  ]
+);
 
 export const cupSponsorsRelations = relations(cupSponsors, ({ one }) => ({
   sponsor: one(sponsors, {
     fields: [cupSponsors.sponsorId],
     references: [sponsors.id],
+  }),
+  cup: one(cups, {
+    fields: [cupSponsors.cupId],
+    references: [cups.id],
   }),
 }));
 

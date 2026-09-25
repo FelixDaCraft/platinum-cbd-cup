@@ -35,7 +35,12 @@ export default function ArticlesPage() {
 
   const utils = api.useUtils();
 
-  const { data: articles, isLoading } = api.articles.list.useQuery({
+  const {
+    data: articles,
+    isLoading,
+    isError,
+    refetch,
+  } = api.articles.list.useQuery({
     status: tab,
   });
 
@@ -76,6 +81,21 @@ export default function ArticlesPage() {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <span className="n-font-data" style={{ color: "var(--n-text-secondary)" }}>[LOADING...]</span>
+      </div>
+    );
+  }
+
+  // Une requête en échec ne doit pas se confondre avec une page vide :
+  // un écran « aucune donnée » masquerait l'incident.
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4 text-center">
+        <span role="alert" className="n-font-data" style={{ color: "var(--n-text-secondary)" }}>
+          [ERREUR] LES ACTUALITÉS N&apos;ONT PAS PU ÊTRE CHARGÉES
+        </span>
+        <button type="button" className="n-btn-secondary text-xs" onClick={() => void refetch()}>
+          RÉESSAYER
+        </button>
       </div>
     );
   }

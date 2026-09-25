@@ -10,11 +10,12 @@ export const metadata: Metadata = {
   },
 };
 
+// Pas de maximumScale ni userScalable: false — le pinch-zoom doit rester
+// possible (WCAG 1.4.4), l'espace jury étant utilisé sur tablette pendant les
+// dégustations. Le zoom auto d'iOS au focus est évité par des inputs >= 16px.
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
 };
 
 /**

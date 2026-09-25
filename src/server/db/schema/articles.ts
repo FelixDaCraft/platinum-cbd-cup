@@ -1,5 +1,5 @@
-import { pgTable, text, timestamp, json, unique, boolean } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { pgTable, text, timestamp, jsonb, unique, boolean, index, check } from "drizzle-orm/pg-core";
+import { relations, sql } from "drizzle-orm";
 import { users } from "./auth";
 import { sponsors } from "./sponsors";
 
@@ -59,20 +59,25 @@ export const articles = pgTable(
     title: text("title").notNull(),
     slug: text("slug").notNull(),
     excerpt: text("excerpt"),
-    content: json("content").$type<Record<string, unknown>>().notNull(), // TipTap JSON content
+    content: jsonb("content").$type<Record<string, unknown>>().notNull(), // TipTap JSON content
     coverImage: text("cover_image"),
     category: text("category"),
     categoryColor: text("category_color"), // Custom color override for category badge
-    tags: json("tags").$type<string[]>().default([]),
+    tags: jsonb("tags").$type<string[]>().default([]),
     isFeatured: boolean("is_featured").notNull().default(false), // Featured article (à la une)
     status: text("status").$type<ArticleStatus>().notNull().default("draft"),
-    publishedAt: timestamp("published_at"),
-    createdAt: timestamp("created_at").notNull().defaultNow(),
-    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     // Unique slug
     unique("articles_slug_unique").on(table.slug),
+    // Le portail liste les articles publiés du plus récent au plus ancien.
+    index("articles_status_published_at_idx").on(table.status, table.publishedAt),
+    index("articles_author_id_idx").on(table.authorId),
+    index("articles_sponsor_id_idx").on(table.sponsorId),
+    check("articles_status_check", sql`${table.status} in ('draft', 'published')`),
   ]
 );
 

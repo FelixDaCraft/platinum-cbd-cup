@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { MobileBottomNav } from "~/components/portal/mobile/mobile-bottom-nav";
+import { currentEdition } from "./edition";
 
 // ---------------------------------------------------------------------------
 // Nav definition — 4 segmented buttons per design
@@ -60,10 +61,18 @@ export function PlatinumShell({ children, liveStatus = "idle" }: PlatinumShellPr
   const pathname = usePathname();
   const isLive = liveStatus === "live";
   const liveLabel = isLive ? "LIVE" : "WAITING FOR SIGNAL";
-  const year = new Date().getFullYear();
+  const { year, label: edition } = currentEdition();
 
   return (
     <div className="shell">
+      {/* Lien d'évitement : premier élément focalisable de la page, il permet
+          de sauter la topbar et sa navigation à chaque changement de page.
+          Les trois espaces authentifiés en ont un ; le portail public n'en
+          avait pas. */}
+      <a href="#contenu-principal" className="skip-link">
+        Aller au contenu
+      </a>
+
       {/* ── Topbar ─────────────────────────────────────────── */}
       <header className="topbar">
         {/* Brand */}
@@ -74,11 +83,14 @@ export function PlatinumShell({ children, liveStatus = "idle" }: PlatinumShellPr
               alt="Platinum CBD Cup"
               width={34}
               height={34}
+              decoding="async"
             />
           </span>
           <span className="brand-text">
             <b>Platinum CBD Cup</b>
-            <span>Independent · ed. 04 · 2026</span>
+            <span suppressHydrationWarning>
+              Independent · ed. {edition} · {year}
+            </span>
           </span>
         </Link>
 
@@ -113,37 +125,46 @@ export function PlatinumShell({ children, liveStatus = "idle" }: PlatinumShellPr
       </header>
 
       {/* ── Page content ───────────────────────────────────── */}
-      <main className="page page-enter">{children}</main>
+      {/* tabIndex=-1 : sans lui, la cible du lien d'évitement reçoit le focus
+          du navigateur mais pas celui du clavier sur WebKit. */}
+      <main id="contenu-principal" tabIndex={-1} className="page page-enter">
+        {children}
+      </main>
 
       {/* ── Mobile-only bottom navigation (≤880px) ─────────── */}
       <MobileBottomNav />
 
       {/* ── Footer ─────────────────────────────────────────── */}
       <footer className="footer">
-        <span>© {year} · Platinum CBD Cup · Independent ledger</span>
+        <span suppressHydrationWarning>
+          © {year} · Platinum CBD Cup · Independent ledger
+        </span>
 
         <nav
-          style={{ display: "flex", gap: 20, alignItems: "center" }}
+          style={{
+            display: "flex",
+            gap: 20,
+            alignItems: "center",
+            flexWrap: "wrap",
+          }}
           aria-label="Liens légaux"
         >
-          <Link
-            href="/about"
-            style={{ color: "inherit", textDecoration: "none" }}
-          >
-            Manifesto
-          </Link>
-          <Link
-            href="/press"
-            style={{ color: "inherit", textDecoration: "none" }}
-          >
-            Presse
-          </Link>
-          <Link
-            href="/contact"
-            style={{ color: "inherit", textDecoration: "none" }}
-          >
-            Contact
-          </Link>
+          {[
+            { href: "/about", label: "Manifesto" },
+            { href: "/press", label: "Presse" },
+            { href: "/contact", label: "Contact" },
+            { href: "/reglement", label: "Règlement" },
+            { href: "/mentions-legales", label: "Mentions légales" },
+            { href: "/confidentialite", label: "Confidentialité" },
+          ].map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              style={{ color: "inherit", textDecoration: "none" }}
+            >
+              {link.label}
+            </Link>
+          ))}
         </nav>
 
         <span style={{ color: "var(--fg-3)", letterSpacing: ".08em" }}>

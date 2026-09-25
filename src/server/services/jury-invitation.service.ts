@@ -3,25 +3,31 @@
  * Handles sending and managing jury invitations
  */
 
-import { Resend } from "resend";
 import { nanoid } from "nanoid";
 import { eq, and } from "drizzle-orm";
 import { db } from "~/server/db";
 import * as schema from "~/server/db/schema";
 import { env } from "~/env";
-
-const resend = new Resend(env.RESEND_API_KEY);
+import { getPortalBaseUrl } from "./app-url";
+import {
+  EMAIL_SEND_CONCURRENCY,
+  escapeHtml,
+  mapWithConcurrency,
+  renderButton,
+  renderEmailLayout,
+  renderFallbackLink,
+  renderGreeting,
+  renderHighlight,
+  renderParagraph,
+  renderQuote,
+  sendEmail,
+} from "./email";
 
 // Invitation expires after 14 days
 const INVITATION_EXPIRY_DAYS = 14;
 
-/**
- * Return the single-tenant public base URL.
- * Uses NEXT_PUBLIC_APP_URL when set, falling back to BETTER_AUTH_URL.
- */
-function getPortalBaseUrl(): string {
-  return process.env.NEXT_PUBLIC_APP_URL ?? env.BETTER_AUTH_URL;
-}
+/** Nom de l'organisateur : mono-tenant, c'est toujours le concours lui-même. */
+const ORGANIZER_NAME = "Platinum CBD Cup";
 
 interface SendInvitationParams {
   cupId: string;
@@ -56,9 +62,6 @@ export async function sendJuryInvitation(
     if (!cup) {
       return { success: false, error: "Cup not found" };
     }
-
-    // Single-tenant: organizer name is hardcoded to the Platinum CBD Cup org.
-    const organizerName = "Platinum CBD Cup";
 
     // Check if already invited
     const existingInvitation = await db.query.juryInvitations.findFirst({
@@ -134,31 +137,25 @@ export async function sendJuryInvitation(
     }
 
     // Send invitation email
-    const result = await resend.emails.send({
-      from: env.EMAIL_FROM,
+    const result = await sendEmail({
+      scope: "Jury Invitation",
+      ref: `invitation ${invitationId}`,
       to: email,
       subject: `Invitation jury - ${cup.name}`,
       html: buildInvitationEmailHtml({
         juryName,
         cupName: cup.name,
-        organizerName,
+        organizerName: ORGANIZER_NAME,
         customMessage,
         invitationUrl,
         expiresAt,
       }),
     });
 
-    if (result.error) {
-      console.error("[Jury Invitation] Resend error:", result.error);
-      // In dev mode, don't fail - the URL is in the console
-      if (env.NODE_ENV === "development") {
-        console.warn("[Jury Invitation] Email non envoye, mais URL disponible ci-dessus");
-        return { success: true, invitationId };
-      }
-      return { success: false, error: result.error.message };
+    if (!result.success) {
+      return { success: false, error: result.error };
     }
 
-    console.log(`[Jury Invitation] Email sent successfully to ${email}`);
     return { success: true, invitationId };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
@@ -189,21 +186,18 @@ export async function resendInvitation(invitationId: string): Promise<SendInvita
 
     const cup = invitation.cup;
 
-    // Single-tenant: organizer name is hardcoded.
-    const organizerName = "Platinum CBD Cup";
-
     // Extend expiry date
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + INVITATION_EXPIRY_DAYS);
 
     // Update invitation
-    const reminderCount = parseInt(invitation.reminderCount ?? "0", 10) + 1;
+    const reminderCount = (invitation.reminderCount ?? 0) + 1;
     await db
       .update(schema.juryInvitations)
       .set({
         sentAt: new Date(),
         lastReminderAt: new Date(),
-        reminderCount: reminderCount.toString(),
+        reminderCount,
         expiresAt,
         updatedAt: new Date(),
       })
@@ -231,30 +225,24 @@ export async function resendInvitation(invitationId: string): Promise<SendInvita
     }
 
     // Send reminder email
-    const result = await resend.emails.send({
-      from: env.EMAIL_FROM,
+    const result = await sendEmail({
+      scope: "Jury Invitation Reminder",
+      ref: `invitation ${invitationId}`,
       to: invitation.email,
       subject: `Rappel: Invitation jury - ${cup.name}`,
       html: buildReminderEmailHtml({
         juryName,
         cupName: cup.name,
-        organizerName,
+        organizerName: ORGANIZER_NAME,
         invitationUrl,
         expiresAt,
-        isReminder: true,
       }),
     });
 
-    if (result.error) {
-      console.error("[Jury Invitation] Resend error:", result.error);
-      if (env.NODE_ENV === "development") {
-        console.warn("[Jury Invitation] Email non envoye, mais URL disponible ci-dessus");
-        return { success: true, invitationId };
-      }
-      return { success: false, error: result.error.message };
+    if (!result.success) {
+      return { success: false, error: result.error };
     }
 
-    console.log(`[Jury Invitation] Reminder email sent successfully to ${invitation.email}`);
     return { success: true, invitationId };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
@@ -327,77 +315,69 @@ interface InvitationEmailParams {
   expiresAt: Date;
 }
 
-function buildInvitationEmailHtml(params: InvitationEmailParams): string {
-  const { juryName, cupName, organizerName, customMessage, invitationUrl, expiresAt } = params;
-  const formattedExpiry = expiresAt.toLocaleDateString("fr-FR", {
+/** Date d'expiration en toutes lettres, telle qu'affichée dans l'email. */
+function formatExpiry(expiresAt: Date): string {
+  return expiresAt.toLocaleDateString("fr-FR", {
     day: "numeric",
     month: "long",
     year: "numeric",
   });
+}
 
-  return `
-    <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px; background-color: #ffffff;">
-      <div style="text-align: center; margin-bottom: 32px;">
-        <h1 style="color: #f59e0b; font-size: 32px; margin: 0;">
-          <span style="color: #f59e0b;">Cup</span><span style="color: #1f2937;">Metrics</span>
-        </h1>
-      </div>
+/**
+ * Invitation initiale et relance ne différaient que par le titre et deux
+ * paragraphes : un seul gabarit, paramétré par `variant`.
+ */
+function buildInvitationEmailHtml(
+  params: InvitationEmailParams,
+  variant: "initial" | "reminder" = "initial"
+): string {
+  const { invitationUrl, expiresAt, customMessage } = params;
+  const cupName = escapeHtml(params.cupName);
+  const organizerName = escapeHtml(params.organizerName);
+  const isReminder = variant === "reminder";
 
-      <h2 style="color: #1f2937; font-size: 24px; margin-bottom: 16px;">
-        Invitation jury
-      </h2>
+  const intro = isReminder
+    ? `Vous avez ete invite par <strong>${organizerName}</strong> a participer
+        en tant que jury a la competition <strong>${cupName}</strong>.`
+    : `<strong>${organizerName}</strong> vous invite a participer en tant que jury
+        a la competition <strong>${cupName}</strong>.`;
 
-      <p style="color: #4b5563; font-size: 16px; line-height: 1.6; margin-bottom: 24px;">
-        Bonjour ${juryName},
-      </p>
-
-      <p style="color: #4b5563; font-size: 16px; line-height: 1.6; margin-bottom: 24px;">
-        <strong>${organizerName}</strong> vous invite a participer en tant que jury
-        a la competition <strong>${cupName}</strong>.
-      </p>
-
-      ${customMessage ? `
-        <div style="background-color: #f9fafb; border-radius: 8px; padding: 16px; margin-bottom: 24px; border-left: 4px solid #f59e0b;">
-          <p style="color: #4b5563; margin: 0; font-size: 14px; font-style: italic;">
-            "${customMessage}"
-          </p>
-        </div>
-      ` : ""}
-
-      <div style="text-align: center; margin: 24px 0;">
-        <a href="${invitationUrl}"
-           style="display: inline-block; background-color: #f59e0b; color: #0a0a0f; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">
-          Accepter l'invitation
-        </a>
-      </div>
-
-      <p style="color: #9ca3af; font-size: 12px; text-align: center; margin-bottom: 24px;">
-        Ou copiez ce lien : <a href="${invitationUrl}" style="color: #f59e0b;">${invitationUrl}</a>
-      </p>
-
-      <div style="background-color: #fef3c7; border-radius: 8px; padding: 16px; margin-bottom: 24px;">
-        <p style="color: #92400e; margin: 0; font-size: 14px;">
+  const highlight = isReminder
+    ? renderHighlight(`<strong>Votre reponse est attendue !</strong>
+          <br />
+          L'organisateur compte sur votre participation.`)
+    : renderHighlight(
+        `<p style="color: #92400e; margin: 0; font-size: 14px;">
           <strong>En tant que jury, vous pourrez :</strong>
         </p>
         <ul style="color: #92400e; margin: 8px 0 0 0; padding-left: 20px; font-size: 14px;">
           <li>Noter les produits selon des criteres definis</li>
           <li>Ajouter des commentaires detailles</li>
           <li>Contribuer au classement final</li>
-        </ul>
-      </div>
+        </ul>`,
+        true
+      );
+
+  const expiryNotice = isReminder
+    ? `Cette invitation expire le <strong>${formatExpiry(expiresAt)}</strong>.`
+    : `Cette invitation expire le <strong>${formatExpiry(expiresAt)}</strong>.
+        Si vous ne souhaitez pas participer, ignorez simplement cet email.`;
+
+  return renderEmailLayout({
+    title: isReminder ? "Rappel : Invitation jury en attente" : "Invitation jury",
+    body: `
+      ${renderGreeting(params.juryName)}
+      ${renderParagraph(intro)}
+      ${customMessage ? renderQuote(customMessage) : ""}
+      ${renderButton(invitationUrl, "Accepter l'invitation")}
+      ${renderFallbackLink(invitationUrl)}
+      ${highlight}
 
       <p style="color: #9ca3af; font-size: 14px; line-height: 1.5;">
-        Cette invitation expire le <strong>${formattedExpiry}</strong>.
-        Si vous ne souhaitez pas participer, ignorez simplement cet email.
-      </p>
-
-      <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 32px 0;" />
-
-      <p style="color: #9ca3af; font-size: 12px; text-align: center;">
-        Platinum CBD Cup - Le concours de reference des meilleurs CBD
-      </p>
-    </div>
-  `;
+        ${expiryNotice}
+      </p>`,
+  });
 }
 
 interface ReminderEmailParams {
@@ -406,68 +386,10 @@ interface ReminderEmailParams {
   organizerName: string;
   invitationUrl: string;
   expiresAt: Date;
-  isReminder: boolean;
 }
 
 function buildReminderEmailHtml(params: ReminderEmailParams): string {
-  const { juryName, cupName, organizerName, invitationUrl, expiresAt } = params;
-  const formattedExpiry = expiresAt.toLocaleDateString("fr-FR", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
-
-  return `
-    <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px; background-color: #ffffff;">
-      <div style="text-align: center; margin-bottom: 32px;">
-        <h1 style="color: #f59e0b; font-size: 32px; margin: 0;">
-          <span style="color: #f59e0b;">Cup</span><span style="color: #1f2937;">Metrics</span>
-        </h1>
-      </div>
-
-      <h2 style="color: #1f2937; font-size: 24px; margin-bottom: 16px;">
-        Rappel : Invitation jury en attente
-      </h2>
-
-      <p style="color: #4b5563; font-size: 16px; line-height: 1.6; margin-bottom: 24px;">
-        Bonjour ${juryName},
-      </p>
-
-      <p style="color: #4b5563; font-size: 16px; line-height: 1.6; margin-bottom: 24px;">
-        Vous avez ete invite par <strong>${organizerName}</strong> a participer
-        en tant que jury a la competition <strong>${cupName}</strong>.
-      </p>
-
-      <div style="text-align: center; margin: 24px 0;">
-        <a href="${invitationUrl}"
-           style="display: inline-block; background-color: #f59e0b; color: #0a0a0f; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">
-          Accepter l'invitation
-        </a>
-      </div>
-
-      <p style="color: #9ca3af; font-size: 12px; text-align: center; margin-bottom: 24px;">
-        Ou copiez ce lien : <a href="${invitationUrl}" style="color: #f59e0b;">${invitationUrl}</a>
-      </p>
-
-      <div style="background-color: #fef3c7; border-radius: 8px; padding: 16px; margin-bottom: 24px;">
-        <p style="color: #92400e; margin: 0; font-size: 14px;">
-          <strong>Votre reponse est attendue !</strong>
-          <br />
-          L'organisateur compte sur votre participation.
-        </p>
-      </div>
-
-      <p style="color: #9ca3af; font-size: 14px; line-height: 1.5;">
-        Cette invitation expire le <strong>${formattedExpiry}</strong>.
-      </p>
-
-      <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 32px 0;" />
-
-      <p style="color: #9ca3af; font-size: 12px; text-align: center;">
-        Platinum CBD Cup - Le concours de reference des meilleurs CBD
-      </p>
-    </div>
-  `;
+  return buildInvitationEmailHtml(params, "reminder");
 }
 
 /**
@@ -518,12 +440,12 @@ export async function sendRatingReminder(
     const user = jury.user;
 
     // Update reminder tracking
-    const reminderCount = parseInt(jury.reminderCount ?? "0", 10) + 1;
+    const reminderCount = (jury.reminderCount ?? 0) + 1;
     await db
       .update(schema.cupJuries)
       .set({
         lastReminderAt: new Date(),
-        reminderCount: reminderCount.toString(),
+        reminderCount,
         updatedAt: new Date(),
       })
       .where(eq(schema.cupJuries.id, cupJuryId));
@@ -549,29 +471,24 @@ export async function sendRatingReminder(
     }
 
     // Send rating reminder email
-    const result = await resend.emails.send({
-      from: env.EMAIL_FROM,
+    const result = await sendEmail({
+      scope: "Jury Rating Reminder",
+      ref: `user ${user.id}`,
       to: user.email,
       subject: `Rappel: Notation en attente - ${cup.name}`,
       html: buildRatingReminderEmailHtml({
         juryName: user.name ?? "Jury",
         cupName: cup.name,
-        organizerName: "Platinum CBD Cup",
+        organizerName: ORGANIZER_NAME,
         ratingUrl,
         completionStats,
       }),
     });
 
-    if (result.error) {
-      console.error("[Jury Rating Reminder] Resend error:", result.error);
-      if (env.NODE_ENV === "development") {
-        console.warn("[Jury Rating Reminder] Email non envoye, mais URL disponible ci-dessus");
-        return { success: true };
-      }
-      return { success: false, error: result.error.message };
+    if (!result.success) {
+      return { success: false, error: result.error };
     }
 
-    console.log(`[Jury Rating Reminder] Email sent successfully to ${user.email}`);
     return { success: true };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
@@ -638,7 +555,9 @@ interface RatingReminderEmailParams {
 }
 
 function buildRatingReminderEmailHtml(params: RatingReminderEmailParams): string {
-  const { juryName, cupName, organizerName, ratingUrl, completionStats } = params;
+  const { ratingUrl, completionStats } = params;
+  const cupName = escapeHtml(params.cupName);
+  const organizerName = escapeHtml(params.organizerName);
 
   const progressHtml = completionStats
     ? `
@@ -647,7 +566,7 @@ function buildRatingReminderEmailHtml(params: RatingReminderEmailParams): string
           Votre progression :
         </p>
         <div style="background-color: #e5e7eb; border-radius: 4px; height: 8px; overflow: hidden;">
-          <div style="background-color: #f59e0b; height: 100%; width: ${completionStats.completionRate}%;"></div>
+          <div style="background-color: #d4af37; height: 100%; width: ${completionStats.completionRate}%;"></div>
         </div>
         <p style="color: #6b7280; margin: 8px 0 0 0; font-size: 12px;">
           ${completionStats.productsRated} / ${completionStats.totalProductsToRate} produits notes (${completionStats.completionRate}%)
@@ -656,53 +575,23 @@ function buildRatingReminderEmailHtml(params: RatingReminderEmailParams): string
     `
     : "";
 
-  return `
-    <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px; background-color: #ffffff;">
-      <div style="text-align: center; margin-bottom: 32px;">
-        <h1 style="color: #f59e0b; font-size: 32px; margin: 0;">
-          <span style="color: #f59e0b;">Cup</span><span style="color: #1f2937;">Metrics</span>
-        </h1>
-      </div>
-
-      <h2 style="color: #1f2937; font-size: 24px; margin-bottom: 16px;">
-        Rappel : Notation en attente
-      </h2>
-
-      <p style="color: #4b5563; font-size: 16px; line-height: 1.6; margin-bottom: 24px;">
-        Bonjour ${juryName},
-      </p>
-
-      <p style="color: #4b5563; font-size: 16px; line-height: 1.6; margin-bottom: 24px;">
-        <strong>${organizerName}</strong> vous rappelle que vous avez des produits
-        a noter pour la competition <strong>${cupName}</strong>.
-      </p>
-
+  return renderEmailLayout({
+    title: "Rappel : Notation en attente",
+    body: `
+      ${renderGreeting(params.juryName)}
+      ${renderParagraph(`<strong>${organizerName}</strong> vous rappelle que vous avez des produits
+        a noter pour la competition <strong>${cupName}</strong>.`)}
       ${progressHtml}
-
-      <div style="background-color: #fef3c7; border-radius: 8px; padding: 16px; margin-bottom: 24px;">
-        <p style="color: #92400e; margin: 0; font-size: 14px;">
-          <strong>Vos notes sont importantes !</strong>
+      ${renderHighlight(`<strong>Vos notes sont importantes !</strong>
           <br />
-          Elles contribuent au classement final de la competition.
-        </p>
-      </div>
-
-      <div style="text-align: center; margin: 32px 0;">
-        <a href="${ratingUrl}"
-           style="display: inline-block; background-color: #f59e0b; color: #0a0a0f; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">
-          Continuer la notation
-        </a>
-      </div>
-
-      <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 32px 0;" />
-
-      <p style="color: #9ca3af; font-size: 12px; text-align: center;">
-        Platinum CBD Cup - Le concours de reference des meilleurs CBD
+          Elles contribuent au classement final de la competition.`)}
+      ${renderButton(ratingUrl, "Continuer la notation")}`,
+    // Le lien de préférences pointe vers le profil du juré : un `href="#"`
+    // laissait croire à un désabonnement possible depuis l'email.
+    footerHtml: `${escapeHtml(ORGANIZER_NAME)} - Le concours de reference des meilleurs CBD
         <br />
-        <a href="#" style="color: #9ca3af;">Gerer mes preferences de notification</a>
-      </p>
-    </div>
-  `;
+        <a href="${getPortalBaseUrl()}/jury/profile" style="color: #9ca3af;">Gerer mes preferences de notification</a>`,
+  });
 }
 
 /**
@@ -789,14 +678,15 @@ export async function sendRatingSheet(
     }
 
     // Send rating sheet email
-    const result = await resend.emails.send({
-      from: env.EMAIL_FROM,
+    const result = await sendEmail({
+      scope: "Jury Rating Sheet",
+      ref: `user ${user.id}`,
       to: user.email,
       subject: `Fiche de notation - ${cup.name}`,
       html: buildRatingSheetEmailHtml({
         juryName: user.name ?? "Jury",
         cupName: cup.name,
-        organizerName: "Platinum CBD Cup",
+        organizerName: ORGANIZER_NAME,
         ratingUrl,
         categories: jury.categoryAssignments.map((a) => a.category.name),
         productsByCategory,
@@ -804,16 +694,10 @@ export async function sendRatingSheet(
       }),
     });
 
-    if (result.error) {
-      console.error("[Jury Rating Sheet] Resend error:", result.error);
-      if (env.NODE_ENV === "development") {
-        console.warn("[Jury Rating Sheet] Email non envoye, mais URL disponible ci-dessus");
-        return { success: true };
-      }
-      return { success: false, error: result.error.message };
+    if (!result.success) {
+      return { success: false, error: result.error };
     }
 
-    console.log(`[Jury Rating Sheet] Email sent successfully to ${user.email}`);
     return { success: true };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
@@ -835,27 +719,24 @@ export async function sendBulkRatingSheets(
   failed: number;
   results: Array<{ juryId: string; success: boolean; error?: string }>;
 }> {
-  const results: Array<{ juryId: string; success: boolean; error?: string }> = [];
-  let success = 0;
-  let failed = 0;
-
-  for (const juryData of juriesData) {
-    const result = await sendRatingSheet(juryData);
-
-    results.push({
-      juryId: juryData.cupJuryId,
-      success: result.success,
-      error: result.error,
-    });
-
-    if (result.success) {
-      success++;
-    } else {
-      failed++;
+  // Parallélisme borné : 70 jurés en séquence dépassaient la coupure du proxy
+  // à 100 s, l'UI affichant une erreur pendant que les envois continuaient.
+  const results = await mapWithConcurrency(
+    juriesData,
+    EMAIL_SEND_CONCURRENCY,
+    async (juryData) => {
+      const result = await sendRatingSheet(juryData);
+      return {
+        juryId: juryData.cupJuryId,
+        success: result.success,
+        error: result.error,
+      };
     }
-  }
+  );
 
-  return { success, failed, results };
+  const success = results.filter((r) => r.success).length;
+
+  return { success, failed: results.length - success, results };
 }
 
 /**
@@ -872,7 +753,10 @@ interface RatingSheetEmailParams {
 }
 
 function buildRatingSheetEmailHtml(params: RatingSheetEmailParams): string {
-  const { juryName, cupName, organizerName, ratingUrl, categories, productsByCategory, totalProducts } = params;
+  const { ratingUrl, productsByCategory, totalProducts } = params;
+  const cupName = escapeHtml(params.cupName);
+  const organizerName = escapeHtml(params.organizerName);
+  const categories = params.categories.map(escapeHtml);
 
   // Build category list HTML
   let categoryListHtml = "";
@@ -880,12 +764,12 @@ function buildRatingSheetEmailHtml(params: RatingSheetEmailParams): string {
     categoryListHtml += `
       <div style="margin-bottom: 16px;">
         <p style="color: #374151; margin: 0 0 8px 0; font-weight: 600;">
-          ${categoryName} (${productCodes.length} produit${productCodes.length !== 1 ? "s" : ""})
+          ${escapeHtml(categoryName)} (${productCodes.length} produit${productCodes.length !== 1 ? "s" : ""})
         </p>
         <div style="display: flex; flex-wrap: wrap; gap: 8px;">
           ${productCodes.map((code) => `
             <span style="background-color: #f3f4f6; padding: 4px 8px; border-radius: 4px; font-size: 12px; color: #374151;">
-              ${code}
+              ${escapeHtml(code)}
             </span>
           `).join("")}
         </div>
@@ -893,26 +777,12 @@ function buildRatingSheetEmailHtml(params: RatingSheetEmailParams): string {
     `;
   }
 
-  return `
-    <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px; background-color: #ffffff;">
-      <div style="text-align: center; margin-bottom: 32px;">
-        <h1 style="color: #f59e0b; font-size: 32px; margin: 0;">
-          <span style="color: #f59e0b;">Cup</span><span style="color: #1f2937;">Metrics</span>
-        </h1>
-      </div>
-
-      <h2 style="color: #1f2937; font-size: 24px; margin-bottom: 16px;">
-        Fiche de notation
-      </h2>
-
-      <p style="color: #4b5563; font-size: 16px; line-height: 1.6; margin-bottom: 24px;">
-        Bonjour ${juryName},
-      </p>
-
-      <p style="color: #4b5563; font-size: 16px; line-height: 1.6; margin-bottom: 24px;">
-        Voici votre fiche de notation pour la competition <strong>${cupName}</strong>
-        organisee par <strong>${organizerName}</strong>.
-      </p>
+  return renderEmailLayout({
+    title: "Fiche de notation",
+    body: `
+      ${renderGreeting(params.juryName)}
+      ${renderParagraph(`Voici votre fiche de notation pour la competition <strong>${cupName}</strong>
+        organisee par <strong>${organizerName}</strong>.`)}
 
       <div style="background-color: #f9fafb; border-radius: 8px; padding: 20px; margin-bottom: 24px;">
         <p style="color: #374151; margin: 0 0 16px 0; font-size: 16px; font-weight: 600;">
@@ -930,29 +800,12 @@ function buildRatingSheetEmailHtml(params: RatingSheetEmailParams): string {
         ${categoryListHtml}
       </div>
 
-      <div style="background-color: #fef3c7; border-radius: 8px; padding: 16px; margin-bottom: 24px;">
-        <p style="color: #92400e; margin: 0; font-size: 14px;">
-          <strong>Instructions :</strong>
+      ${renderHighlight(`<strong>Instructions :</strong>
           <br />
           Cliquez sur le bouton ci-dessous pour acceder a l'interface de notation.
-          Vous pourrez noter chaque produit selon les criteres definis.
-        </p>
-      </div>
-
-      <div style="text-align: center; margin: 32px 0;">
-        <a href="${ratingUrl}"
-           style="display: inline-block; background-color: #f59e0b; color: #0a0a0f; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">
-          Commencer la notation
-        </a>
-      </div>
-
-      <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 32px 0;" />
-
-      <p style="color: #9ca3af; font-size: 12px; text-align: center;">
-        Platinum CBD Cup - Le concours de reference des meilleurs CBD
-      </p>
-    </div>
-  `;
+          Vous pourrez noter chaque produit selon les criteres definis.`)}
+      ${renderButton(ratingUrl, "Commencer la notation")}`,
+  });
 }
 
 /**
@@ -1012,29 +865,24 @@ export async function sendJuryWelcomeEmail(
     }
 
     // Send welcome email
-    const result = await resend.emails.send({
-      from: env.EMAIL_FROM,
+    const result = await sendEmail({
+      scope: "Jury Welcome Email",
+      ref: `user ${user.id}`,
       to: user.email,
       subject: `Bienvenue dans le jury - ${cup.name}`,
       html: buildJuryWelcomeEmailHtml({
         juryName: user.name,
         cupName: cup.name,
-        organizerName: "Platinum CBD Cup",
+        organizerName: ORGANIZER_NAME,
         dashboardUrl,
         loginUrl,
       }),
     });
 
-    if (result.error) {
-      console.error("[Jury Welcome Email] Resend error:", result.error);
-      if (env.NODE_ENV === "development") {
-        console.warn("[Jury Welcome Email] Email non envoye, mais URLs disponibles ci-dessus");
-        return { success: true };
-      }
-      return { success: false, error: result.error.message };
+    if (!result.success) {
+      return { success: false, error: result.error };
     }
 
-    console.log(`[Jury Welcome Email] Email sent successfully to ${user.email}`);
     return { success: true };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
@@ -1055,56 +903,31 @@ interface JuryWelcomeEmailParams {
 }
 
 function buildJuryWelcomeEmailHtml(params: JuryWelcomeEmailParams): string {
-  const { juryName, cupName, organizerName, dashboardUrl, loginUrl } = params;
+  const { loginUrl } = params;
+  const cupName = escapeHtml(params.cupName);
+  const organizerName = escapeHtml(params.organizerName);
 
-  return `
-    <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px; background-color: #ffffff;">
-      <div style="text-align: center; margin-bottom: 32px;">
-        <h1 style="color: #f59e0b; font-size: 32px; margin: 0;">
-          <span style="color: #f59e0b;">Cup</span><span style="color: #1f2937;">Metrics</span>
-        </h1>
-      </div>
-
-      <h2 style="color: #1f2937; font-size: 24px; margin-bottom: 16px;">
-        Bienvenue dans le jury !
-      </h2>
-
-      <p style="color: #4b5563; font-size: 16px; line-height: 1.6; margin-bottom: 24px;">
-        Bonjour ${juryName},
-      </p>
-
-      <p style="color: #4b5563; font-size: 16px; line-height: 1.6; margin-bottom: 24px;">
-        Votre compte a ete cree avec succes ! Vous faites maintenant partie du jury
-        de la competition <strong>${cupName}</strong> organisee par <strong>${organizerName}</strong>.
-      </p>
-
-      <div style="background-color: #fef3c7; border-radius: 8px; padding: 16px; margin-bottom: 24px;">
-        <p style="color: #92400e; margin: 0; font-size: 14px;">
+  return renderEmailLayout({
+    title: "Bienvenue dans le jury !",
+    body: `
+      ${renderGreeting(params.juryName)}
+      ${renderParagraph(`Votre compte a ete cree avec succes ! Vous faites maintenant partie du jury
+        de la competition <strong>${cupName}</strong> organisee par <strong>${organizerName}</strong>.`)}
+      ${renderHighlight(
+        `<p style="color: #92400e; margin: 0; font-size: 14px;">
           <strong>Prochaines etapes :</strong>
         </p>
         <ul style="color: #92400e; margin: 8px 0 0 0; padding-left: 20px; font-size: 14px;">
           <li>Connectez-vous a votre espace jury</li>
           <li>Attendez l'ouverture de la phase de notation</li>
           <li>Notez les produits selon les criteres definis</li>
-        </ul>
-      </div>
-
-      <div style="text-align: center; margin: 32px 0;">
-        <a href="${loginUrl}"
-           style="display: inline-block; background-color: #f59e0b; color: #0a0a0f; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">
-          Acceder a mon espace jury
-        </a>
-      </div>
+        </ul>`,
+        true
+      )}
+      ${renderButton(loginUrl, "Acceder a mon espace jury")}
 
       <p style="color: #9ca3af; font-size: 14px; line-height: 1.5; margin-top: 32px;">
         Conservez cet email, il contient le lien vers votre espace jury.
-      </p>
-
-      <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 32px 0;" />
-
-      <p style="color: #9ca3af; font-size: 12px; text-align: center;">
-        Platinum CBD Cup - Le concours de reference des meilleurs CBD
-      </p>
-    </div>
-  `;
+      </p>`,
+  });
 }

@@ -54,9 +54,7 @@ export default function PortalCategoryProductsPage() {
           <p className="n-font-body" style={{ color: "var(--n-text-secondary)", fontSize: "14px", marginBottom: "24px" }}>
             {error.message}
           </p>
-          <Link href={`/jury/cups/${cupId}`}>
-            <button className="n-btn-secondary">Retour</button>
-          </Link>
+          <Link href={`/jury/cups/${cupId}`} className="n-btn-secondary">Retour</Link>
         </div>
       </div>
     );
@@ -85,9 +83,7 @@ export default function PortalCategoryProductsPage() {
           <p className="n-font-body" style={{ color: "var(--n-text-secondary)", fontSize: "14px", marginBottom: "24px" }}>
             Vous n&apos;êtes pas assigné à cette catégorie
           </p>
-          <Link href={`/jury/cups/${cupId}`}>
-            <button className="n-btn-secondary">Retour</button>
-          </Link>
+          <Link href={`/jury/cups/${cupId}`} className="n-btn-secondary">Retour</Link>
         </div>
       </div>
     );

@@ -20,9 +20,13 @@ import { getStatusLabel } from "~/lib/validations/cup";
  */
 export default function CupsPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
-  const { data: cups, isLoading } = api.cup.list.useQuery();
-  const { data: historicalCups, isLoading: historicalLoading } =
-    api.historicalImport.list.useQuery();
+  const { data: cups, isLoading, isError, refetch } = api.cup.list.useQuery();
+  const {
+    data: historicalCups,
+    isLoading: historicalLoading,
+    isError: isHistoricalError,
+    refetch: refetchHistorical,
+  } = api.historicalImport.list.useQuery();
 
   if (isLoading || historicalLoading) {
     return (
@@ -44,6 +48,28 @@ export default function CupsPage() {
         >
           [LOADING...]
         </span>
+      </div>
+    );
+  }
+
+  // Une requête en échec ne doit pas déclencher l'état vide « aucune cup »,
+  // qui pousse l'organisateur à recréer une compétition déjà existante.
+  if (isError || isHistoricalError) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4 text-center">
+        <span role="alert" className="n-font-data" style={{ color: "var(--n-text-secondary)", fontSize: "13px", letterSpacing: "0.08em" }}>
+          [ERREUR] LA LISTE DES CUPS N&apos;A PAS PU ÊTRE CHARGÉE
+        </span>
+        <button
+          type="button"
+          className="n-btn-secondary text-xs"
+          onClick={() => {
+            void refetch();
+            void refetchHistorical();
+          }}
+        >
+          RÉESSAYER
+        </button>
       </div>
     );
   }
@@ -90,8 +116,8 @@ export default function CupsPage() {
         </div>
 
         <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-          <Link href="/dashboard/cups/import-history">
-            <button className="n-btn-secondary">IMPORTER HISTORIQUE</button>
+          <Link href="/dashboard/cups/import-history" className="n-btn-secondary">
+            IMPORTER HISTORIQUE
           </Link>
 
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -167,8 +193,8 @@ export default function CupsPage() {
             >
               CRÉER MA PREMIÈRE CUP
             </button>
-            <Link href="/dashboard/cups/import-history">
-              <button className="n-btn-secondary">IMPORTER UN HISTORIQUE</button>
+            <Link href="/dashboard/cups/import-history" className="n-btn-secondary">
+              IMPORTER UN HISTORIQUE
             </Link>
           </div>
         </div>

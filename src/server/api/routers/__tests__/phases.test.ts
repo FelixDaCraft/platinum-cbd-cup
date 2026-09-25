@@ -1,4 +1,5 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { TRPCError } from "@trpc/server";
 
 import {
   updatePhaseDatesSchema,
@@ -9,7 +10,6 @@ import {
 } from "~/lib/validations/phases";
 import type { CupStatus } from "~/server/db/schema/cups";
 
-// Mock auth
 vi.mock("~/lib/auth", () => ({
   auth: {
     api: {
@@ -18,7 +18,53 @@ vi.mock("~/lib/auth", () => ({
   },
 }));
 
-describe("Phases Router", () => {
+/** État de la base simulée (voir category.test.ts pour le détail du montage). */
+const dbState = vi.hoisted(() => ({
+  updates: [] as Record<string, unknown>[],
+  /**
+   * Lignes que chaque UPDATE ... RETURNING rend, dans l'ordre d'appel.
+   * `processDuePhaseTransitions` ne lit plus les cups avant de les écrire :
+   * c'est l'UPDATE conditionnel lui-même qui dit lesquelles ont bougé.
+   */
+  updateReturns: [] as { id: string; name: string }[][],
+}));
+
+const { updates, updateReturns } = dbState;
+
+vi.mock("~/server/db", () => ({
+  db: {
+    query: {
+      users: { findFirst: vi.fn() },
+      cups: { findFirst: vi.fn(), findMany: vi.fn() },
+    },
+    update: () => ({
+      set: (values: Record<string, unknown>) => {
+        return {
+          where: () => ({
+            returning: () => {
+              const rows = dbState.updateReturns.shift() ?? [];
+              // Une entrée par cup réellement déplacée : l'UPDATE groupé n'est
+              // compté que s'il a touché au moins une ligne.
+              for (let i = 0; i < rows.length; i++) dbState.updates.push(values);
+              return Promise.resolve(rows);
+            },
+            then: (resolve: (v: unknown) => unknown) => {
+              dbState.updates.push(values);
+              return Promise.resolve(undefined).then(resolve);
+            },
+          }),
+        };
+      },
+    }),
+  },
+}));
+
+beforeEach(() => {
+  updates.length = 0;
+  updateReturns.length = 0;
+});
+
+describe("Phases — validations, helpers et automatisation", () => {
   describe("Input Validation - updatePhaseDatesSchema", () => {
     it("rejects missing cupId", () => {
       const result = updatePhaseDatesSchema.safeParse({
@@ -270,230 +316,157 @@ describe("Phases Router", () => {
     });
   });
 
-  describe("Business Logic - Status Restrictions", () => {
-    it("should allow all date edits when cup is draft", () => {
-      const cupStatus: CupStatus = "draft";
-      const editableDates = getEditableDates(cupStatus);
+  // ---------------------------------------------------------------------
+  // Automatisation des phases (phase-automation.ts)
+  //
+  // Remplace les blocs « Phase Automation Security » et « Phase Automation
+  // Transitions » d'origine, qui recalculaient la condition dans le test
+  // (`expect(shouldTransition).toBe(true)`) sans jamais appeler la
+  // procédure. checkPhaseTransitions est une procédure PUBLIQUE : son seul
+  // garde est CRON_SECRET, d'où la couverture ci-dessous.
+  // ---------------------------------------------------------------------
+  describe("Automatisation des phases", () => {
+    const CRON_SECRET = "secret-de-cron-pour-les-tests";
+    let previousSecret: string | undefined;
 
-      expect(editableDates.length).toBe(4);
+    beforeEach(() => {
+      vi.clearAllMocks();
+      previousSecret = process.env.CRON_SECRET;
+      process.env.CRON_SECRET = CRON_SECRET;
     });
 
-    it("should block all date edits when cup is completed", () => {
-      const cupStatus: CupStatus = "completed";
-      const editableDates = getEditableDates(cupStatus);
-
-      expect(editableDates.length).toBe(0);
+    afterEach(() => {
+      if (previousSecret === undefined) {
+        delete process.env.CRON_SECRET;
+      } else {
+        process.env.CRON_SECRET = previousSecret;
+      }
     });
 
-    it("should only allow ratingEndAt extension during rating phase", () => {
-      const cupStatus: CupStatus = "rating";
-      const editableDates = getEditableDates(cupStatus);
+    async function createCaller() {
+      const { phaseAutomationRouter } = await import("../phase-automation");
+      const { db } = await import("~/server/db");
 
-      expect(editableDates).toEqual(["ratingEndAt"]);
-    });
-  });
+      return phaseAutomationRouter.createCaller({
+        headers: new Headers(),
+        db,
+      } as never);
+    }
 
-  describe("Business Logic - Phase Transitions", () => {
-    it("published -> registration_closed when registrationCloseAt reached", () => {
-      const now = new Date();
-      const pastDate = new Date(now.getTime() - 86400000); // yesterday
-      const cup = {
-        status: "published" as CupStatus,
-        registrationCloseAt: pastDate,
-      };
+    async function codeOf(fn: () => Promise<unknown>) {
+      try {
+        await fn();
+      } catch (error) {
+        expect(error).toBeInstanceOf(TRPCError);
+        return (error as TRPCError).code;
+      }
+      throw new Error("La procédure aurait dû lever une erreur");
+    }
 
-      // Logic: if registrationCloseAt <= now, transition to registration_closed
-      const shouldTransition = cup.registrationCloseAt && cup.registrationCloseAt <= now;
-      expect(shouldTransition).toBe(true);
-    });
+    /** Les trois UPDATE de transition, dans l'ordre du routeur. */
+    async function queueCupBatches(
+      toClose: { id: string; name: string }[],
+      toRate: { id: string; name: string }[],
+      toComplete: { id: string; name: string }[]
+    ) {
+      updateReturns.length = 0;
+      updateReturns.push(toClose, toRate, toComplete);
+    }
 
-    it("registration_closed -> rating when ratingStartAt reached", () => {
-      const now = new Date();
-      const pastDate = new Date(now.getTime() - 86400000);
-      const cup = {
-        status: "registration_closed" as CupStatus,
-        ratingStartAt: pastDate,
-      };
+    it("refuse un secret invalide", async () => {
+      await queueCupBatches([], [], []);
+      const caller = await createCaller();
 
-      const shouldTransition = cup.ratingStartAt && cup.ratingStartAt <= now;
-      expect(shouldTransition).toBe(true);
-    });
-
-    it("rating -> completed when ratingEndAt reached", () => {
-      const now = new Date();
-      const pastDate = new Date(now.getTime() - 86400000);
-      const cup = {
-        status: "rating" as CupStatus,
-        ratingEndAt: pastDate,
-      };
-
-      const shouldTransition = cup.ratingEndAt && cup.ratingEndAt <= now;
-      expect(shouldTransition).toBe(true);
+      expect(
+        await codeOf(() => caller.checkPhaseTransitions({ cronSecret: "mauvais" }))
+      ).toBe("UNAUTHORIZED");
+      expect(updates).toHaveLength(0);
     });
 
-    it("no transition when date not reached yet", () => {
-      const now = new Date();
-      const futureDate = new Date(now.getTime() + 86400000); // tomorrow
-      const cup = {
-        status: "published" as CupStatus,
-        registrationCloseAt: futureDate,
-      };
+    // Un secret vide ne doit pas ouvrir la porte : c'est exactement ce qu'une
+    // variable d'environnement oubliée produit côté appelant.
+    it("refuse un secret vide", async () => {
+      await queueCupBatches([], [], []);
+      const caller = await createCaller();
 
-      const shouldTransition = cup.registrationCloseAt && cup.registrationCloseAt <= now;
-      expect(shouldTransition).toBe(false);
+      expect(await codeOf(() => caller.checkPhaseTransitions({ cronSecret: "" }))).toBe(
+        "UNAUTHORIZED"
+      );
     });
 
-    it("no transition when date is null (manual transition required)", () => {
-      // When registrationCloseAt is null, no automatic transition should occur
-      const registrationCloseAt: Date | null = null;
+    it("refuse un préfixe du secret attendu", async () => {
+      await queueCupBatches([], [], []);
+      const caller = await createCaller();
 
-      // This simulates the condition check in the router
-      const shouldTransition = registrationCloseAt !== null;
-      expect(shouldTransition).toBe(false);
-    });
-  });
-
-  describe("Business Logic - Multi-tenancy Validation", () => {
-    it("validates cup belongs to user organization", () => {
-      const cupOrganizationId = "org-1";
-      const memberOrganizationId = "org-1";
-
-      expect(cupOrganizationId).toBe(memberOrganizationId);
+      expect(
+        await codeOf(() =>
+          caller.checkPhaseTransitions({ cronSecret: CRON_SECRET.slice(0, -1) })
+        )
+      ).toBe("UNAUTHORIZED");
     });
 
-    it("detects cross-tenant access attempt", () => {
-      const cupOrganizationId = "org-1";
-      const attackerOrganizationId = "org-2";
+    // Sans CRON_SECRET côté serveur, la procédure doit se fermer, pas
+    // s'ouvrir à tout le monde.
+    it("refuse tout appel quand CRON_SECRET n'est pas configuré", async () => {
+      delete process.env.CRON_SECRET;
+      await queueCupBatches([], [], []);
+      const caller = await createCaller();
 
-      expect(cupOrganizationId).not.toBe(attackerOrganizationId);
-      // Router would throw FORBIDDEN
-    });
-  });
-
-  describe("Authorization Checks", () => {
-    it("identifies when no session exists", async () => {
-      const { auth } = await import("~/lib/auth");
-      vi.mocked(auth.api.getSession).mockResolvedValueOnce(null);
-
-      const session = await auth.api.getSession({ headers: new Headers() });
-
-      expect(session).toBeNull();
-      // Router would throw UNAUTHORIZED
+      expect(
+        await codeOf(() => caller.checkPhaseTransitions({ cronSecret: CRON_SECRET }))
+      ).toBe("UNAUTHORIZED");
+      expect(updates).toHaveLength(0);
     });
 
-    it("requires owner role for updatePhaseDates", () => {
-      const memberRole = "member";
-      const ownerRole = "owner";
+    it("n'effectue aucune transition quand aucune date n'est atteinte", async () => {
+      await queueCupBatches([], [], []);
+      const caller = await createCaller();
 
-      // Only owner can update phase dates
-      expect(memberRole).not.toBe(ownerRole);
-      // Router would throw FORBIDDEN for non-owner
-    });
-  });
+      const result = await caller.checkPhaseTransitions({ cronSecret: CRON_SECRET });
 
-  describe("Phase Automation Security", () => {
-    it("rejects checkPhaseTransitions without cronSecret", () => {
-      // The procedure requires cronSecret input
-      const input = {};
-      const hasSecret = "cronSecret" in input;
-
-      expect(hasSecret).toBe(false);
-      // Router would throw ZodError for missing cronSecret
+      expect(result.transitionsCount).toBe(0);
+      expect(result.transitions).toEqual([]);
+      expect(updates).toHaveLength(0);
     });
 
-    it("rejects checkPhaseTransitions with invalid cronSecret", () => {
-      const inputSecret = "wrong-secret";
-      const envSecret = "correct-secret";
+    it("enchaîne les trois transitions et les rapporte", async () => {
+      await queueCupBatches(
+        [{ id: "cup-a", name: "Cup A" }],
+        [{ id: "cup-b", name: "Cup B" }],
+        [{ id: "cup-c", name: "Cup C" }]
+      );
+      const caller = await createCaller();
 
-      expect(inputSecret).not.toBe(envSecret);
-      // Router would throw UNAUTHORIZED
+      const result = await caller.checkPhaseTransitions({ cronSecret: CRON_SECRET });
+
+      expect(result.transitionsCount).toBe(3);
+      expect(result.transitions).toEqual([
+        { cupId: "cup-a", from: "published", to: "registration_closed" },
+        { cupId: "cup-b", from: "registration_closed", to: "rating" },
+        { cupId: "cup-c", from: "rating", to: "completed" },
+      ]);
+      expect(updates.map((u) => u.status)).toEqual([
+        "registration_closed",
+        "rating",
+        "completed",
+      ]);
     });
 
-    it("accepts checkPhaseTransitions with valid cronSecret", () => {
-      const inputSecret = "correct-secret";
-      const envSecret = "correct-secret";
+    it("traite toutes les cups d'un même lot", async () => {
+      await queueCupBatches(
+        [
+          { id: "cup-a", name: "Cup A" },
+          { id: "cup-b", name: "Cup B" },
+        ],
+        [],
+        []
+      );
+      const caller = await createCaller();
 
-      expect(inputSecret).toBe(envSecret);
-      // Router would proceed with transitions
-    });
-  });
+      const result = await caller.checkPhaseTransitions({ cronSecret: CRON_SECRET });
 
-  describe("Phase Automation Transitions", () => {
-    it("transitions published cup to registration_closed when registrationCloseAt reached", () => {
-      const now = new Date();
-      const pastDate = new Date(now.getTime() - 86400000); // yesterday
-      const cup = {
-        status: "published" as const,
-        registrationCloseAt: pastDate,
-      };
-
-      const shouldTransition =
-        cup.status === "published" &&
-        cup.registrationCloseAt !== null &&
-        cup.registrationCloseAt <= now;
-
-      expect(shouldTransition).toBe(true);
-    });
-
-    it("does not transition published cup when registrationCloseAt is null", () => {
-      const cup = {
-        status: "published" as const,
-        registrationCloseAt: null,
-      };
-
-      const shouldTransition =
-        cup.status === "published" &&
-        cup.registrationCloseAt !== null;
-
-      expect(shouldTransition).toBe(false);
-    });
-
-    it("does not transition published cup when registrationCloseAt is in future", () => {
-      const now = new Date();
-      const futureDate = new Date(now.getTime() + 86400000); // tomorrow
-      const cup = {
-        status: "published" as const,
-        registrationCloseAt: futureDate,
-      };
-
-      const shouldTransition =
-        cup.status === "published" &&
-        cup.registrationCloseAt !== null &&
-        cup.registrationCloseAt <= now;
-
-      expect(shouldTransition).toBe(false);
-    });
-
-    it("transitions registration_closed to rating when ratingStartAt reached", () => {
-      const now = new Date();
-      const pastDate = new Date(now.getTime() - 86400000);
-      const cup = {
-        status: "registration_closed" as const,
-        ratingStartAt: pastDate,
-      };
-
-      const shouldTransition =
-        cup.status === "registration_closed" &&
-        cup.ratingStartAt !== null &&
-        cup.ratingStartAt <= now;
-
-      expect(shouldTransition).toBe(true);
-    });
-
-    it("transitions rating to completed when ratingEndAt reached", () => {
-      const now = new Date();
-      const pastDate = new Date(now.getTime() - 86400000);
-      const cup = {
-        status: "rating" as const,
-        ratingEndAt: pastDate,
-      };
-
-      const shouldTransition =
-        cup.status === "rating" &&
-        cup.ratingEndAt !== null &&
-        cup.ratingEndAt <= now;
-
-      expect(shouldTransition).toBe(true);
+      expect(result.transitionsCount).toBe(2);
+      expect(updates).toHaveLength(2);
     });
   });
 });

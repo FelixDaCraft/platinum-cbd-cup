@@ -1,4 +1,5 @@
-import { pgTable, text, timestamp, unique } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, unique, index, check } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 /**
  * Newsletter subscriber status
@@ -20,19 +21,23 @@ export const newsletterSubscribers = pgTable(
     status: text("status").$type<SubscriberStatus>().notNull().default("pending"),
     // Confirmation token for double opt-in
     confirmationToken: text("confirmation_token"),
-    confirmedAt: timestamp("confirmed_at"),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
     // Unsubscribe tracking
-    unsubscribedAt: timestamp("unsubscribed_at"),
+    unsubscribedAt: timestamp("unsubscribed_at", { withTimezone: true }),
     unsubscribeToken: text("unsubscribe_token"),
     // Source tracking
     source: text("source").default("portal"), // portal, import, manual
     // Timestamps
-    createdAt: timestamp("created_at").notNull().defaultNow(),
-    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     // Unique email
     unique("newsletter_email_unique").on(table.email),
+    // Les liens de confirmation et de désinscription cherchent par token.
+    index("newsletter_subscribers_confirmation_token_idx").on(table.confirmationToken),
+    index("newsletter_subscribers_unsubscribe_token_idx").on(table.unsubscribeToken),
+    check("newsletter_subscribers_status_check", sql`${table.status} in ('pending', 'active', 'unsubscribed')`),
   ]
 );
 

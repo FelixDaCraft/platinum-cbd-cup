@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import { Eyebrow } from "~/components/portal/platinum";
 import { ContactForm } from "./_components/contact-form";
+import { canonical } from "../_lib/seo";
 
 export const metadata: Metadata = {
+  alternates: { canonical: canonical("/contact") },
   title: "Contact",
   description: "Contactez l'équipe Platinum CBD Cup pour toute question ou demande d'information.",
 };

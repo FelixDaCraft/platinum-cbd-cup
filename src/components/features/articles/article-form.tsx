@@ -34,7 +34,7 @@ import {
   SelectValue,
 } from "~/components/ui/select";
 import { ImageUpload } from "~/components/ui/image-upload";
-import { RichTextEditor } from "~/components/ui/rich-text-editor";
+import { RichTextEditor } from "~/components/ui/rich-text-editor-lazy";
 import { api } from "~/trpc/react";
 import type { Article } from "~/server/db/schema";
 
@@ -413,6 +413,10 @@ export function ArticleForm({ article }: ArticleFormProps) {
                               <img
                                 src={sponsor.logo}
                                 alt=""
+                                width={16}
+                                height={16}
+                                loading="lazy"
+                                decoding="async"
                                 className="h-4 w-4 object-contain"
                               />
                             )}

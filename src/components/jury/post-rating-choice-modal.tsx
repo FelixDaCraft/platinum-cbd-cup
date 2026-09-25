@@ -67,19 +67,19 @@ export function PostRatingChoiceModal({
 
   if (mode === "submitted") {
     if (allComplete) {
-      title = "TOUTES LES NOTATIONS TERMINEES";
+      title = "TOUTES LES NOTATIONS TERMINÉES";
       description =
-        "Vous avez note tous vos produits assignes. Excellente contribution.";
+        "Vous avez noté tous vos produits assignés. Excellente contribution.";
     } else if (allCategoryComplete) {
-      title = "CATEGORIE TERMINEE";
+      title = "CATÉGORIE TERMINÉE";
       description =
-        "Toutes vos notations pour cette categorie sont enregistrees.";
+        "Toutes vos notations pour cette catégorie sont enregistrées.";
     } else {
       title = "NOTATION SOUMISE";
-      description = "Votre notation a bien ete enregistree et verrouillee.";
+      description = "Votre notation a bien été enregistrée et verrouillée.";
     }
   } else {
-    title = "BROUILLON ENREGISTRE";
+    title = "BROUILLON ENREGISTRÉ";
     description =
       "Votre progression est sauvegardee. Vous pouvez reprendre plus tard.";
   }
@@ -248,7 +248,7 @@ export function PostRatingChoiceModal({
               </PrimaryBtn>
             )}
             <SecondaryBtn onClick={goCategory}>
-              RETOUR A LA CATEGORIE
+              RETOUR À LA CATÉGORIE
             </SecondaryBtn>
           </div>
         </DialogPrimitive.Content>

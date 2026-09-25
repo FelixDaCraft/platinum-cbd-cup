@@ -50,10 +50,10 @@ export const pressRouter = createTRPCRouter({
       if (input.mediaKitFileName !== undefined) updateData.mediaKitFileName = input.mediaKitFileName;
       if (input.pressEmail !== undefined) updateData.pressEmail = input.pressEmail;
       if (input.pressPhone !== undefined) updateData.pressPhone = input.pressPhone;
-      if (input.showPressReleases !== undefined) updateData.showPressReleases = String(input.showPressReleases);
-      if (input.showGallery !== undefined) updateData.showGallery = String(input.showGallery);
-      if (input.showMediaKit !== undefined) updateData.showMediaKit = String(input.showMediaKit);
-      if (input.showContact !== undefined) updateData.showContact = String(input.showContact);
+      if (input.showPressReleases !== undefined) updateData.showPressReleases = input.showPressReleases;
+      if (input.showGallery !== undefined) updateData.showGallery = input.showGallery;
+      if (input.showMediaKit !== undefined) updateData.showMediaKit = input.showMediaKit;
+      if (input.showContact !== undefined) updateData.showContact = input.showContact;
 
       if (existing) {
         const [updated] = await ctx.db

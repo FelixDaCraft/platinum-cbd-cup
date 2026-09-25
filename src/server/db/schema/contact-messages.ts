@@ -1,4 +1,7 @@
-import { pgTable, text, timestamp, index, boolean, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, index, boolean, pgEnum, check } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { generateId } from "./id";
+import { users } from "./auth";
 
 /**
  * Contact message status
@@ -34,7 +37,9 @@ export type ContactSubject = (typeof contactSubjectEnum)[number];
 export const contactMessages = pgTable(
   "contact_messages",
   {
-    id: text("id").primaryKey(),
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => generateId()),
 
     // Sender info
     senderName: text("sender_name").notNull(),
@@ -47,16 +52,19 @@ export const contactMessages = pgTable(
     isStarred: boolean("is_starred").notNull().default(false),
 
     // Response tracking
-    repliedAt: timestamp("replied_at"),
-    repliedBy: text("replied_by"),
+    repliedAt: timestamp("replied_at", { withTimezone: true }),
+    // `set null` : la suppression d'un organisateur ne doit pas emporter
+    // l'historique des messages qu'il a traités.
+    repliedBy: text("replied_by").references(() => users.id, { onDelete: "set null" }),
 
     // Timestamps
-    createdAt: timestamp("created_at").notNull().defaultNow(),
-    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     index("idx_contact_messages_status").on(table.status),
     index("idx_contact_messages_created").on(table.createdAt),
+    check("contact_messages_subject_check", sql`${table.subject} in ('general', 'registration', 'results', 'sponsorship', 'press', 'technical', 'other')`),
   ]
 );
 

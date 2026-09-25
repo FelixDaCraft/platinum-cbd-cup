@@ -5,16 +5,88 @@
 
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { eq, and, max } from "drizzle-orm";
+import { eq, and, inArray, max } from "drizzle-orm";
 import { nanoid } from "nanoid";
-import {
-  createTRPCRouter,
-  organizerProcedure,
-  protectedProcedure,
-} from "~/server/api/trpc";
+import { createTRPCRouter, organizerProcedure } from "~/server/api/trpc";
+import { auth } from "~/lib/auth";
+import type { db as Database } from "~/server/db";
 import * as schema from "~/server/db/schema";
 import { sendBulkInvitations } from "~/server/services/jury-invitation.service";
 import { generateAnonymousCode as generateAnonymousCodeFromService } from "~/server/services/anonymization.service";
+
+/** Ligne d'import rejetée, renvoyée au client pour reprise manuelle. */
+interface ImportFailure {
+  row: number;
+  identifier: string;
+  reason: string;
+}
+
+/** Page d'atterrissage du lien de définition de mot de passe. */
+const PASSWORD_SETUP_REDIRECT = "/reset-password";
+
+/**
+ * Envoie à un producteur importé le lien qui lui permet de définir son mot de
+ * passe, seul moyen d'activer un compte créé par CSV : celui-ci n'a ni ligne
+ * `accounts` ni adresse vérifiée. `onPasswordReset` (lib/auth.ts) marque
+ * l'adresse vérifiée à l'ouverture du lien, ce qui évite au producteur
+ * d'enchaîner « mot de passe oublié » puis « vérifier mon email » sans que
+ * rien ne le lui ait expliqué.
+ *
+ * On passe par Better Auth plutôt que par un email maison : lui seul sait
+ * émettre un jeton de réinitialisation valide.
+ */
+async function sendAccountSetupEmail(email: string): Promise<void> {
+  await auth.api.requestPasswordReset({
+    body: { email, redirectTo: PASSWORD_SETUP_REDIRECT },
+  });
+}
+
+/**
+ * Producteurs inscrits à une cup dont le compte ne possède aucun moyen de
+ * connexion : pas de ligne `accounts`, donc ni mot de passe ni fournisseur
+ * externe. C'est la signature exacte d'un compte créé par import CSV.
+ */
+async function findProducersWithoutCredentials(
+  db: typeof Database,
+  cupId: string
+): Promise<{ userId: string; email: string }[]> {
+  const rows = await db
+    .select({ userId: schema.users.id, email: schema.users.email })
+    .from(schema.registrations)
+    .innerJoin(
+      schema.producers,
+      eq(schema.registrations.producerId, schema.producers.id)
+    )
+    .innerJoin(schema.users, eq(schema.producers.userId, schema.users.id))
+    .where(eq(schema.registrations.cupId, cupId));
+
+  if (rows.length === 0) return [];
+
+  const activated = await db
+    .select({ userId: schema.accounts.userId })
+    .from(schema.accounts)
+    .where(
+      inArray(
+        schema.accounts.userId,
+        rows.map((r) => r.userId)
+      )
+    );
+
+  const activatedIds = new Set(activated.map((a) => a.userId));
+
+  // Un même producteur peut avoir plusieurs inscriptions sur la cup : on ne
+  // veut lui envoyer qu'un seul email.
+  const seen = new Set<string>();
+  const pending: { userId: string; email: string }[] = [];
+
+  for (const row of rows) {
+    if (activatedIds.has(row.userId) || seen.has(row.userId)) continue;
+    seen.add(row.userId);
+    pending.push(row);
+  }
+
+  return pending;
+}
 
 // Types for preview rows
 interface PreviewRow {
@@ -73,7 +145,7 @@ export const cupImportRouter = createTRPCRouter({
   /**
    * Get categories for a cup (for import validation display)
    */
-  getCategoriesForCup: protectedProcedure
+  getCategoriesForCup: organizerProcedure
     .input(z.object({ cupId: z.string().min(1) }))
     .query(async ({ ctx, input }) => {
       const categories = await ctx.db.query.categories.findMany({
@@ -86,23 +158,25 @@ export const cupImportRouter = createTRPCRouter({
 
   /**
    * Get producers for a cup (for import validation display)
+   *
+   * Ne renvoie aucune donnée de contact : l'appariement des lignes du CSV avec
+   * les producteurs se fait côté serveur dans `parseProductsCSV`, et l'écran
+   * d'import ne consomme que le nombre de producteurs. Exposer ici les emails
+   * (et, via un `with` non filtré, le SIRET, le téléphone et l'adresse) serait
+   * la même fuite que celle fermée côté inscriptions.
    */
-  getProducersForCup: protectedProcedure
+  getProducersForCup: organizerProcedure
     .input(z.object({ cupId: z.string().min(1) }))
     .query(async ({ ctx, input }) => {
       const registrations = await ctx.db.query.registrations.findMany({
         where: eq(schema.registrations.cupId, input.cupId),
+        columns: { id: true },
         with: {
           producer: {
             columns: {
               id: true,
               companyName: true,
               brandName: true,
-            },
-            with: {
-              user: {
-                columns: { email: true, name: true },
-              },
             },
           },
         },
@@ -112,8 +186,6 @@ export const cupImportRouter = createTRPCRouter({
         id: r.producer.id,
         companyName: r.producer.companyName,
         brandName: r.producer.brandName,
-        email: r.producer.user.email,
-        name: r.producer.user.name,
       }));
     }),
 
@@ -224,6 +296,12 @@ export const cupImportRouter = createTRPCRouter({
             adresse: z.string().nullable(),
           })
         ),
+        /**
+         * Envoie à chaque compte créé le lien de définition de mot de passe.
+         * Sans lui, le producteur importé n'a aucun moyen documenté de se
+         * connecter à son espace (inscriptions, factures, résultats).
+         */
+        sendInvites: z.boolean().default(true),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -236,82 +314,171 @@ export const cupImportRouter = createTRPCRouter({
       }
 
       let imported = 0;
-      let errors = 0;
+      let invitesSent = 0;
+      const failures: ImportFailure[] = [];
 
-      for (const producer of input.producers) {
+      for (const [index, producer] of input.producers.entries()) {
         try {
-          let user = await ctx.db.query.users.findFirst({
-            where: eq(schema.users.email, producer.email.toLowerCase()),
-          });
-
-          if (!user) {
-            const userId = nanoid();
-            await ctx.db.insert(schema.users).values({
-              id: userId,
-              email: producer.email.toLowerCase(),
-              name: producer.nom,
-              emailVerified: false,
-              createdAt: new Date(),
-              updatedAt: new Date(),
+          // Une transaction par ligne : une ligne en échec ne doit pas laisser
+          // un user sans producteur ni un producteur sans inscription.
+          const outcome = await ctx.db.transaction(async (tx) => {
+            let user = await tx.query.users.findFirst({
+              where: eq(schema.users.email, producer.email.toLowerCase()),
             });
-            user = await ctx.db.query.users.findFirst({
-              where: eq(schema.users.id, userId),
+
+            const userCreated = !user;
+
+            if (!user) {
+              const userId = nanoid();
+              const [inserted] = await tx
+                .insert(schema.users)
+                .values({
+                  id: userId,
+                  email: producer.email.toLowerCase(),
+                  name: producer.nom,
+                  emailVerified: false,
+                  createdAt: new Date(),
+                  updatedAt: new Date(),
+                })
+                .returning();
+              user = inserted;
+            }
+
+            if (!user) {
+              throw new Error("Impossible de créer le compte utilisateur");
+            }
+
+            // Check if producer profile already exists for this user
+            const existingProducer = await tx.query.producers.findFirst({
+              where: eq(schema.producers.userId, user.id),
             });
-          }
 
-          if (!user) {
-            errors++;
-            continue;
-          }
+            let producerId: string;
 
-          // Check if producer profile already exists for this user
-          const existingProducer = await ctx.db.query.producers.findFirst({
-            where: eq(schema.producers.userId, user.id),
-          });
+            if (existingProducer) {
+              producerId = existingProducer.id;
+            } else {
+              producerId = nanoid();
+              await tx.insert(schema.producers).values({
+                id: producerId,
+                userId: user.id,
+                companyName: producer.entreprise ?? producer.nom,
+                brandName: producer.nom,
+                phone: producer.telephone,
+                address: producer.adresse,
+              });
+            }
 
-          let producerId: string;
-
-          if (existingProducer) {
-            producerId = existingProducer.id;
-          } else {
-            producerId = nanoid();
-            await ctx.db.insert(schema.producers).values({
-              id: producerId,
-              userId: user.id,
-              companyName: producer.entreprise ?? producer.nom,
-              brandName: producer.nom,
-              phone: producer.telephone,
-              address: producer.adresse,
+            // Check if already registered for this cup
+            const existingRegistration = await tx.query.registrations.findFirst({
+              where: and(
+                eq(schema.registrations.cupId, input.cupId),
+                eq(schema.registrations.producerId, producerId)
+              ),
             });
+
+            if (existingRegistration) {
+              return { registered: false, userCreated, email: user.email };
+            }
+
+            await tx.insert(schema.registrations).values({
+              id: nanoid(),
+              cupId: input.cupId,
+              producerId,
+              status: "confirmed",
+              totalAmount: 0,
+            });
+
+            return { registered: true, userCreated, email: user.email };
+          });
+
+          if (outcome.registered) imported++;
+
+          // Hors transaction : un envoi Resend en échec ne doit pas annuler
+          // l'import de la ligne, il est simplement signalé à l'organisateur.
+          if (input.sendInvites && outcome.userCreated) {
+            try {
+              await sendAccountSetupEmail(outcome.email);
+              invitesSent++;
+            } catch (e) {
+              console.error("Error sending setup email:", outcome.email, e);
+              failures.push({
+                row: index + 1,
+                identifier: producer.email,
+                reason: `Compte créé, mais email d'activation non envoyé : ${
+                  e instanceof Error ? e.message : "erreur inconnue"
+                }`,
+              });
+            }
           }
-
-          // Check if already registered for this cup
-          const existingRegistration = await ctx.db.query.registrations.findFirst({
-            where: and(
-              eq(schema.registrations.cupId, input.cupId),
-              eq(schema.registrations.producerId, producerId)
-            ),
-          });
-
-          if (existingRegistration) continue;
-
-          const registrationId = nanoid();
-          await ctx.db.insert(schema.registrations).values({
-            id: registrationId,
-            cupId: input.cupId,
-            producerId,
-            status: "confirmed",
-            totalAmount: 0,
-          });
-
-          imported++;
         } catch (e) {
           console.error("Error importing producer:", producer.email, e);
-          errors++;
+          failures.push({
+            row: index + 1,
+            identifier: producer.email,
+            reason: e instanceof Error ? e.message : "Erreur inconnue",
+          });
         }
       }
 
-      return { imported, errors };
+      return { imported, errors: failures.length, failures, invitesSent };
+    }),
+
+  /**
+   * Compte les producteurs inscrits à une cup dont le compte n'a jamais été
+   * activé (aucune ligne `accounts`), c'est-à-dire ceux qui ne peuvent pas se
+   * connecter. Alimente le bouton de relance ci-dessous.
+   */
+  countPendingProducerAccounts: organizerProcedure
+    .input(z.object({ cupId: z.string().min(1) }))
+    .query(async ({ ctx, input }) => {
+      const pending = await findProducersWithoutCredentials(ctx.db, input.cupId);
+      return { pending: pending.length };
+    }),
+
+  /**
+   * (Re)envoie le lien d'activation aux producteurs importés qui n'ont pas
+   * encore de moyen de connexion.
+   *
+   * Les 68 producteurs déjà en base ont été créés avant l'envoi automatique :
+   * cette mutation est leur rattrapage. Elle est idempotente — un producteur
+   * qui a défini son mot de passe n'est plus dans la liste.
+   */
+  sendProducerAccountSetup: organizerProcedure
+    .input(
+      z.object({
+        cupId: z.string().min(1),
+        // Resend limite le débit : on envoie par paquets plutôt que de laisser
+        // une requête de plusieurs minutes se faire couper en cours de route.
+        batchSize: z.number().int().min(1).max(50).default(25),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const pending = await findProducersWithoutCredentials(ctx.db, input.cupId);
+      const batch = pending.slice(0, input.batchSize);
+
+      let sent = 0;
+      const failures: { email: string; reason: string }[] = [];
+
+      for (const producer of batch) {
+        try {
+          await sendAccountSetupEmail(producer.email);
+          sent++;
+        } catch (e) {
+          console.error("Error sending setup email:", producer.email, e);
+          failures.push({
+            email: producer.email,
+            reason: e instanceof Error ? e.message : "Erreur inconnue",
+          });
+        }
+      }
+
+      return {
+        sent,
+        errors: failures.length,
+        failures,
+        remaining: Math.max(0, pending.length - batch.length),
+      };
     }),
 
   /**
@@ -471,41 +638,22 @@ export const cupImportRouter = createTRPCRouter({
       let nextOrder = (maxOrderResult[0]?.maxOrder ?? -1) + 1;
 
       let imported = 0;
-      let errors = 0;
+      const failures: ImportFailure[] = [];
 
-      for (const product of input.products) {
+      for (const [index, product] of input.products.entries()) {
+        const fail = (reason: string) =>
+          failures.push({ row: index + 1, identifier: product.nom, reason });
+
         try {
           const registration = registrationByEmail.get(product.producteur_email.toLowerCase());
 
           if (!registration) {
-            errors++;
+            fail(`Aucune inscription pour ${product.producteur_email}`);
             continue;
           }
 
           const catKey = product.categorie.toLowerCase();
-          let category = categoryByName.get(catKey) ?? createdCategories.get(catKey);
-
-          if (!category) {
-            const categoryId = nanoid();
-            const [newCat] = await ctx.db
-              .insert(schema.categories)
-              .values({
-                id: categoryId,
-                cupId: input.cupId,
-                name: product.categorie.trim(),
-                description: null,
-                sortOrder: nextOrder++,
-              })
-              .returning();
-            if (!newCat) {
-              errors++;
-              continue;
-            }
-            category = newCat;
-            createdCategories.set(catKey, newCat);
-          }
-
-          const anonymousCode = await generateAnonymousCodeFromService(ctx.db, cup.id, category.id);
+          const knownCategory = categoryByName.get(catKey) ?? createdCategories.get(catKey);
 
           let description = product.description ?? "";
           if (product.thc || product.cbd) {
@@ -517,26 +665,73 @@ export const cupImportRouter = createTRPCRouter({
               : thcCbd.join(" - ");
           }
 
-          const productId = nanoid();
-          await ctx.db.insert(schema.products).values({
-            id: productId,
-            registrationId: registration.id,
-            categoryId: category.id,
-            name: product.nom,
-            description: description || null,
-            priceAtRegistration: 0,
-            status: "pending",
-            anonymousCode,
+          // Une transaction par ligne. Deux raisons : une ligne en échec ne
+          // doit pas laisser une catégorie créée sans son produit, et le
+          // verrou consultatif qui sérialise l'attribution des codes anonymes
+          // (anonymization.service) n'existe que pour la durée d'une
+          // transaction — hors transaction il était relâché aussitôt pris.
+          const createdCategory = await ctx.db.transaction(async (tx) => {
+            let category = knownCategory;
+
+            if (!category) {
+              const [newCat] = await tx
+                .insert(schema.categories)
+                .values({
+                  id: nanoid(),
+                  cupId: input.cupId,
+                  name: product.categorie.trim(),
+                  description: null,
+                  sortOrder: nextOrder++,
+                })
+                .returning();
+
+              if (!newCat) {
+                throw new Error(
+                  `Impossible de créer la catégorie ${product.categorie}`
+                );
+              }
+              category = newCat;
+            }
+
+            const anonymousCode = await generateAnonymousCodeFromService(
+              tx as unknown as typeof ctx.db,
+              cup.id,
+              category.id
+            );
+
+            await tx.insert(schema.products).values({
+              id: nanoid(),
+              registrationId: registration.id,
+              categoryId: category.id,
+              name: product.nom,
+              description: description || null,
+              // 0 volontairement : l'import crée des inscriptions `confirmed` à
+              // `total_amount = 0` (engagement réglé hors plateforme). Facturer
+              // le tarif de la cup ici produirait une facture réclamant un
+              // montant que le producteur a déjà payé ailleurs.
+              priceAtRegistration: 0,
+              status: "pending",
+              anonymousCode,
+            });
+
+            return knownCategory ? null : category;
           });
+
+          // Mémorisée seulement après commit : une catégorie dont la
+          // transaction a été annulée ne doit pas être réutilisée par les
+          // lignes suivantes, qui référenceraient un identifiant inexistant.
+          if (createdCategory) {
+            createdCategories.set(catKey, createdCategory);
+          }
 
           imported++;
         } catch (e) {
           console.error("Error importing product:", product.nom, e);
-          errors++;
+          fail(e instanceof Error ? e.message : "Erreur inconnue");
         }
       }
 
-      return { imported, errors };
+      return { imported, errors: failures.length, failures };
     }),
 
   /**
@@ -650,36 +845,53 @@ export const cupImportRouter = createTRPCRouter({
         throw new TRPCError({ code: "NOT_FOUND", message: "Cup non trouvee" });
       }
 
-      let imported = 0;
-      let errors = 0;
-      let invitesSent = 0;
-
-      if (input.sendInvites) {
-        const juriesToInvite = input.jurys.map((j) => {
-          const nameParts = j.nom.trim().split(/\s+/);
-          const firstName = nameParts[0] ?? j.nom;
-          const lastName = nameParts.slice(1).join(" ") || undefined;
-
-          return {
-            email: j.email,
-            firstName,
-            lastName,
-          };
+      // L'import de jurés passe entièrement par l'invitation : c'est elle qui
+      // crée la ligne `jury_invitations`. Sans envoi, rien n'est écrit — la
+      // version précédente annonçait pourtant `imported = jurys.length`, un
+      // compte-rendu de succès pour une opération sans effet.
+      if (!input.sendInvites) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            "L'import de jurés passe par l'envoi des invitations : sans envoi, aucun juré n'est enregistré",
         });
-
-        const result = await sendBulkInvitations(
-          input.cupId,
-          juriesToInvite,
-          ctx.userId
-        );
-
-        imported = result.success;
-        invitesSent = result.success;
-        errors = result.failed;
-      } else {
-        imported = input.jurys.length;
       }
 
-      return { imported, errors, invitesSent };
+      const juriesToInvite = input.jurys.map((j) => {
+        const nameParts = j.nom.trim().split(/\s+/);
+        const firstName = nameParts[0] ?? j.nom;
+        const lastName = nameParts.slice(1).join(" ") || undefined;
+
+        return {
+          email: j.email,
+          firstName,
+          lastName,
+        };
+      });
+
+      const result = await sendBulkInvitations(
+        input.cupId,
+        juriesToInvite,
+        ctx.userId
+      );
+
+      // Même contrat que les deux autres imports : l'organisateur doit savoir
+      // quelles lignes ont échoué et pourquoi, sans lire les logs Docker.
+      const failures: ImportFailure[] = result.results
+        .map((r, index) => ({ r, index }))
+        .filter(({ r }) => !r.success)
+        .map(({ r, index }) => ({
+          row: index + 1,
+          identifier: r.email,
+          reason: r.error ?? "Invitation non envoyée",
+        }));
+
+      return {
+        imported: result.success,
+        errors: result.failed,
+        invitesSent: result.success,
+        alreadyInvited: result.alreadyInvited,
+        failures,
+      };
     }),
 });

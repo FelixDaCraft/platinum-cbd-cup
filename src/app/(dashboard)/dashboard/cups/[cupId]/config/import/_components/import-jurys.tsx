@@ -30,7 +30,6 @@ export function ImportJurys({ cupId }: ImportJurysProps) {
   const [csvContent, setCsvContent] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [previewRows, setPreviewRows] = useState<PreviewRow[]>([]);
-  const [sendInvites, setSendInvites] = useState(true);
   const [isImporting, setIsImporting] = useState(false);
   const [importResult, setImportResult] = useState<{
     success: number;
@@ -57,11 +56,7 @@ export function ImportJurys({ cupId }: ImportJurysProps) {
         errors: data.errors,
         invitesSent: data.invitesSent ?? 0
       });
-      if (sendInvites) {
-        toast.success(`${data.imported} jury(s) importé(s) et invité(s) par email`);
-      } else {
-        toast.success(`${data.imported} jury(s) importé(s)`);
-      }
+      toast.success(`${data.imported} jury(s) importé(s) et invité(s) par email`);
       // Invalidate related queries
       void utils.cup.invalidate();
       void utils.jury.invalidate();
@@ -104,7 +99,6 @@ export function ImportJurys({ cupId }: ImportJurysProps) {
         specialite: r.data.specialite || null,
         bio: r.data.bio || null,
       })),
-      sendInvites,
     });
   };
 
@@ -149,26 +143,18 @@ export function ImportJurys({ cupId }: ImportJurysProps) {
         <>
           <CsvPreviewTable rows={previewRows} columns={columns} />
 
-          {/* Send invites option */}
+          {/* L'envoi n'est pas optionnel : c'est l'invitation qui crée la ligne
+              `jury_invitations`. Sans elle, l'import n'écrit rien. La case à
+              cocher qui laissait croire le contraire a été retirée. */}
           <Card>
             <CardContent className="p-4">
               <div className="flex items-start space-x-3">
-                <Checkbox
-                  id="sendInvites"
-                  checked={sendInvites}
-                  onCheckedChange={(checked) => setSendInvites(checked === true)}
-                  disabled={isImporting}
-                />
-                <div className="space-y-1">
-                  <Label htmlFor="sendInvites" className="flex items-center gap-2 cursor-pointer">
-                    <Mail className="h-4 w-4" style={{ color: "var(--n-text-secondary)" }} />
-                    Envoyer les invitations par email
-                  </Label>
-                  <p className="text-xs text-muted-foreground">
-                    Chaque jury recevra un email avec un lien pour créer son compte et accéder à la notation.
-                    {!sendInvites && " Les jurys devront être invités manuellement plus tard."}
-                  </p>
-                </div>
+                <Mail className="h-4 w-4 mt-0.5" style={{ color: "var(--n-text-secondary)" }} />
+                <p className="text-xs text-muted-foreground">
+                  Chaque juré recevra un email avec un lien pour créer son compte et
+                  accéder à la notation. C'est cette invitation qui l'enregistre sur
+                  l'édition : l'import ne peut pas se faire sans elle.
+                </p>
               </div>
             </CardContent>
           </Card>
@@ -178,8 +164,7 @@ export function ImportJurys({ cupId }: ImportJurysProps) {
             <div className="text-sm text-muted-foreground">
               {validCount > 0 ? (
                 <span>
-                  <strong>{validCount}</strong> jury(s) prêt(s) à être importé(s)
-                  {sendInvites && " et invité(s)"}
+                  <strong>{validCount}</strong> juré(s) prêt(s) à être importé(s) et invité(s)
                 </span>
               ) : (
                 <span className="text-destructive">Aucune ligne valide à importer</span>
@@ -195,10 +180,8 @@ export function ImportJurys({ cupId }: ImportJurysProps) {
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                     Import en cours...
                   </>
-                ) : sendInvites ? (
-                  <>Importer et inviter {validCount} jury(s)</>
                 ) : (
-                  <>Importer {validCount} jury(s)</>
+                  <>Importer et inviter {validCount} juré(s)</>
                 )}
               </Button>
             </div>

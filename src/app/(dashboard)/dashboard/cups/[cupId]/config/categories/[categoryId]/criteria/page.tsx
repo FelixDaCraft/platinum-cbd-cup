@@ -238,11 +238,11 @@ export default function CriteriaPage() {
     return (
       <div className="space-y-6">
         <div className="flex items-center gap-4">
-          <Link href={`/dashboard/cups/${cupId}/config/categories`}>
-            <Button variant="ghost" size="icon">
+          <Button asChild variant="ghost" size="icon">
+            <Link href={`/dashboard/cups/${cupId}/config/categories`}>
               <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </Link>
+            </Link>
+          </Button>
           <h1 style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: "20px", textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: 700, color: "var(--n-accent)" }}>
             Catégorie non trouvée
           </h1>
@@ -261,11 +261,11 @@ export default function CriteriaPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <Link href={`/dashboard/cups/${cupId}/config/categories`}>
-            <Button variant="ghost" size="icon">
+          <Button asChild variant="ghost" size="icon">
+            <Link href={`/dashboard/cups/${cupId}/config/categories`}>
               <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </Link>
+            </Link>
+          </Button>
           <div>
             <h1 style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: "20px", textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: 700, color: "var(--n-text-display)" }}>
               Critères de notation
@@ -359,11 +359,11 @@ export default function CriteriaPage() {
                   </p>
                 </div>
               </div>
-              <Link href={`/dashboard/cups/${cupId}`}>
-                <Button variant="ghost" size="sm">
+              <Button asChild variant="ghost" size="sm">
+                <Link href={`/dashboard/cups/${cupId}`}>
                   Modifier dans la cup
-                </Button>
-              </Link>
+                </Link>
+              </Button>
             </div>
           </div>
 

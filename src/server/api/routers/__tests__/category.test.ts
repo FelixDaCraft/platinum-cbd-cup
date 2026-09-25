@@ -8,12 +8,10 @@ import {
   categoryFormSchema,
 } from "~/lib/validations/category";
 
-// Mock nanoid
 vi.mock("nanoid", () => ({
   nanoid: () => "test-category-id",
 }));
 
-// Mock auth
 vi.mock("~/lib/auth", () => ({
   auth: {
     api: {
@@ -22,32 +20,73 @@ vi.mock("~/lib/auth", () => ({
   },
 }));
 
-// Test data fixtures
-const mockUser = {
-  id: "user-1",
-  email: "test@example.com",
-  name: "Test User",
-};
+/**
+ * État de la base simulée, partagé entre le test et la fabrique de mock.
+ * `vi.hoisted` est indispensable : vitest remonte les `vi.mock` au-dessus
+ * des déclarations du module.
+ */
+const dbState = vi.hoisted(() => ({
+  /** File des résultats renvoyés par les `select()` successifs, dans l'ordre. */
+  selectResults: [] as unknown[][],
+  /** Valeurs passées à chaque `update().set()`. */
+  updates: [] as Record<string, unknown>[],
+  /** Un élément par `delete()` exécuté. */
+  deleted: [] as true[],
+  /** Valeurs passées à chaque `insert().values()`. */
+  inserted: [] as Record<string, unknown>[],
+}));
 
-const mockSession = {
-  user: mockUser,
-  session: { id: "session-1" },
-};
+const { selectResults, updates, deleted } = dbState;
 
-const mockMember = {
-  id: "member-1",
-  userId: "user-1",
-  organizationId: "org-1",
-  role: "owner" as const,
-};
+vi.mock("~/server/db", () => {
+  // Les chaînes Drizzle sont « thenables » : on rend chaque maillon
+  // chaînable et le dernier awaitable.
+  const selectChain = () => {
+    const chain = {
+      from: () => chain,
+      where: () => Promise.resolve(dbState.selectResults.shift() ?? []),
+      then: (resolve: (v: unknown) => unknown) =>
+        Promise.resolve(dbState.selectResults.shift() ?? []).then(resolve),
+    };
+    return chain;
+  };
 
-const mockCup = {
-  id: "cup-1",
-  name: "Test Cup",
-  organizationId: "org-1",
-  status: "draft" as const,
-  type: "public" as const,
-};
+  return {
+    db: {
+      query: {
+        users: { findFirst: vi.fn() },
+        cups: { findFirst: vi.fn() },
+        categories: { findFirst: vi.fn(), findMany: vi.fn() },
+      },
+      select: selectChain,
+      insert: () => ({
+        values: (values: Record<string, unknown>) => {
+          dbState.inserted.push(values);
+          return { returning: () => Promise.resolve([values]) };
+        },
+      }),
+      update: () => ({
+        set: (values: Record<string, unknown>) => {
+          dbState.updates.push(values);
+          return { where: () => Promise.resolve(undefined) };
+        },
+      }),
+      delete: () => ({
+        where: () => {
+          dbState.deleted.push(true);
+          return Promise.resolve(undefined);
+        },
+      }),
+    },
+  };
+});
+
+beforeEach(() => {
+  selectResults.length = 0;
+  updates.length = 0;
+  deleted.length = 0;
+  dbState.inserted.length = 0;
+});
 
 describe("Category Router", () => {
   describe("Input Validation - createCategorySchema", () => {
@@ -222,103 +261,200 @@ describe("Category Router", () => {
     });
   });
 
-  describe("Authorization Checks", () => {
-    it("identifies when no session exists", async () => {
+
+  // ---------------------------------------------------------------------
+  // Procédures du routeur
+  //
+  // Les blocs « Business Logic » et « Multi-tenancy Validation » d'origine
+  // ne touchaient jamais category.ts : ils recopiaient la logique dans le
+  // test puis se comparaient à eux-mêmes (`expect("org-1").toBe("org-1")`).
+  // Le multi-tenant a par ailleurs disparu avec le fork. On appelle ici les
+  // procédures pour de vrai, via createCaller et une base simulée.
+  // ---------------------------------------------------------------------
+  describe("Procédures", () => {
+    /** Authentifie l'appelant ; `row` est ce que organizerProcedure lira. */
+    async function signIn(row: { isAdmin?: boolean; role?: string } | null) {
       const { auth } = await import("~/lib/auth");
-      vi.mocked(auth.api.getSession).mockResolvedValueOnce(null);
+      const { db } = await import("~/server/db");
 
-      const session = await auth.api.getSession({ headers: new Headers() });
+      if (row === null) {
+        vi.mocked(auth.api.getSession).mockResolvedValue(null);
+        return;
+      }
 
-      expect(session).toBeNull();
-      // Router would throw UNAUTHORIZED
+      vi.mocked(auth.api.getSession).mockResolvedValue({
+        user: { id: "user-1", email: "test@example.com" },
+        session: { id: "session-1" },
+      } as never);
+      vi.mocked(db.query.users.findFirst).mockResolvedValue(row as never);
+    }
+
+    const asOrganizer = () => signIn({ isAdmin: false, role: "organizer" });
+    const asProducer = () => signIn({ isAdmin: false, role: "producer" });
+    const asAnonymous = () => signIn(null);
+
+    async function createCaller() {
+      const { categoryRouter } = await import("../category");
+      const { db } = await import("~/server/db");
+
+      return categoryRouter.createCaller({ headers: new Headers(), db } as never);
+    }
+
+    /** Exécute `fn` et renvoie le code tRPC levé. */
+    async function codeOf(fn: () => Promise<unknown>) {
+      try {
+        await fn();
+      } catch (error) {
+        expect(error).toBeInstanceOf(TRPCError);
+        return (error as TRPCError).code;
+      }
+      throw new Error("La procédure aurait dû lever une erreur");
+    }
+
+    beforeEach(() => {
+      vi.clearAllMocks();
     });
 
-    it("returns valid session when authenticated", async () => {
-      const { auth } = await import("~/lib/auth");
-      vi.mocked(auth.api.getSession).mockResolvedValueOnce(mockSession as never);
+    it("refuse un appelant anonyme sur chaque procédure", async () => {
+      await asAnonymous();
+      const caller = await createCaller();
 
-      const session = await auth.api.getSession({ headers: new Headers() });
-
-      expect(session).not.toBeNull();
-      expect(session?.user.id).toBe("user-1");
-    });
-  });
-
-  describe("Business Logic - sortOrder Calculation", () => {
-    it("calculates sortOrder 0 when no categories exist", () => {
-      const maxOrderFromDb: number | null = null;
-      const nextOrder = ((maxOrderFromDb as number | null) ?? -1) + 1;
-
-      expect(nextOrder).toBe(0);
-    });
-
-    it("calculates correct next sortOrder with existing categories", () => {
-      const maxOrderFromDb = 5;
-      const nextOrder = (maxOrderFromDb ?? -1) + 1;
-
-      expect(nextOrder).toBe(6);
-    });
-  });
-
-  describe("Business Logic - Multi-tenancy Validation", () => {
-    it("validates category belongs to user organization via cup", () => {
-      const categoryOrganizationId = mockCup.organizationId;
-      const memberOrganizationId = mockMember.organizationId;
-
-      expect(categoryOrganizationId).toBe(memberOrganizationId);
-    });
-
-    it("detects cross-tenant access attempt", () => {
-      const categoryOrganizationId = "org-1";
-      const attackerOrganizationId = "org-2";
-
-      expect(categoryOrganizationId).not.toBe(attackerOrganizationId);
-      // Router would throw FORBIDDEN
-    });
-  });
-
-  describe("Business Logic - Delete Protection", () => {
-    it("blocks deletion when products exist", () => {
-      const productsCount = 5;
-      const shouldBlock = productsCount > 0;
-
-      expect(shouldBlock).toBe(true);
-      // Router throws CONFLICT with message
-    });
-
-    it("allows deletion when no products exist", () => {
-      const productsCount = 0;
-      const shouldBlock = productsCount > 0;
-
-      expect(shouldBlock).toBe(false);
-    });
-  });
-
-  describe("Business Logic - Reorder", () => {
-    it("correctly maps array positions to sortOrder", () => {
-      const categoryIds = ["cat-3", "cat-1", "cat-2"];
-      const sortOrders = categoryIds.map((id, index) => ({
-        id,
-        sortOrder: index,
-      }));
-
-      expect(sortOrders).toEqual([
-        { id: "cat-3", sortOrder: 0 },
-        { id: "cat-1", sortOrder: 1 },
-        { id: "cat-2", sortOrder: 2 },
-      ]);
-    });
-
-    it("validates all categoryIds belong to the cup", () => {
-      const requestedIds = ["cat-1", "cat-2", "cat-3"];
-      const existingIdsInCup = ["cat-1", "cat-2"]; // cat-3 doesn't exist
-
-      const allIdsValid = requestedIds.every((id) =>
-        existingIdsInCup.includes(id)
+      expect(await codeOf(() => caller.list({ cupId: "cup-1" }))).toBe("UNAUTHORIZED");
+      expect(await codeOf(() => caller.count({ cupId: "cup-1" }))).toBe("UNAUTHORIZED");
+      expect(
+        await codeOf(() => caller.create({ cupId: "cup-1", name: "Indoor" }))
+      ).toBe("UNAUTHORIZED");
+      expect(await codeOf(() => caller.update({ id: "cat-1", name: "Indoor" }))).toBe(
+        "UNAUTHORIZED"
       );
+      expect(await codeOf(() => caller.delete({ id: "cat-1" }))).toBe("UNAUTHORIZED");
+      expect(
+        await codeOf(() => caller.reorder({ cupId: "cup-1", categoryIds: ["cat-1"] }))
+      ).toBe("UNAUTHORIZED");
+    });
 
-      expect(allIdsValid).toBe(false);
-      // Router throws BAD_REQUEST
+    it("refuse un producteur authentifié sur chaque procédure", async () => {
+      await asProducer();
+      const caller = await createCaller();
+
+      expect(await codeOf(() => caller.list({ cupId: "cup-1" }))).toBe("FORBIDDEN");
+      expect(
+        await codeOf(() => caller.create({ cupId: "cup-1", name: "Indoor" }))
+      ).toBe("FORBIDDEN");
+      expect(await codeOf(() => caller.delete({ id: "cat-1" }))).toBe("FORBIDDEN");
+      expect(
+        await codeOf(() => caller.reorder({ cupId: "cup-1", categoryIds: ["cat-1"] }))
+      ).toBe("FORBIDDEN");
+    });
+
+    it("refuse un utilisateur dont la ligne users a disparu", async () => {
+      const { auth } = await import("~/lib/auth");
+      const { db } = await import("~/server/db");
+
+      vi.mocked(auth.api.getSession).mockResolvedValue({
+        user: { id: "user-1", email: "test@example.com" },
+        session: { id: "session-1" },
+      } as never);
+      vi.mocked(db.query.users.findFirst).mockResolvedValue(undefined as never);
+
+      const caller = await createCaller();
+      expect(await codeOf(() => caller.list({ cupId: "cup-1" }))).toBe("FORBIDDEN");
+    });
+
+    it("renvoie NOT_FOUND quand la cup n'existe pas", async () => {
+      await asOrganizer();
+      const { db } = await import("~/server/db");
+      vi.mocked(db.query.cups.findFirst).mockResolvedValue(undefined as never);
+
+      const caller = await createCaller();
+      expect(await codeOf(() => caller.list({ cupId: "inconnue" }))).toBe("NOT_FOUND");
+    });
+
+    it("liste les catégories de la cup", async () => {
+      await asOrganizer();
+      const { db } = await import("~/server/db");
+      vi.mocked(db.query.cups.findFirst).mockResolvedValue({ id: "cup-1" } as never);
+      vi.mocked(db.query.categories.findMany).mockResolvedValue([
+        { id: "cat-1", cupId: "cup-1", name: "Indoor", sortOrder: 0 },
+        { id: "cat-2", cupId: "cup-1", name: "Outdoor", sortOrder: 1 },
+      ] as never);
+
+      const caller = await createCaller();
+      const result = await caller.list({ cupId: "cup-1" });
+
+      expect(result).toHaveLength(2);
+      expect(result[0]!.name).toBe("Indoor");
+    });
+
+    it("refuse de supprimer une catégorie qui contient des produits", async () => {
+      await asOrganizer();
+      const { db } = await import("~/server/db");
+      vi.mocked(db.query.categories.findFirst).mockResolvedValue({
+        id: "cat-1",
+        cupId: "cup-1",
+      } as never);
+      // Premier select() : le compte de produits.
+      selectResults.push([{ count: 3 }]);
+
+      const caller = await createCaller();
+      expect(await codeOf(() => caller.delete({ id: "cat-1" }))).toBe("CONFLICT");
+    });
+
+    it("refuse de supprimer une catégorie dont dépendent des jurés", async () => {
+      await asOrganizer();
+      const { db } = await import("~/server/db");
+      vi.mocked(db.query.categories.findFirst).mockResolvedValue({
+        id: "cat-1",
+        cupId: "cup-1",
+      } as never);
+      // produits = 0, assignations = 2, codes = 0
+      selectResults.push([{ count: 0 }], [{ count: 2 }], [{ count: 0 }]);
+
+      const caller = await createCaller();
+      expect(await codeOf(() => caller.delete({ id: "cat-1" }))).toBe("CONFLICT");
+      expect(deleted).toHaveLength(0);
+    });
+
+    it("supprime une catégorie libre de toute dépendance", async () => {
+      await asOrganizer();
+      const { db } = await import("~/server/db");
+      vi.mocked(db.query.categories.findFirst).mockResolvedValue({
+        id: "cat-1",
+        cupId: "cup-1",
+      } as never);
+      selectResults.push([{ count: 0 }], [{ count: 0 }], [{ count: 0 }]);
+
+      const caller = await createCaller();
+      await expect(caller.delete({ id: "cat-1" })).resolves.toEqual({ success: true });
+      expect(deleted).toHaveLength(1);
+    });
+
+    it("refuse un réordonnancement contenant une catégorie étrangère à la cup", async () => {
+      await asOrganizer();
+      const { db } = await import("~/server/db");
+      vi.mocked(db.query.cups.findFirst).mockResolvedValue({ id: "cup-1" } as never);
+      // La cup ne contient que cat-1 et cat-2 : cat-3 vient d'ailleurs.
+      selectResults.push([{ id: "cat-1" }, { id: "cat-2" }]);
+
+      const caller = await createCaller();
+      expect(
+        await codeOf(() =>
+          caller.reorder({ cupId: "cup-1", categoryIds: ["cat-1", "cat-2", "cat-3"] })
+        )
+      ).toBe("BAD_REQUEST");
+      expect(updates).toHaveLength(0);
+    });
+
+    it("applique le rang de chaque catégorie selon sa position", async () => {
+      await asOrganizer();
+      const { db } = await import("~/server/db");
+      vi.mocked(db.query.cups.findFirst).mockResolvedValue({ id: "cup-1" } as never);
+      selectResults.push([{ id: "cat-1" }, { id: "cat-2" }, { id: "cat-3" }]);
+
+      const caller = await createCaller();
+      await caller.reorder({ cupId: "cup-1", categoryIds: ["cat-3", "cat-1", "cat-2"] });
+
+      expect(updates.map((u) => u.sortOrder)).toEqual([0, 1, 2]);
     });
   });
 });

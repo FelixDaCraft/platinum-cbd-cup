@@ -3,7 +3,6 @@
  * Handles sending synthesis PDFs to producers via email with tracking
  */
 
-import { Resend } from "resend";
 import { eq, and, sql } from "drizzle-orm";
 import { db } from "~/server/db";
 import * as schema from "~/server/db/schema";
@@ -11,33 +10,55 @@ import { env } from "~/env";
 import { generateProducerSynthesisPdf } from "./results-pdf.service";
 import { formatScoreForScale } from "~/lib/validations/labels";
 import type { RatingScale } from "~/server/db/schema/cups";
+import { getPortalBaseUrl } from "./app-url";
+import {
+  EMAIL_SEND_CONCURRENCY,
+  escapeHtml,
+  mapWithConcurrency,
+  renderButton,
+  renderCallout,
+  renderEmailLayout,
+  renderGreeting,
+  renderParagraph,
+  renderQuote,
+  sendEmail,
+} from "./email";
 
-const resend = new Resend(env.RESEND_API_KEY);
-
-/**
- * Return the single-tenant public base URL.
- */
-function getPortalBaseUrl(): string {
-  return process.env.NEXT_PUBLIC_APP_URL ?? env.BETTER_AUTH_URL;
-}
+/** Nom de l'organisateur : mono-tenant, c'est toujours le concours lui-même. */
+const ORGANIZER_NAME = "Platinum CBD Cup";
 
 /**
  * Update email send status for a registration - Story 8.7
+ *
+ * Au mieux : ce suivi sert à cibler les relances, il n'est pas le résultat de
+ * l'envoi. Une écriture qui échoue ne doit surtout pas ressortir en exception,
+ * car `sendResultsEmail` est appelée en lot par `sendBulkResultsEmails` : un
+ * rejet y interromprait les soixante-sept envois suivants et l'organisateur
+ * n'apprendrait même pas lesquels sont déjà partis.
  */
 async function updateEmailStatus(
   registrationId: string,
   success: boolean,
   error?: string
-): Promise<void> {
-  await db
-    .update(schema.registrations)
-    .set({
-      synthesisEmailSentAt: success ? new Date() : null,
-      synthesisEmailError: success ? null : error,
-      synthesisEmailAttempts: sql`COALESCE(${schema.registrations.synthesisEmailAttempts}, 0) + 1`,
-      updatedAt: new Date(),
-    })
-    .where(eq(schema.registrations.id, registrationId));
+): Promise<boolean> {
+  try {
+    await db
+      .update(schema.registrations)
+      .set({
+        synthesisEmailSentAt: success ? new Date() : null,
+        synthesisEmailError: success ? null : error,
+        synthesisEmailAttempts: sql`COALESCE(${schema.registrations.synthesisEmailAttempts}, 0) + 1`,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.registrations.id, registrationId));
+    return true;
+  } catch (trackingError) {
+    console.error(
+      `[Results Email] Suivi d'envoi non enregistré (registration ${registrationId}):`,
+      trackingError instanceof Error ? trackingError.message : trackingError
+    );
+    return false;
+  }
 }
 
 export interface SendResultsEmailParams {
@@ -49,6 +70,12 @@ export interface SendResultsEmailResult {
   success: boolean;
   error?: string;
   emailId?: string;
+  /**
+   * Vrai quand l'email est bien parti mais que son enregistrement a échoué.
+   * L'inscription paraîtra « non envoyée » au tableau de bord et une relance
+   * enverrait le PDF une seconde fois : il faut que l'organisateur le sache.
+   */
+  trackingFailed?: boolean;
 }
 
 /**
@@ -141,14 +168,15 @@ export async function sendResultsEmail(
     const portalBaseUrl = getPortalBaseUrl();
 
     // Send email with PDF attachment
-    const result = await resend.emails.send({
-      from: env.EMAIL_FROM,
+    const result = await sendEmail({
+      scope: "Results Email",
+      ref: `registration ${registrationId}`,
       to: user.email,
       subject: `Vos resultats - ${cup.name}`,
       html: buildResultsEmailHtml({
         producerName: producer.companyName ?? user.name ?? "Producteur",
         cupName: cup.name,
-        organizerName: "Platinum CBD Cup",
+        organizerName: ORGANIZER_NAME,
         customMessage,
         productSummary,
         producerPortalUrl: `${portalBaseUrl}/producer/cups/${cup.id}`,
@@ -161,24 +189,20 @@ export async function sendResultsEmail(
       ],
     });
 
-    if (result.error) {
-      console.error("[Results Email] Resend error:", result.error);
-      // Update status with error - Story 8.7
-      await updateEmailStatus(registrationId, false, result.error.message);
-      if (env.NODE_ENV === "development") {
-        console.warn("[Results Email] Email non envoye (dev mode)");
-        // Still mark as sent in dev mode for testing
-        await updateEmailStatus(registrationId, true);
-        return { success: true, emailId: "dev-mode" };
-      }
-      return { success: false, error: result.error.message };
+    if (!result.success) {
+      // Story 8.7 : l'échec est tracé sur l'inscription pour permettre une relance ciblée.
+      await updateEmailStatus(registrationId, false, result.error);
+      return { success: false, error: result.error };
     }
 
     // Update status as sent - Story 8.7
-    await updateEmailStatus(registrationId, true);
+    const tracked = await updateEmailStatus(registrationId, true);
 
-    console.log(`[Results Email] Email sent successfully to ${user.email}`);
-    return { success: true, emailId: result.data?.id };
+    return {
+      success: true,
+      emailId: result.id ?? (result.devFallback ? "dev-mode" : undefined),
+      ...(tracked ? {} : { trackingFailed: true }),
+    };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
     console.error("[Results Email] Error:", errorMessage);
@@ -198,11 +222,14 @@ export async function sendBulkResultsEmails(
   success: number;
   failed: number;
   skipped: number;
+  /** Envois partis mais non enregistrés : une relance les doublerait. */
+  trackingFailed: number;
   results: Array<{
     registrationId: string;
     producerName: string;
     success: boolean;
     error?: string;
+    trackingFailed?: boolean;
   }>;
 }> {
   // Get all confirmed registrations for this cup
@@ -221,52 +248,66 @@ export async function sendBulkResultsEmails(
     },
   });
 
-  const results: Array<{
-    registrationId: string;
-    producerName: string;
-    success: boolean;
-    error?: string;
-  }> = [];
-  let success = 0;
-  let failed = 0;
-  let skipped = 0;
+  // Parallélisme borné : chaque envoi regénère un PDF de synthèse (1 à 2 s).
+  // En séquence, 68 producteurs dépassaient la coupure du proxy à 100 s et
+  // l'organisateur relançait alors que les envois étaient encore en cours.
+  const results = await mapWithConcurrency(
+    registrations,
+    EMAIL_SEND_CONCURRENCY,
+    async (registration) => {
+      const producerName = registration.producer.companyName ?? "N/A";
 
-  for (const registration of registrations) {
-    const producerName = registration.producer.companyName ?? "N/A";
+      // Skip if no products with results
+      const hasResults = registration.products.some((p) => p.finalScore !== null);
+      if (!hasResults) {
+        return {
+          registrationId: registration.id,
+          producerName,
+          success: false,
+          error: "Aucun produit avec resultats",
+          skipped: true,
+        };
+      }
 
-    // Skip if no products with results
-    const hasResults = registration.products.some((p) => p.finalScore !== null);
-    if (!hasResults) {
-      results.push({
-        registrationId: registration.id,
-        producerName,
-        success: false,
-        error: "Aucun produit avec resultats",
-      });
-      skipped++;
-      continue;
+      // Le lot ne doit jamais tomber en entier sur une inscription : un rejet
+      // remonterait à `mapWithConcurrency` et annulerait le compte rendu des
+      // envois déjà partis, que l'organisateur relancerait en double.
+      try {
+        const result = await sendResultsEmail({
+          registrationId: registration.id,
+          customMessage,
+        });
+
+        return {
+          registrationId: registration.id,
+          producerName,
+          success: result.success,
+          error: result.error,
+          trackingFailed: result.trackingFailed,
+          skipped: false,
+        };
+      } catch (error) {
+        return {
+          registrationId: registration.id,
+          producerName,
+          success: false,
+          error: error instanceof Error ? error.message : "Erreur inattendue",
+          skipped: false,
+        };
+      }
     }
+  );
 
-    const result = await sendResultsEmail({
-      registrationId: registration.id,
-      customMessage,
-    });
+  const skipped = results.filter((r) => r.skipped).length;
+  const success = results.filter((r) => r.success).length;
 
-    results.push({
-      registrationId: registration.id,
-      producerName,
-      success: result.success,
-      error: result.error,
-    });
-
-    if (result.success) {
-      success++;
-    } else {
-      failed++;
-    }
-  }
-
-  return { success, failed, skipped, results };
+  return {
+    success,
+    failed: results.length - success - skipped,
+    skipped,
+    trackingFailed: results.filter((r) => r.trackingFailed).length,
+    results: results.map(({ skipped: _skipped, ...rest }) => rest),
+  };
 }
 
 /**
@@ -301,13 +342,13 @@ function buildResultsEmailHtml(params: ResultsEmailParams): string {
     .map(
       (p) => `
     <tr>
-      <td style="padding: 12px; border-bottom: 1px solid #e5e7eb;">${p.name}</td>
-      <td style="padding: 12px; border-bottom: 1px solid #e5e7eb;">${p.category}</td>
-      <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: center; font-weight: 600;">${p.score}</td>
+      <td style="padding: 12px; border-bottom: 1px solid #e5e7eb;">${escapeHtml(p.name)}</td>
+      <td style="padding: 12px; border-bottom: 1px solid #e5e7eb;">${escapeHtml(p.category)}</td>
+      <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: center; font-weight: 600;">${escapeHtml(p.score)}</td>
       <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: center;">
         ${
           p.label
-            ? `<span style="background-color: #fef3c7; color: #92400e; padding: 4px 8px; border-radius: 4px; font-size: 12px;">${p.label}</span>`
+            ? `<span style="background-color: #fef3c7; color: #92400e; padding: 4px 8px; border-radius: 4px; font-size: 12px;">${escapeHtml(p.label)}</span>`
             : "-"
         }
       </td>
@@ -316,46 +357,20 @@ function buildResultsEmailHtml(params: ResultsEmailParams): string {
     )
     .join("");
 
-  return `
-    <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px; background-color: #ffffff;">
-      <div style="text-align: center; margin-bottom: 32px;">
-        <h1 style="color: #f59e0b; font-size: 32px; margin: 0;">
-          <span style="color: #f59e0b;">Cup</span><span style="color: #1f2937;">Metrics</span>
-        </h1>
-      </div>
-
-      <h2 style="color: #1f2937; font-size: 24px; margin-bottom: 16px;">
-        Vos resultats sont disponibles !
-      </h2>
-
-      <p style="color: #4b5563; font-size: 16px; line-height: 1.6; margin-bottom: 24px;">
-        Bonjour ${producerName},
-      </p>
-
-      <p style="color: #4b5563; font-size: 16px; line-height: 1.6; margin-bottom: 24px;">
-        <strong>${organizerName}</strong> a le plaisir de vous communiquer les resultats
-        de vos produits pour la competition <strong>${cupName}</strong>.
-      </p>
-
-      ${
-        customMessage
-          ? `
-        <div style="background-color: #f9fafb; border-radius: 8px; padding: 16px; margin-bottom: 24px; border-left: 4px solid #f59e0b;">
-          <p style="color: #4b5563; margin: 0; font-size: 14px; font-style: italic;">
-            "${customMessage}"
-          </p>
-        </div>
-      `
-          : ""
-      }
-
-      <div style="background-color: #fef3c7; border-radius: 8px; padding: 16px; margin-bottom: 24px;">
-        <p style="color: #92400e; margin: 0; font-size: 14px;">
-          <strong>Felicitations !</strong>
+  return renderEmailLayout({
+    title: "Vos resultats sont disponibles !",
+    body: `
+      ${renderGreeting(producerName)}
+      ${renderParagraph(`<strong>${escapeHtml(organizerName)}</strong> a le plaisir de vous communiquer les resultats
+        de vos produits pour la competition <strong>${escapeHtml(cupName)}</strong>.`)}
+      ${customMessage ? renderQuote(customMessage) : ""}
+      ${renderCallout({
+        content: `<strong>Felicitations !</strong>
           <br />
-          Retrouvez en piece jointe votre synthese detaillee avec graphiques.
-        </p>
-      </div>
+          Retrouvez en piece jointe votre synthese detaillee avec graphiques.`,
+        background: "#fef3c7",
+        textColor: "#92400e",
+      })}
 
       <div style="margin-bottom: 24px;">
         <p style="color: #374151; margin: 0 0 16px 0; font-size: 14px; font-weight: 600;">
@@ -376,23 +391,11 @@ function buildResultsEmailHtml(params: ResultsEmailParams): string {
         </table>
       </div>
 
-      <div style="text-align: center; margin: 32px 0;">
-        <a href="${producerPortalUrl}"
-           style="display: inline-block; background-color: #f59e0b; color: #0a0a0f; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">
-          Voir mes resultats detailles
-        </a>
-      </div>
+      ${renderButton(producerPortalUrl, "Voir mes resultats detailles")}
 
       <p style="color: #9ca3af; font-size: 14px; line-height: 1.5; margin-top: 32px;">
         Le document PDF en piece jointe contient une analyse detaillee de vos resultats,
         incluant des graphiques radar et votre positionnement par rapport a la moyenne de votre categorie.
-      </p>
-
-      <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 32px 0;" />
-
-      <p style="color: #9ca3af; font-size: 12px; text-align: center;">
-        Platinum CBD Cup - Le concours de reference des meilleurs CBD
-      </p>
-    </div>
-  `;
+      </p>`,
+  });
 }

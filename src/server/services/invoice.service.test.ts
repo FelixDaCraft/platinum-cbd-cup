@@ -16,7 +16,63 @@ vi.mock("~/server/db", () => ({
 }));
 
 // Import after mocking
-import { generateInvoiceNumber, getInvoiceData, type InvoiceData } from "./invoice.service";
+import {
+  allocateInvoiceNumber,
+  generateInvoiceNumber,
+  getInvoiceData,
+  type InvoiceData,
+} from "./invoice.service";
+
+/**
+ * Faux client Drizzle imitant le comportement de `pg_advisory_xact_lock` :
+ * un seul appelant détient le verrou, les suivants attendent la libération
+ * (le commit de la transaction précédente).
+ *
+ * Le but est de vérifier que la numérotation est bien sérialisée par le
+ * verrou, pas de simuler Postgres : deux confirmations de paiement
+ * simultanées ne doivent jamais recevoir le même numéro de facture.
+ */
+function createFakeLedger() {
+  const issued: string[] = [];
+  let chain: Promise<void> = Promise.resolve();
+
+  function makeTx() {
+    let release: () => void = () => undefined;
+
+    return {
+      execute: async () => {
+        const previous = chain;
+        chain = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        await previous;
+      },
+      query: {
+        registrations: {
+          // `orderBy` distingue la lecture du plus grand numéro de l'année de
+          // la lecture du numéro déjà attribué à l'inscription.
+          findFirst: async (args: { orderBy?: unknown }) =>
+            args.orderBy
+              ? issued.length > 0
+                ? { invoiceNumber: issued[issued.length - 1] }
+                : undefined
+              : { invoiceNumber: null },
+        },
+      },
+      update: () => ({
+        set: (values: { invoiceNumber: string }) => ({
+          where: async () => {
+            issued.push(values.invoiceNumber);
+          },
+        }),
+      }),
+      /** Relâche le verrou, comme le ferait le commit de la transaction. */
+      commit: () => release(),
+    };
+  }
+
+  return { issued, makeTx };
+}
 
 describe("Invoice Service", () => {
   beforeEach(() => {
@@ -88,6 +144,74 @@ describe("Invoice Service", () => {
       const invoiceNumber = await generateInvoiceNumber();
 
       expect(invoiceNumber).toBe("INV-2026-100000");
+    });
+  });
+
+  describe("allocateInvoiceNumber sous concurrence", () => {
+    it("prend le verrou avant la moindre lecture", async () => {
+      const calls: string[] = [];
+      const tx = {
+        execute: async () => {
+          calls.push("lock");
+        },
+        query: {
+          registrations: {
+            findFirst: async () => {
+              calls.push("read");
+              return { invoiceNumber: null };
+            },
+          },
+        },
+        update: () => ({
+          set: () => ({
+            where: async () => {
+              calls.push("write");
+            },
+          }),
+        }),
+      };
+
+      await allocateInvoiceNumber(tx as never, "reg_1");
+
+      // Une lecture avant le verrou rendrait la sérialisation inopérante.
+      expect(calls[0]).toBe("lock");
+      expect(calls).toContain("write");
+    });
+
+    it("n'attribue jamais le même numéro à deux confirmations simultanées", async () => {
+      const { issued, makeTx } = createFakeLedger();
+      const first = makeTx();
+      const second = makeTx();
+
+      // Les deux transactions démarrent avant que la première ne commite.
+      const firstNumber = allocateInvoiceNumber(first as never, "reg_a");
+      const secondNumber = allocateInvoiceNumber(second as never, "reg_b");
+
+      expect(await firstNumber).toBe("INV-2026-00001");
+      first.commit();
+
+      expect(await secondNumber).toBe("INV-2026-00002");
+      second.commit();
+
+      expect(issued).toEqual(["INV-2026-00001", "INV-2026-00002"]);
+    });
+
+    it("est idempotent : une inscription déjà numérotée conserve son numéro", async () => {
+      const tx = {
+        execute: async () => undefined,
+        query: {
+          registrations: {
+            findFirst: async () => ({ invoiceNumber: "INV-2026-00042" }),
+          },
+        },
+        update: () => {
+          throw new Error("aucune réécriture attendue");
+        },
+      };
+
+      await expect(allocateInvoiceNumber(tx as never, "reg_1")).resolves.toBe(
+        "INV-2026-00042"
+      );
     });
   });
 

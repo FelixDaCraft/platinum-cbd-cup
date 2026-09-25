@@ -38,5 +38,11 @@
     "**/*.js",
     ".next/types/**/*.ts"
   ],
-  "exclude": ["node_modules", "generated", "scripts", "public"]
+  // scripts/ n'est plus exclu : ces fichiers écrivent en base (import
+  // historique, suppression de comptes) et une colonne renommée dans le
+  // schéma Drizzle ne se voyait qu'à l'exécution contre la base cible.
+  // public/ reste exclu : il ne contient que des assets et des scripts de
+  // navigateur (sw.js, widget/embed.js) que checkJs analyserait à tort avec
+  // les lib DOM+Node de l'application.
+  "exclude": ["node_modules", "generated", "public"]
 }

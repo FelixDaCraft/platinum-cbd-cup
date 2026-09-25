@@ -1,5 +1,6 @@
 import { pgTable, text, timestamp, boolean, unique } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
+import { generateId } from "./id";
 import { users } from "./auth";
 import { registrations } from "./registrations";
 
@@ -9,7 +10,9 @@ import { registrations } from "./registrations";
 export const producers = pgTable(
   "producers",
   {
-    id: text("id").primaryKey(), // nanoid generated
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => generateId()),
     userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
@@ -27,8 +30,8 @@ export const producers = pgTable(
     notifyOnCupUpdates: boolean("notify_on_cup_updates")
       .notNull()
       .default(true),
-    createdAt: timestamp("created_at").notNull().defaultNow(),
-    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     // A user can only have ONE producer profile

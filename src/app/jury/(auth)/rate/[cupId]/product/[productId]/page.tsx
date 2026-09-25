@@ -438,6 +438,17 @@ export default function RatingPage() {
           ? "[ERROR]"
           : null;
 
+  // Le libellé visible est en anglais télégraphique ; on double d'un texte
+  // français lisible pour les lecteurs d'écran.
+  const autoSaveSpokenLabel =
+    autoSaveStatus === "saving"
+      ? "Enregistrement en cours"
+      : autoSaveStatus === "saved"
+        ? "Notes enregistrées"
+        : autoSaveStatus === "error"
+          ? "Échec de l'enregistrement"
+          : "";
+
   return (
     <div
       style={{
@@ -484,8 +495,12 @@ export default function RatingPage() {
                 [SUBMITTED]
               </span>
             )}
-            {!isSubmitted && autoSaveLabel && (
+            {/* Région live rendue en permanence : un lecteur d'écran n'annonce
+                pas le contenu d'un conteneur aria-live inséré après coup. */}
+            {!isSubmitted && (
               <span
+                role="status"
+                aria-live="polite"
                 className="n-font-data"
                 style={{
                   fontSize: "11px",
@@ -499,6 +514,7 @@ export default function RatingPage() {
                 }}
               >
                 {autoSaveLabel}
+                <span className="sr-only">{autoSaveSpokenLabel}</span>
               </span>
             )}
           </div>
@@ -651,6 +667,7 @@ export default function RatingPage() {
                   }}
                 >
                   <span
+                    id={`criterion-${criterion.id}-label`}
                     style={{
                       fontFamily: "'Space Grotesk', sans-serif",
                       fontSize: "15px",
@@ -695,13 +712,21 @@ export default function RatingPage() {
                   </p>
                 )}
 
-                {/* Score buttons */}
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                {/* Score buttons — l'état sélectionné ne doit pas reposer sur la
+                    seule couleur : aria-pressed l'expose aux lecteurs d'écran. */}
+                <div
+                  role="group"
+                  aria-labelledby={`criterion-${criterion.id}-label`}
+                  style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}
+                >
                   {scoreOptions.map((score) => {
                     const isSelected = currentScore === score;
                     return (
                       <button
                         key={score}
+                        type="button"
+                        aria-pressed={isSelected}
+                        aria-label={`${criterion.name} : ${score} sur ${maxScore}`}
                         onClick={() => handleScoreChange(criterion.id, score)}
                         disabled={isSubmitted || submitMutation.isPending}
                         style={{
@@ -809,7 +834,8 @@ export default function RatingPage() {
                 marginBottom: "12px",
               }}
             >
-              <p
+              <label
+                htmlFor="rating-comment"
                 style={{
                   fontFamily: "'Space Grotesk', sans-serif",
                   fontSize: "15px",
@@ -823,7 +849,7 @@ export default function RatingPage() {
                 >
                   (optionnel)
                 </span>
-              </p>
+              </label>
               <span
                 className="n-label"
                 style={{
@@ -839,7 +865,9 @@ export default function RatingPage() {
               </span>
             </div>
             <textarea
+              id="rating-comment"
               className="n-textarea"
+              maxLength={500}
               placeholder="Vos remarques sur ce produit..."
               value={comment}
               onChange={(e) => setComment(e.target.value.slice(0, 500))}

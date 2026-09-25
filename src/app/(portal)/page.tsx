@@ -1,3 +1,5 @@
+import type { Metadata } from "next";
+import { unstable_cache } from "next/cache";
 import Link from "next/link";
 import { db } from "~/server/db";
 import { desc, isNotNull, eq, count } from "drizzle-orm";
@@ -6,11 +8,25 @@ import {
   Eyebrow,
   Countdown,
   Ticker,
-  GeometricEmblem,
 } from "~/components/portal/platinum";
 import { MobileHomeHero } from "~/components/portal/mobile/mobile-home-hero";
+import { DesktopEmblem } from "./_components/desktop-emblem";
+import { PORTAL_CACHE_TAGS, PORTAL_REVALIDATE } from "./_lib/cache";
+import { canonical } from "./_lib/seo";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * L'accueil hérite du titre et de la description du layout racine, mais pas
+ * de l'URL canonique : sans elle, /?utm_source=… et / sont deux documents
+ * distincts pour un moteur. `metadataBase` n'étant pas défini, on construit
+ * l'absolu comme dans robots.ts et sitemap.ts.
+ */
+export const metadata: Metadata = {
+  alternates: {
+    canonical: canonical("/"),
+  },
+};
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -132,17 +148,17 @@ async function getCountdownState(): Promise<CountdownState> {
   return { kind: "next-year" };
 }
 
+/**
+ * Le bandeau ne montre que des résultats réels.
+ *
+ * Il affichait auparavant six scores inventés (« CF23 · FLOWER INDOOR · 94.2 »)
+ * dès que la requête échouait — sur le site public d'un concours, rien ne
+ * distinguait ces notes des vraies. Une base indisponible remonte désormais
+ * l'erreur : `unstable_cache` ne mémorise pas un rejet, et la page masque
+ * simplement le bandeau.
+ */
 async function getTickerItems(): Promise<string[]> {
-  const mockItems = [
-    "CF23 · FLOWER INDOOR · 94.2",
-    "EPA87 · EXTRACT · 91.8",
-    "HAS14 · HASHISH · 89.4",
-    "CBG09 · ISOLATE · 87.1",
-    "OIL41 · FULL-SPECTRUM · 92.6",
-    "TOP19 · TOPICAL · 85.9",
-  ];
-
-  try {
+  {
     const products = await db
       .select({
         anonymousCode: schema.products.anonymousCode,
@@ -158,17 +174,11 @@ async function getTickerItems(): Promise<string[]> {
       .orderBy(desc(schema.products.updatedAt))
       .limit(6);
 
-    if (products.length > 0) {
-      return products.map(
-        (p) =>
-          `${p.anonymousCode ?? "—"} · ${p.categoryName.toUpperCase()} · ${Number(p.finalScore).toFixed(1)}`
-      );
-    }
-  } catch {
-    // DB unavailable — use mock
+    return products.map(
+      (p) =>
+        `${p.anonymousCode ?? "—"} · ${p.categoryName.toUpperCase()} · ${Number(p.finalScore).toFixed(1)}`
+    );
   }
-
-  return mockItems;
 }
 
 interface CategoryRow {
@@ -176,15 +186,6 @@ interface CategoryRow {
   name: string;
   specimenCount: number;
 }
-
-const mockCategories: CategoryRow[] = [
-  { code: "CF", name: "Flower · Indoor", specimenCount: 42 },
-  { code: "OG", name: "Flower · Outdoor", specimenCount: 31 },
-  { code: "HA", name: "Hashish", specimenCount: 24 },
-  { code: "EP", name: "Extract · Rosin", specimenCount: 28 },
-  { code: "OI", name: "Full-spectrum Oil", specimenCount: 38 },
-  { code: "TO", name: "Topical", specimenCount: 21 },
-];
 
 interface LatestCupBadge {
   /** "EDITION 04" — uppercase, padded edition number derived from cup year. */
@@ -245,8 +246,9 @@ async function getLatestCupBadge(): Promise<LatestCupBadge> {
   }
 }
 
+/** Même règle que le bandeau : aucune catégorie inventée, aucun effectif inventé. */
 async function getCategories(): Promise<CategoryRow[]> {
-  try {
+  {
     const cup = await db.query.cups.findFirst({
       where: (c, { ne: neOp }) => neOp(c.status, "draft"),
       orderBy: (c, { desc: dsc }) => [dsc(c.createdAt)],
@@ -257,7 +259,7 @@ async function getCategories(): Promise<CategoryRow[]> {
       },
     });
 
-    if (!cup || cup.categories.length === 0) return mockCategories;
+    if (!cup || cup.categories.length === 0) return [];
 
     // Count products per category, joined through registrations to scope to this cup
     const counts = await db
@@ -280,21 +282,70 @@ async function getCategories(): Promise<CategoryRow[]> {
       name: c.name,
       specimenCount: countMap.get(c.id) ?? 0,
     }));
-  } catch {
-    return mockCategories;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Cache
+// ---------------------------------------------------------------------------
+
+/**
+ * L'accueil enchaînait huit requêtes SQL à chaque affichage — pour un contenu
+ * (édition en cours, catégories, derniers scores) qui bouge quelques fois par
+ * an. Les quatre lecteurs ci-dessous ne renvoient que des valeurs primitives,
+ * donc traversent sans dommage la sérialisation JSON du cache de données.
+ *
+ * Le compte à rebours reste juste : il transporte un horodatage cible, pas
+ * une durée, et c'est le composant client qui décompte.
+ */
+const cacheOptions = {
+  revalidate: PORTAL_REVALIDATE,
+  tags: [PORTAL_CACHE_TAGS.cups, PORTAL_CACHE_TAGS.results],
+};
+
+const getCachedCountdownState = unstable_cache(
+  getCountdownState,
+  ["home-countdown"],
+  cacheOptions,
+);
+const getCachedTickerItems = unstable_cache(
+  getTickerItems,
+  ["home-ticker"],
+  cacheOptions,
+);
+const getCachedCategories = unstable_cache(
+  getCategories,
+  ["home-categories"],
+  cacheOptions,
+);
+const getCachedLatestCupBadge = unstable_cache(
+  getLatestCupBadge,
+  ["home-latest-cup-badge"],
+  cacheOptions,
+);
 
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
+/**
+ * Un lecteur qui échoue ne doit ni faire tomber l'accueil, ni inventer du
+ * contenu : sa section disparaît, et rien n'est mémorisé — la requête suivante
+ * retentera. `Promise.allSettled` isole chaque lecteur des trois autres.
+ */
+async function sansPanne<T>(promesse: Promise<T>, repli: T): Promise<T> {
+  const [issue] = await Promise.allSettled([promesse]);
+  if (issue.status === "fulfilled") return issue.value;
+  console.error("[accueil] lecteur indisponible :", issue.reason);
+  return repli;
+}
+
 export default async function PortalHomePage() {
   const [countdown, tickerItems, categories, latestBadge] = await Promise.all([
-    getCountdownState(),
-    getTickerItems(),
-    getCategories(),
-    getLatestCupBadge(),
+    getCachedCountdownState(),
+    sansPanne(getCachedTickerItems(), [] as string[]),
+    sansPanne(getCachedCategories(), [] as CategoryRow[]),
+    getCachedLatestCupBadge(),
   ]);
 
   return (
@@ -361,7 +412,9 @@ export default async function PortalHomePage() {
           </div>
 
           <div style={{ display: "grid", placeItems: "center" }}>
-            <GeometricEmblem size={735} tiltZ={-0.18} />
+            {/* Monté uniquement au-dessus de 881px : masquer ce canvas en CSS
+                laissait un second contexte WebGL vivant sous MobileHomeHero. */}
+            <DesktopEmblem size={735} tiltZ={-0.18} />
           </div>
         </div>
       </section>
@@ -447,7 +500,7 @@ export default async function PortalHomePage() {
       </section>
 
       {/* ── TICKER ───────────────────────────────────────────────────────── */}
-      <Ticker items={tickerItems} />
+      {tickerItems.length > 0 && <Ticker items={tickerItems} />}
 
       {/* ── THREE-UP ─────────────────────────────────────────────────────── */}
       <section style={{ marginTop: 64 }}>
@@ -509,6 +562,7 @@ export default async function PortalHomePage() {
       </section>
 
       {/* ── CATEGORIES ───────────────────────────────────────────────────── */}
+      {categories.length > 0 && (
       <section style={{ marginTop: 64 }}>
         <div
           style={{
@@ -570,6 +624,7 @@ export default async function PortalHomePage() {
           ))}
         </div>
       </section>
+      )}
 
       {/* ── PALMARÈS CTA ─────────────────────────────────────────────────── */}
       <section style={{ marginTop: 64, marginBottom: 64 }}>

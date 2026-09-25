@@ -580,17 +580,16 @@ export default function JuryAssignmentsPage() {
                               VERROUILLE
                             </span>
                           ) : (
-                            <Link href={`/jury/cups/${cup.cupId}`}>
-                              <button
-                                className={isUrgent ? "n-btn-primary" : "n-btn-ghost"}
-                                style={
-                                  isUrgent
-                                    ? { backgroundColor: "var(--n-accent)", borderColor: "var(--n-accent)" }
-                                    : undefined
-                                }
-                              >
-                                {isUrgent ? "NOTER MAINTENANT" : "VOIR"}
-                              </button>
+                            <Link
+                              href={`/jury/cups/${cup.cupId}`}
+                              className={isUrgent ? "n-btn-primary" : "n-btn-ghost"}
+                              style={
+                                isUrgent
+                                  ? { backgroundColor: "var(--n-accent)", borderColor: "var(--n-accent)" }
+                                  : undefined
+                              }
+                            >
+                              {isUrgent ? "NOTER MAINTENANT" : "VOIR"}
                             </Link>
                           )}
                         </div>

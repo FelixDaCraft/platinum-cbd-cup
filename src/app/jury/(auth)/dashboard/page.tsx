@@ -249,7 +249,12 @@ export default function PortalJuryDashboardPage() {
 
   const [invitationCode, setInvitationCode] = useState("");
 
-  const { data: juryCups, isLoading } = api.jury.getMyJuryCups.useQuery();
+  const {
+    data: juryCups,
+    isLoading,
+    isError,
+    refetch,
+  } = api.jury.getMyJuryCups.useQuery();
   const { data: cupsWithResults } = api.jury.getCompletedCupsWithResults.useQuery();
   const { data: myStats } = api.jury.getMyStats.useQuery();
 
@@ -292,6 +297,35 @@ export default function PortalJuryDashboardPage() {
         >
           [LOADING...]
         </span>
+      </div>
+    );
+  }
+
+  // Une requête en échec ne doit pas se confondre avec un espace vide :
+  // « aucune cup » est plausible et masquerait l'incident.
+  if (isError) {
+    return (
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 16,
+          minHeight: 400,
+          textAlign: "center",
+        }}
+      >
+        <span
+          role="alert"
+          className="n-font-data n-label"
+          style={{ color: "var(--n-text-secondary)", fontSize: 13 }}
+        >
+          [ERREUR] VOS CUPS N&apos;ONT PAS PU ÊTRE CHARGÉES
+        </span>
+        <button type="button" className="n-btn-secondary text-xs" onClick={() => void refetch()}>
+          RÉESSAYER
+        </button>
       </div>
     );
   }
@@ -624,10 +658,8 @@ export default function PortalJuryDashboardPage() {
                         PUBLIE LE {formatDate(cup.resultsPublishedAt).toUpperCase()} — {cup.totalProducts} PRODUIT{cup.totalProducts > 1 ? "S" : ""}
                       </p>
                     </div>
-                    <Link href={`/jury/results/${cup.cupId}`} style={{ textDecoration: "none" }}>
-                      <button className="n-btn-ghost" style={{ fontSize: 12, padding: "6px 12px" }}>
-                        VOIR COMPARAISON &gt;
-                      </button>
+                    <Link href={`/jury/results/${cup.cupId}`} style={{ fontSize: 12, padding: "6px 12px", textDecoration: "none" }} className="n-btn-ghost">
+                      VOIR COMPARAISON &gt;
                     </Link>
                   </div>
                 ))}

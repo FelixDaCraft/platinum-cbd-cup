@@ -13,10 +13,9 @@ import { Eyebrow, Field, Check } from "~/components/portal/platinum";
 // ---------------------------------------------------------------------------
 
 interface FormData {
-  // Step 1
-  categoryCode: string;
-  categoryId: string; // real DB id resolved from cup categories
-  // Step 2
+  // Étape 1
+  categoryId: string;
+  // Étape 2
   name: string;
   producer: string;
   origin: string;
@@ -24,30 +23,21 @@ interface FormData {
   thc: string;
   cbd: string;
   hasCoa: boolean;
-  // Step 3
-  email: string;
-  phone: string;
-  companyName: string;
-  siret: string;
-  // Step 4
-  payment: "card" | "sepa";
+  // Étape 4
   accept: boolean;
 }
 
-// ---------------------------------------------------------------------------
-// Design-system category codes — fallback used when cup has no categories
-// ---------------------------------------------------------------------------
+/** Taux de Δ9-THC maximal admis par la réglementation européenne, en %. */
+const MAX_THC_PERCENT = 0.3;
 
-const DESIGN_CATEGORIES = [
-  { code: "CF", name: "Flower · Indoor", fee: 180 },
-  { code: "OG", name: "Flower · Outdoor", fee: 150 },
-  { code: "HA", name: "Hashish", fee: 220 },
-  { code: "EP", name: "Extract · Rosin", fee: 260 },
-  { code: "OI", name: "Full-spectrum Oil", fee: 180 },
-  { code: "TO", name: "Topical", fee: 160 },
-] as const;
-
-const LOGISTICS_FEE = 18;
+/** Les prix sont stockés en centimes côté serveur. */
+function formatEuros(cents: number): string {
+  return (cents / 100).toLocaleString("fr-FR", {
+    style: "currency",
+    currency: "EUR",
+    minimumFractionDigits: cents % 100 === 0 ? 0 : 2,
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Stepper sub-component
@@ -58,7 +48,6 @@ const STEPS = [
   { n: 2, l: "Spécimen" },
   { n: 3, l: "Contact" },
   { n: 4, l: "Paiement" },
-  { n: 5, l: "Confirmation" },
 ];
 
 function Stepper({ step }: { step: number }) {
@@ -160,17 +149,17 @@ export default function RegisterPage() {
   // Get-or-create registration (protectedProcedure — fires once user is confirmed present)
   const getOrCreate = api.registration.getOrCreate.useMutation();
 
+  // Coordonnées de facturation : lues sur le profil producteur, pas ressaisies.
+  const { data: producerProfile } = api.producer.getProfile.useQuery(undefined, {
+    enabled: !!session?.user,
+  });
+
   // addProduct — used at step 4 (Payer) to commit the specimen into the DB
   const addProduct = api.registration.addProduct.useMutation();
 
-  // createCheckoutSession — redirects user to Viva.com after addProduct succeeds
-  const createCheckoutSession = api.registration.createCheckoutSession.useMutation({
-    onSuccess: (data) => {
-      if (data.checkoutUrl) {
-        window.location.href = data.checkoutUrl;
-      }
-    },
-  });
+  // createCheckoutSession — la redirection est déclenchée dans handlePay, qui
+  // traite l'absence d'URL comme une erreur au lieu de laisser croire au succès.
+  const createCheckoutSession = api.registration.createCheckoutSession.useMutation();
 
   // ---------------------------------------------------------------------------
   // Local wizard state
@@ -180,24 +169,15 @@ export default function RegisterPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  // Confirmation-step anonymous code (returned by backend or generated locally)
-  const [anonymousCode, setAnonymousCode] = useState<string | null>(null);
-
   const [data, setData] = useState<FormData>({
-    categoryCode: "CF",
     categoryId: "",
     name: "",
     producer: "",
     origin: "",
     vintage: "",
-    thc: "0.28",
-    cbd: "12.4",
+    thc: "",
+    cbd: "",
     hasCoa: false,
-    email: "",
-    phone: "",
-    companyName: "",
-    siret: "",
-    payment: "card",
     accept: false,
   });
 
@@ -205,55 +185,23 @@ export default function RegisterPage() {
     setData((d) => ({ ...d, [k]: v }));
 
   // ---------------------------------------------------------------------------
-  // Derived fee values
+  // Catégories et frais — lus tels quels dans la cup, jamais devinés
   // ---------------------------------------------------------------------------
 
-  // Map of category code → { id, fee } resolved from real cup data
-  const categoryMap = (() => {
-    if (!cupData?.categories?.length) {
-      // fallback to design constants
-      return Object.fromEntries(
-        DESIGN_CATEGORIES.map((c) => [
-          c.code,
-          { id: "", fee: c.fee, name: c.name },
-        ])
-      );
-    }
-    // Cup has real categories. Try to match by name prefix to design codes.
-    // For each design category, find the cup category whose name contains the code or matches the name prefix.
-    // If no match, map by index.
-    const result: Record<string, { id: string; fee: number; name: string }> = {};
-    cupData.categories.forEach((cat, i) => {
-      const designCat = DESIGN_CATEGORIES[i];
-      if (!designCat) return;
-      const fee =
-        cat.pricePerProduct != null
-          ? cat.pricePerProduct / 100 // stored in cents
-          : (cupData.cup.defaultPricePerProduct != null
-              ? cupData.cup.defaultPricePerProduct / 100
-              : designCat.fee);
-      result[designCat.code] = {
-        id: cat.id,
-        name: cat.name,
-        fee,
-      };
-    });
-    // Fill any remaining design cats that weren't covered
-    DESIGN_CATEGORIES.forEach((c) => {
-      if (!result[c.code]) {
-        result[c.code] = { id: "", fee: c.fee, name: c.name };
-      }
-    });
-    return result;
-  })();
+  const categories = cupData?.categories ?? [];
 
-  const selectedCatEntry = categoryMap[data.categoryCode] ?? {
-    id: "",
-    fee: 180,
-    name: "—",
-  };
-  const fee = selectedCatEntry.fee;
-  const total = fee + LOGISTICS_FEE;
+  /** Prix d'un produit dans cette catégorie, en centimes (override ou défaut cup). */
+  const categoryPriceInCents = (category: { pricePerProduct: number | null }) =>
+    category.pricePerProduct ?? cupData?.cup.defaultPricePerProduct ?? 0;
+
+  const selectedCategory =
+    categories.find((category) => category.id === data.categoryId) ?? null;
+
+  // Le montant débité est celui que le serveur recalcule à partir des produits ;
+  // c'est donc ce prix-là qui doit s'afficher, pas une grille locale.
+  const feeInCents = selectedCategory
+    ? categoryPriceInCents(selectedCategory)
+    : 0;
 
   // ---------------------------------------------------------------------------
   // Initialize registration once cup data is available and user is logged in
@@ -275,7 +223,7 @@ export default function RegisterPage() {
   }, [cupData, session, registrationInitialized, getOrCreate, cupId]);
 
   // ---------------------------------------------------------------------------
-  // Step 4 → "Payer" handler
+  // Étape 4 → "Payer"
   // ---------------------------------------------------------------------------
 
   const handlePay = async () => {
@@ -283,6 +231,29 @@ export default function RegisterPage() {
       setSubmitError("Vous devez accepter le règlement pour continuer.");
       return;
     }
+    if (!selectedCategory) {
+      setSubmitError("Choisissez une catégorie à l'étape 1.");
+      return;
+    }
+    if (!data.name.trim() || !data.producer.trim()) {
+      setSubmitError(
+        "Le nom du spécimen et le producteur sont obligatoires (étape 2)."
+      );
+      return;
+    }
+
+    const thc = Number(data.thc.replace(",", "."));
+    if (!data.thc.trim() || Number.isNaN(thc)) {
+      setSubmitError("Renseignez le taux de Δ9-THC déclaré (étape 2).");
+      return;
+    }
+    if (thc > MAX_THC_PERCENT) {
+      setSubmitError(
+        `Le taux de Δ9-THC déclaré (${data.thc}%) dépasse la limite de ${MAX_THC_PERCENT}% : le spécimen ne peut pas être inscrit.`
+      );
+      return;
+    }
+
     if (!getOrCreate.data?.id) {
       setSubmitError("Inscription non initialisée. Rechargez la page.");
       return;
@@ -290,37 +261,19 @@ export default function RegisterPage() {
 
     const registrationId = getOrCreate.data.id;
 
-    // Resolve real categoryId — if we have one from cup data, use it.
-    // Otherwise the mutation will fail server-side (expected: user must pick a real category).
-    const resolvedCategoryId = selectedCatEntry.id;
-
-    if (!resolvedCategoryId) {
-      // TODO: The design's category codes (CF/OG/HA/EP/OI/TO) are static labels
-      // that don't exist as DB category IDs on this cup. The organizer must create
-      // cup categories in the dashboard first. For now we surface a clear error.
-      setSubmitError(
-        "Aucune catégorie correspondante trouvée dans la base de données. " +
-          "L'organisateur doit créer les catégories pour cette cup."
-      );
-      return;
-    }
-
     setSubmitting(true);
     setSubmitError(null);
 
     try {
-      // Step A: add the product to the registration
-      // NOTE: The addProduct mutation only accepts: registrationId, categoryId, name, description.
-      // Fields collected by the wizard but NOT accepted by addProduct:
-      //   - origin, vintage, thc %, cbd %, hasCoa → TODO: store in product.description or a future schema column
-      //   - phone, companyName, siret → TODO: these belong to the producer profile, not the product
-      //   - payment method (card/sepa) → Viva handles this; wizard's picker is cosmetic only
-      //   - email → already on the user account (passed to Viva as the order customer)
-      const productResult = await addProduct.mutateAsync({
+      // Étape A : enregistrer le produit sur l'inscription.
+      // NOTE: addProduct n'accepte que registrationId, categoryId, name, description.
+      // TODO: origine, millésime, THC, CBD et COA sont empaquetés dans `description`
+      // faute de colonnes dédiées ; ils devraient devenir des attributs structurés
+      // du produit pour alimenter les PDF, les analyses labo et les filtres.
+      await addProduct.mutateAsync({
         registrationId,
-        categoryId: resolvedCategoryId,
-        name: data.name || "Spécimen",
-        // Pack supplementary fields into description as a stopgap
+        categoryId: selectedCategory.id,
+        name: data.name.trim(),
         description: [
           data.producer ? `Producteur: ${data.producer}` : null,
           data.origin ? `Origine: ${data.origin}` : null,
@@ -333,20 +286,26 @@ export default function RegisterPage() {
           .join(" · ") || undefined,
       });
 
-      // Step B: create the Viva payment order
-      // If totalAmount === 0 → confirmFreeRegistration instead (not implemented here,
-      // as cup registration fees are always > 0 in the current design).
-      await createCheckoutSession.mutateAsync({ registrationId });
+      // Étape B : créer la commande Viva et partir sur le checkout hébergé.
+      // L'inscription reste `pending_payment` : elle n'est confirmée qu'au
+      // retour de Viva (page /register/success) ou par le webhook.
+      const session = await createCheckoutSession.mutateAsync({ registrationId });
 
-      // If we reach here without redirect, generate local code for step 5 display
-      // (Viva redirect will have fired; this is the no-redirect fallback)
-      setAnonymousCode(`${data.categoryCode}·${Math.floor(Math.random() * 90 + 10)}`);
-      setStep(5);
+      if (!session.checkoutUrl) {
+        setSubmitError(
+          "Le paiement n'est pas disponible pour le moment. Votre inscription est enregistrée mais non payée : réessayez depuis « Mes inscriptions »."
+        );
+        setSubmitting(false);
+        return;
+      }
+
+      // `submitting` reste vrai : le bouton affiche « Redirection… » jusqu'à ce
+      // que le navigateur quitte la page.
+      window.location.href = session.checkoutUrl;
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Une erreur est survenue.";
       setSubmitError(message);
-    } finally {
       setSubmitting(false);
     }
   };
@@ -411,9 +370,6 @@ export default function RegisterPage() {
   // Main render
   // ---------------------------------------------------------------------------
 
-  const catName =
-    DESIGN_CATEGORIES.find((c) => c.code === data.categoryCode)?.name.split(" · ")[0] ?? "—";
-
   return (
     <div className="page-enter">
       {/* ── HEADER ────────────────────────────────────────────────────────── */}
@@ -440,66 +396,85 @@ export default function RegisterPage() {
       >
         {/* ── LEFT: STEP CONTENT ──────────────────────────────────────────── */}
         <div className="card">
-          {/* ── STEP 1 — CATÉGORIE ────────────────────────────────────────── */}
+          {/* ── ÉTAPE 1 — CATÉGORIE ───────────────────────────────────────── */}
           {step === 1 && (
             <>
               <h2 className="section-title" style={{ fontSize: 22 }}>
                 Choix de la catégorie
               </h2>
-              <div className="grid g-2" style={{ marginTop: 20 }}>
-                {DESIGN_CATEGORIES.map((c) => {
-                  const sel = data.categoryCode === c.code;
-                  const catFee = categoryMap[c.code]?.fee ?? c.fee;
-                  return (
-                    <button
-                      key={c.code}
-                      onClick={() => {
-                        set("categoryCode", c.code);
-                        set("categoryId", categoryMap[c.code]?.id ?? "");
-                      }}
-                      style={{
-                        textAlign: "left",
-                        padding: 20,
-                        cursor: "pointer",
-                        background: sel ? "var(--accent-dim)" : "var(--bg)",
-                        border: `1px solid ${sel ? "var(--accent)" : "var(--line)"}`,
-                        borderRadius: 12,
-                        color: "var(--fg)",
-                        fontFamily: "inherit",
-                        transition:
-                          "border-color .15s ease, background .15s ease",
-                      }}
-                    >
-                      <div
+              {categories.length === 0 ? (
+                <p
+                  style={{
+                    marginTop: 20,
+                    fontSize: 13,
+                    color: "var(--fg-2)",
+                    lineHeight: 1.6,
+                  }}
+                >
+                  Aucune catégorie n&apos;est ouverte sur cette cup pour
+                  l&apos;instant. L&apos;organisateur doit les créer avant que
+                  les inscriptions soient possibles.
+                </p>
+              ) : (
+                <div className="grid g-2" style={{ marginTop: 20 }}>
+                  {categories.map((category) => {
+                    const sel = data.categoryId === category.id;
+                    return (
+                      <button
+                        key={category.id}
+                        onClick={() => set("categoryId", category.id)}
                         style={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
+                          textAlign: "left",
+                          padding: 20,
+                          cursor: "pointer",
+                          background: sel ? "var(--accent-dim)" : "var(--bg)",
+                          border: `1px solid ${sel ? "var(--accent)" : "var(--line)"}`,
+                          borderRadius: 12,
+                          color: "var(--fg)",
+                          fontFamily: "inherit",
+                          transition:
+                            "border-color .15s ease, background .15s ease",
                         }}
                       >
-                        <div className="mono" style={{ fontSize: 22 }}>
-                          {c.code}
-                        </div>
                         <div
-                          className="mono tabular"
                           style={{
-                            fontSize: 13,
-                            color: sel ? "var(--accent)" : "var(--fg-2)",
+                            display: "flex",
+                            alignItems: "baseline",
+                            justifyContent: "space-between",
+                            gap: 12,
                           }}
                         >
-                          €{catFee}
+                          <div className="mono" style={{ fontSize: 15 }}>
+                            {category.name}
+                          </div>
+                          <div
+                            className="mono tabular"
+                            style={{
+                              fontSize: 13,
+                              whiteSpace: "nowrap",
+                              color: sel ? "var(--accent)" : "var(--fg-2)",
+                            }}
+                          >
+                            {formatEuros(categoryPriceInCents(category))}
+                          </div>
                         </div>
-                      </div>
-                      <div
-                        className="mono"
-                        style={{ fontSize: 13, marginTop: 14 }}
-                      >
-                        {c.name}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
+                        {category.description && (
+                          <div
+                            style={{
+                              fontSize: 12.5,
+                              color: "var(--fg-2)",
+                              marginTop: 12,
+                              lineHeight: 1.5,
+                            }}
+                          >
+                            {category.description}
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </>
           )}
 
@@ -561,12 +536,17 @@ export default function RegisterPage() {
                 <div className="grid g-2" style={{ gap: 18 }}>
                   <Field
                     label="Δ9-THC (%) *"
+                    name="thc"
+                    placeholder="0.28"
                     value={data.thc}
                     onChange={(v) => set("thc", v)}
-                    hint="≤ 0.3% UE"
+                    hint={`≤ ${MAX_THC_PERCENT}% UE`}
+                    required
                   />
                   <Field
                     label="CBD total (%)"
+                    name="cbd"
+                    placeholder="12.4"
                     value={data.cbd}
                     onChange={(v) => set("cbd", v)}
                   />
@@ -595,41 +575,57 @@ export default function RegisterPage() {
             </>
           )}
 
-          {/* ── STEP 3 — CONTACT ──────────────────────────────────────────── */}
+          {/* ── ÉTAPE 3 — CONTACT ─────────────────────────────────────────── */}
           {step === 3 && (
             <>
               <h2 className="section-title" style={{ fontSize: 22 }}>
                 Contact
               </h2>
-              <div className="grid g-2" style={{ marginTop: 20, gap: 18 }}>
-                <Field
-                  label="Email *"
-                  placeholder="you@studio.eu"
-                  value={data.email}
-                  onChange={(v) => set("email", v)}
-                  type="email"
-                  required
-                />
-                <Field
-                  label="Téléphone"
-                  placeholder="+33 6 00 00 00 00"
-                  value={data.phone}
-                  onChange={(v) => set("phone", v)}
-                  type="tel"
-                />
-                <Field
-                  label="Raison sociale"
-                  placeholder="Studio Garden SARL"
-                  value={data.companyName}
-                  onChange={(v) => set("companyName", v)}
-                />
-                <Field
-                  label="SIRET / VAT"
-                  placeholder="FR00 000000000"
-                  value={data.siret}
-                  onChange={(v) => set("siret", v)}
-                />
+              {/*
+                Les coordonnées de facturation viennent du profil producteur :
+                les saisir ici serait trompeur, `addProduct` ne les accepte pas
+                et la facture les lit sur le profil.
+              */}
+              <div style={{ marginTop: 20 }}>
+                <div className="kv">
+                  <span className="kv-k">Email du compte</span>
+                  <span className="kv-v">{session.user.email ?? "—"}</span>
+                </div>
+                <div className="kv">
+                  <span className="kv-k">Raison sociale</span>
+                  <span className="kv-v">
+                    {producerProfile?.companyName ?? "—"}
+                  </span>
+                </div>
+                <div className="kv">
+                  <span className="kv-k">SIRET</span>
+                  <span className="kv-v">
+                    {producerProfile?.siret ?? "Non renseigné"}
+                  </span>
+                </div>
+                <div className="kv">
+                  <span className="kv-k">Téléphone</span>
+                  <span className="kv-v">
+                    {producerProfile?.phone ?? "Non renseigné"}
+                  </span>
+                </div>
               </div>
+              <p
+                style={{
+                  marginTop: 16,
+                  fontSize: 12.5,
+                  color: "var(--fg-2)",
+                  lineHeight: 1.6,
+                }}
+              >
+                Ces informations figureront sur votre facture.{" "}
+                <Link
+                  href="/producer/profile"
+                  style={{ color: "var(--accent)", textDecoration: "underline" }}
+                >
+                  Modifier mon profil producteur
+                </Link>
+              </p>
               {/* Envoi du spécimen sub-card */}
               <div
                 style={{
@@ -671,87 +667,53 @@ export default function RegisterPage() {
             </>
           )}
 
-          {/* ── STEP 4 — PAIEMENT ─────────────────────────────────────────── */}
+          {/* ── ÉTAPE 4 — PAIEMENT ────────────────────────────────────────── */}
           {step === 4 && (
             <>
               <h2 className="section-title" style={{ fontSize: 22 }}>
                 Paiement
               </h2>
-              {/* Payment method picker */}
+              {/*
+                Aucun champ de carte ici : la saisie se fait sur la page de
+                paiement hébergée par Viva.com, seule à voir les données de
+                carte. Le moyen de paiement se choisit là-bas.
+              */}
               <div
-                className="grid"
                 style={{
-                  gridTemplateColumns: "1fr 1fr",
-                  gap: 12,
                   marginTop: 20,
+                  padding: 18,
+                  border: "1px solid var(--line)",
+                  borderRadius: 10,
+                  background: "var(--bg)",
                 }}
               >
-                {(
-                  [
-                    ["card", "Carte", "Visa · MC · Amex"],
-                    ["sepa", "SEPA", "Virement bancaire"],
-                  ] as const
-                ).map(([id, t, s]) => {
-                  const sel = data.payment === id;
-                  return (
-                    <button
-                      key={id}
-                      onClick={() => set("payment", id)}
-                      style={{
-                        padding: 20,
-                        textAlign: "left",
-                        cursor: "pointer",
-                        background: sel ? "var(--accent-dim)" : "var(--bg)",
-                        border: `1px solid ${sel ? "var(--accent)" : "var(--line)"}`,
-                        borderRadius: 12,
-                        color: "var(--fg)",
-                        fontFamily: "inherit",
-                      }}
-                    >
-                      <div className="mono" style={{ fontSize: 15 }}>
-                        {t}
-                      </div>
-                      <div
-                        className="mono fg3"
-                        style={{
-                          fontSize: 11,
-                          marginTop: 4,
-                          letterSpacing: ".1em",
-                          textTransform: "uppercase",
-                        }}
-                      >
-                        {s}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Card fields — cosmetic only; real payment handled by Viva checkout */}
-              {data.payment === "card" && (
                 <div
+                  className="mono"
                   style={{
-                    marginTop: 20,
-                    display: "grid",
-                    gridTemplateColumns: "1fr",
-                    gap: 16,
+                    fontSize: 11,
+                    letterSpacing: ".1em",
+                    color: "var(--fg-3)",
+                    textTransform: "uppercase",
+                    marginBottom: 10,
                   }}
                 >
-                  {/*
-                   * TODO: These card fields are UI-only placeholders per the design.
-                   * Actual payment collection happens on Viva's hosted checkout page.
-                   */}
-                  <Field
-                    label="Numéro de carte"
-                    placeholder="4242 4242 4242 4242"
-                    mono
-                  />
-                  <div className="grid g-2" style={{ gap: 16 }}>
-                    <Field label="Expiration" placeholder="MM / AA" mono />
-                    <Field label="CVC" placeholder="123" mono />
-                  </div>
+                  Paiement sécurisé Viva.com
                 </div>
-              )}
+                <p
+                  style={{
+                    fontSize: 13,
+                    color: "var(--fg-2)",
+                    lineHeight: 1.55,
+                    margin: 0,
+                  }}
+                >
+                  En validant, vous serez redirigé vers la page de paiement de{" "}
+                  <b style={{ color: "var(--fg)" }}>Viva.com</b> pour régler{" "}
+                  <b style={{ color: "var(--fg)" }}>{formatEuros(feeInCents)}</b>
+                  . Votre inscription est confirmée dès que le paiement est
+                  encaissé ; vous recevez alors votre facture par email.
+                </p>
+              </div>
 
               {/* Terms checkbox */}
               <label
@@ -799,179 +761,98 @@ export default function RegisterPage() {
             </>
           )}
 
-          {/* ── STEP 5 — CONFIRMATION ─────────────────────────────────────── */}
-          {step === 5 && (
-            <div style={{ textAlign: "center", padding: "30px 10px" }}>
-              <div
-                style={{
-                  width: 80,
-                  height: 80,
-                  borderRadius: "50%",
-                  margin: "0 auto",
-                  border: "1px solid var(--accent)",
-                  display: "grid",
-                  placeItems: "center",
-                  background: "var(--accent-dim)",
-                  boxShadow: "0 0 40px var(--accent-dim)",
-                }}
-              >
-                <span style={{ color: "var(--accent)", fontSize: 30 }}>✓</span>
-              </div>
-              <div
-                className="mono"
-                style={{
-                  fontSize: 11,
-                  letterSpacing: ".15em",
-                  color: "var(--fg-3)",
-                  marginTop: 20,
-                  textTransform: "uppercase",
-                }}
-              >
-                Inscription confirmée
-              </div>
-              <div
-                className="display"
-                style={{
-                  fontSize: "clamp(40px, 5vw, 64px)",
-                  marginTop: 14,
-                }}
-              >
-                {anonymousCode ?? `${data.categoryCode}·${Math.floor(Math.random() * 90 + 10)}`}
-              </div>
-              <div
-                className="mono"
-                style={{
-                  fontSize: 12,
-                  color: "var(--fg-2)",
-                  marginTop: 16,
-                  letterSpacing: ".05em",
-                }}
-              >
-                Votre code anonyme. Gardez-le précieusement.
-              </div>
-              <div
-                style={{
-                  marginTop: 32,
-                  display: "flex",
-                  justifyContent: "center",
-                  gap: 12,
-                }}
-              >
-                <Link href="/">
-                  <button className="btn ghost">Accueil</button>
-                </Link>
-                <Link href={`/cups/${cupId}`}>
-                  <button className="btn accent">
-                    Suivre ma participation{" "}
-                    <span className="btn-arrow">→</span>
-                  </button>
-                </Link>
-              </div>
-            </div>
-          )}
-
-          {/* ── NAV (steps 1-4) ───────────────────────────────────────────── */}
-          {step < 5 && (
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                marginTop: 32,
-                paddingTop: 24,
-                borderTop: "1px solid var(--line)",
+          {/* ── NAV ───────────────────────────────────────────────────────── */}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              marginTop: 32,
+              paddingTop: 24,
+              borderTop: "1px solid var(--line)",
+            }}
+          >
+            <button
+              className="btn ghost"
+              disabled={step === 1}
+              onClick={() => setStep((s) => Math.max(1, s - 1))}
+              style={{ opacity: step === 1 ? 0.3 : 1 }}
+            >
+              ← Précédent
+            </button>
+            <button
+              className="btn accent"
+              disabled={submitting || (step === 1 && !selectedCategory)}
+              onClick={() => {
+                if (step === 4) {
+                  void handlePay();
+                } else {
+                  setStep((s) => Math.min(STEPS.length, s + 1));
+                }
               }}
             >
-              <button
-                className="btn ghost"
-                disabled={step === 1}
-                onClick={() => setStep((s) => Math.max(1, s - 1))}
-                style={{ opacity: step === 1 ? 0.3 : 1 }}
-              >
-                ← Précédent
-              </button>
-              <button
-                className="btn accent"
-                disabled={submitting}
-                onClick={() => {
-                  if (step === 4) {
-                    void handlePay();
-                  } else {
-                    setStep((s) => Math.min(5, s + 1));
-                  }
-                }}
-              >
-                {submitting
-                  ? "Traitement…"
-                  : step === 4
-                    ? "Payer"
-                    : "Continuer"}{" "}
-                {!submitting && <span className="btn-arrow">→</span>}
-              </button>
-            </div>
-          )}
+              {submitting
+                ? "Redirection vers le paiement…"
+                : step === 4
+                  ? `Payer ${formatEuros(feeInCents)}`
+                  : "Continuer"}{" "}
+              {!submitting && <span className="btn-arrow">→</span>}
+            </button>
+          </div>
         </div>
 
-        {/* ── RIGHT: RÉCAPITULATIF (steps 1-4) ────────────────────────────── */}
-        {step < 5 && (
-          <div
-            className="card"
-            style={{ height: "fit-content", position: "sticky", top: 100 }}
-          >
-            <Eyebrow>Récapitulatif</Eyebrow>
-            <div style={{ marginTop: 16 }}>
-              <div className="kv">
-                <span className="kv-k">Catégorie</span>
-                <span className="kv-v">
-                  {data.categoryCode} · {catName}
-                </span>
-              </div>
-              <div className="kv">
-                <span className="kv-k">Spécimen</span>
-                <span className="kv-v">{data.name || "—"}</span>
-              </div>
-              <div className="kv">
-                <span className="kv-k">Producteur</span>
-                <span className="kv-v">{data.producer || "—"}</span>
-              </div>
-              <div className="kv">
-                <span className="kv-k">Frais catégorie</span>
-                <span className="kv-v">€{fee}</span>
-              </div>
-              <div className="kv">
-                <span className="kv-k">Logistique</span>
-                <span className="kv-v">€{LOGISTICS_FEE}</span>
-              </div>
+        {/* ── DROITE : RÉCAPITULATIF ──────────────────────────────────────── */}
+        <div
+          className="card"
+          style={{ height: "fit-content", position: "sticky", top: 100 }}
+        >
+          <Eyebrow>Récapitulatif</Eyebrow>
+          <div style={{ marginTop: 16 }}>
+            <div className="kv">
+              <span className="kv-k">Catégorie</span>
+              <span className="kv-v">{selectedCategory?.name ?? "—"}</span>
             </div>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "baseline",
-                marginTop: 16,
-                paddingTop: 16,
-                borderTop: "1px solid var(--line-strong)",
-              }}
-            >
-              <span
-                className="mono"
-                style={{
-                  fontSize: 11,
-                  letterSpacing: ".1em",
-                  color: "var(--fg-3)",
-                  textTransform: "uppercase",
-                }}
-              >
-                Total TTC
-              </span>
-              <span
-                className="mono tabular"
-                style={{ fontSize: 28, fontWeight: 300 }}
-              >
-                €{total}
-              </span>
+            <div className="kv">
+              <span className="kv-k">Spécimen</span>
+              <span className="kv-v">{data.name || "—"}</span>
+            </div>
+            <div className="kv">
+              <span className="kv-k">Producteur</span>
+              <span className="kv-v">{data.producer || "—"}</span>
+            </div>
+            <div className="kv">
+              <span className="kv-k">Frais d&apos;inscription</span>
+              <span className="kv-v">{formatEuros(feeInCents)}</span>
             </div>
           </div>
-        )}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "baseline",
+              marginTop: 16,
+              paddingTop: 16,
+              borderTop: "1px solid var(--line-strong)",
+            }}
+          >
+            <span
+              className="mono"
+              style={{
+                fontSize: 11,
+                letterSpacing: ".1em",
+                color: "var(--fg-3)",
+                textTransform: "uppercase",
+              }}
+            >
+              Total
+            </span>
+            <span
+              className="mono tabular"
+              style={{ fontSize: 28, fontWeight: 300 }}
+            >
+              {formatEuros(feeInCents)}
+            </span>
+          </div>
+        </div>
       </div>
     </div>
   );

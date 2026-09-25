@@ -178,7 +178,7 @@ export function PhaseDatesForm({
 
   const updatePhaseDates = api.cup.updatePhaseDates.useMutation({
     onSuccess: () => {
-      toast.success("Dates des phases mises a jour");
+      toast.success("Dates des phases mises à jour");
       utils.cup.getPhaseDates.invalidate({ cupId });
       onSuccess?.();
     },
@@ -196,14 +196,14 @@ export function PhaseDatesForm({
     if (dates.registrationOpenAt && dates.registrationCloseAt) {
       if (dates.registrationOpenAt >= dates.registrationCloseAt) {
         errors.registrationCloseAt =
-          "Doit etre apres l'ouverture des inscriptions";
+          "Doit être après l'ouverture des inscriptions";
       }
     }
 
     // Check rating dates order
     if (dates.ratingStartAt && dates.ratingEndAt) {
       if (dates.ratingStartAt >= dates.ratingEndAt) {
-        errors.ratingEndAt = "Doit etre apres le debut de la notation";
+        errors.ratingEndAt = "Doit être après le début de la notation";
       }
     }
 
@@ -211,7 +211,7 @@ export function PhaseDatesForm({
     if (dates.registrationCloseAt && dates.ratingStartAt) {
       if (dates.registrationCloseAt > dates.ratingStartAt) {
         errors.ratingStartAt =
-          "Doit etre apres ou egal a la cloture des inscriptions";
+          "Doit être après ou égal à la clôture des inscriptions";
       }
     }
 
@@ -268,7 +268,7 @@ export function PhaseDatesForm({
         />
 
         <DateTimeField
-          label="Cloture des inscriptions"
+          label="Clôture des inscriptions"
           fieldName="registrationCloseAt"
           value={dates.registrationCloseAt}
           onChange={(date) => handleDateChange("registrationCloseAt", date)}
@@ -277,7 +277,7 @@ export function PhaseDatesForm({
         />
 
         <DateTimeField
-          label="Debut de la notation"
+          label="Début de la notation"
           fieldName="ratingStartAt"
           value={dates.ratingStartAt}
           onChange={(date) => handleDateChange("ratingStartAt", date)}
@@ -296,7 +296,7 @@ export function PhaseDatesForm({
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Laissez les dates vides pour gerer les transitions manuellement.
+        Laissez les dates vides pour gérer les transitions manuellement.
       </p>
 
       {cupStatus !== "draft" && (

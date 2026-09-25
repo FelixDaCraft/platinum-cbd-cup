@@ -7,7 +7,6 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowLeft, ArrowRight, Loader2, MailCheck } from "lucide-react";
 import { toast } from "sonner";
-import { motion } from "framer-motion";
 
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -111,13 +110,12 @@ function ForgotPasswordForm() {
     "focus:bg-background focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
   );
 
+  // Animation d'apparition en CSS (tw-animate-css) plutôt qu'en JS :
+  // framer-motion pesait ~70 Ko compressés dans le premier chargement des
+  // quatre pages d'authentification — celles que les jurés et producteurs
+  // ouvrent en premier — pour une simple apparition.
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, ease: "easeOut" }}
-      className="w-full max-w-md relative z-10"
-    >
+    <div className="w-full max-w-md relative z-10 animate-in fade-in slide-in-from-bottom-5 duration-500 ease-out">
       <div className="bg-card/80 backdrop-blur-xl rounded-2xl border border-border/50 shadow-2xl shadow-black/5 overflow-hidden">
         {/* Accent line at top */}
         <div
@@ -283,6 +281,6 @@ function ForgotPasswordForm() {
           </div>
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 }

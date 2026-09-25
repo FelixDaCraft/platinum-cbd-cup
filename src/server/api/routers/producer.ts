@@ -1,16 +1,14 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { nanoid } from "nanoid";
-import { eq, and, count, isNotNull, ne, desc } from "drizzle-orm";
+import { eq, and, or, count, isNotNull, ne, desc } from "drizzle-orm";
 
 import {
   createTRPCRouter,
   protectedProcedure,
-  publicProcedure,
   organizerProcedure,
+  type AuthedContext,
 } from "~/server/api/trpc";
-import { db } from "~/server/db";
-import { auth } from "~/lib/auth";
 import * as schema from "~/server/db/schema";
 import {
   producerProfileUpdateSchema,
@@ -23,12 +21,7 @@ import {
 } from "~/server/services/results-pdf.service";
 import { getMaxScoreForScale } from "~/lib/validations/labels";
 
-type ProtectedContext = {
-  db: typeof db;
-  userId: string;
-};
-
-const getProducerIdByUser = async (ctx: ProtectedContext) => {
+const getProducerIdByUser = async (ctx: AuthedContext) => {
   const producer = await ctx.db.query.producers.findFirst({
     where: (producers, { eq: eqFn }) => eqFn(producers.userId, ctx.userId),
     columns: { id: true },
@@ -38,7 +31,7 @@ const getProducerIdByUser = async (ctx: ProtectedContext) => {
 };
 
 const requireProducerIdByUser = async (
-  ctx: ProtectedContext,
+  ctx: AuthedContext,
   message: string
 ) => {
   const producerId = await getProducerIdByUser(ctx);
@@ -110,6 +103,28 @@ export const producerRouter = createTRPCRouter({
         });
       }
 
+      // La suppression cascade jusqu'aux produits, aux notes des jurés et aux
+      // factures numérotées (trou dans la séquence INV-YYYY-XXXXX). On la
+      // refuse dès qu'une inscription confirmée ou facturée existe.
+      const blocking = await ctx.db.query.registrations.findFirst({
+        where: and(
+          eq(schema.registrations.producerId, input.producerId),
+          or(
+            eq(schema.registrations.status, "confirmed"),
+            isNotNull(schema.registrations.invoiceNumber)
+          )
+        ),
+        columns: { id: true },
+      });
+
+      if (blocking) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message:
+            "Ce producteur a une inscription confirmée ou facturée : sa suppression effacerait des factures et des notes de jurés",
+        });
+      }
+
       await ctx.db
         .delete(schema.producers)
         .where(eq(schema.producers.id, input.producerId));
@@ -137,6 +152,33 @@ export const producerRouter = createTRPCRouter({
         throw new TRPCError({
           code: "CONFLICT",
           message: "Un profil producteur existe deja",
+        });
+      }
+
+      // Conflit d'intérêts : un juré ne peut pas déposer de produits. Il serait
+      // de plus redirigé vers /producer par getUserPortalAccess et perdrait
+      // l'accès à son espace de notation.
+      const juryProfile = await ctx.db.query.juryProfiles.findFirst({
+        where: (juryProfiles, { eq: eqFn }) => eqFn(juryProfiles.userId, ctx.userId),
+        columns: { id: true },
+      });
+
+      // Un juré peut avoir été rattaché à une cup sans profil juré (invitation
+      // par code) : c'est `cup_juries` qui porte le droit de notation.
+      const juryMembership = await ctx.db.query.cupJuries.findFirst({
+        where: (cupJuries, { eq: eqFn, and: andFn }) =>
+          andFn(
+            eqFn(cupJuries.userId, ctx.userId),
+            eqFn(cupJuries.isActive, true)
+          ),
+        columns: { id: true },
+      });
+
+      if (juryProfile !== undefined || juryMembership !== undefined) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message:
+            "Votre compte est un compte juré : il ne peut pas créer de profil producteur",
         });
       }
 

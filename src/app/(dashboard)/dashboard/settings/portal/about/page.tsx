@@ -36,7 +36,12 @@ const cardTitleStyle: React.CSSProperties = {
 
 export default function AboutEditorPage() {
   const utils = api.useUtils();
-  const { data, isLoading } = api.organizationAbout.get.useQuery();
+  const {
+    data,
+    isLoading,
+    isError,
+    refetch,
+  } = api.organizationAbout.get.useQuery();
 
   const [history, setHistory] = useState("");
   const [mission, setMission] = useState("");
@@ -101,6 +106,21 @@ export default function AboutEditorPage() {
         <span style={{ fontFamily: "'Space Mono', monospace", color: "var(--n-text-secondary)" }}>
           [LOADING...]
         </span>
+      </div>
+    );
+  }
+
+  // Une requête en échec ne doit pas se confondre avec une page vide :
+  // un écran « aucune donnée » masquerait l'incident.
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4 text-center">
+        <span role="alert" className="n-label" style={{ color: "var(--n-text-secondary)" }}>
+          [ERREUR] LA PAGE À PROPOS N&apos;A PAS PU ÊTRE CHARGÉE
+        </span>
+        <button type="button" className="n-btn-secondary text-xs" onClick={() => void refetch()}>
+          RÉESSAYER
+        </button>
       </div>
     );
   }

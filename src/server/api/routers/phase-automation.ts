@@ -1,15 +1,34 @@
+import { createHash, timingSafeEqual } from "node:crypto";
+
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
 import * as schema from "~/server/db/schema";
-import { eq } from "drizzle-orm";
+import type { db as Database } from "~/server/db";
+import { and, eq, isNotNull, lte } from "drizzle-orm";
 
 /**
- * Phase automation router for automatic status transitions
- * Called by cron jobs (Trigger.dev or similar) to automatically
- * transition cups based on configured dates
+ * Comparaison a temps constant du secret de cron.
  *
- * SECURITY: Protected by CRON_SECRET environment variable
+ * Les deux valeurs sont hachees avant comparaison pour que `timingSafeEqual`
+ * recoive toujours deux buffers de meme longueur (il leve une exception sinon,
+ * ce qui divulguerait la longueur du secret attendu).
+ */
+function cronSecretMatches(provided: string, expected: string): boolean {
+  return timingSafeEqual(
+    createHash("sha256").update(provided).digest(),
+    createHash("sha256").update(expected).digest()
+  );
+}
+
+/**
+ * Routeur d'automatisation des phases.
+ *
+ * Point d'entrée HTTP du traitement planifié, protégé par CRON_SECRET. Le
+ * travail lui-même vit dans `processDuePhaseTransitions` (plus bas), qu'un
+ * script d'hôte peut appeler directement. La mention « Trigger.dev » d'origine
+ * était un vestige du SaaS CupMetrics : ce déploiement n'a pas d'ordonnanceur
+ * applicatif.
  */
 export const phaseAutomationRouter = createTRPCRouter({
   /**
@@ -29,101 +48,96 @@ export const phaseAutomationRouter = createTRPCRouter({
     .input(z.object({ cronSecret: z.string() }))
     .mutation(async ({ ctx, input }) => {
       // Validate cron secret to prevent unauthorized access
+      // CRON_SECRET n'est pas declare dans src/env.js : il echappe donc a la
+      // validation de demarrage et son absence ne se voit qu'ici.
       const expectedSecret = process.env.CRON_SECRET;
-      if (!expectedSecret || input.cronSecret !== expectedSecret) {
+      if (!expectedSecret) {
+        console.error(
+          "[Phase Automation] CRON_SECRET absent : aucune transition automatique ne peut s'executer."
+        );
         throw new TRPCError({
           code: "UNAUTHORIZED",
           message: "Invalid cron secret",
         });
       }
-      const now = new Date();
-      const transitions: { cupId: string; from: string; to: string }[] = [];
 
-      // Transition 1: published -> registration_closed
-      // When registrationCloseAt is reached
-      const cupsToCloseRegistration = await ctx.db.query.cups.findMany({
-        where: (cups, { and: andFn, eq: eqFn, lte: lteFn, isNotNull: isNotNullFn }) =>
-          andFn(
-            eqFn(cups.status, "published"),
-            isNotNullFn(cups.registrationCloseAt),
-            lteFn(cups.registrationCloseAt, now)
-          ),
-      });
-
-      for (const cup of cupsToCloseRegistration) {
-        await ctx.db
-          .update(schema.cups)
-          .set({ status: "registration_closed", updatedAt: now })
-          .where(eq(schema.cups.id, cup.id));
-
-        transitions.push({
-          cupId: cup.id,
-          from: "published",
-          to: "registration_closed",
+      if (!cronSecretMatches(input.cronSecret, expectedSecret)) {
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "Invalid cron secret",
         });
-
-        console.log(`[Phase Automation] Cup ${cup.id} (${cup.name}): registration closed automatically`);
-        // TODO (post-MVP): Send notification to organizer via Resend
       }
-
-      // Transition 2: registration_closed -> rating
-      // When ratingStartAt is reached
-      const cupsToStartRating = await ctx.db.query.cups.findMany({
-        where: (cups, { and: andFn, eq: eqFn, lte: lteFn, isNotNull: isNotNullFn }) =>
-          andFn(
-            eqFn(cups.status, "registration_closed"),
-            isNotNullFn(cups.ratingStartAt),
-            lteFn(cups.ratingStartAt, now)
-          ),
-      });
-
-      for (const cup of cupsToStartRating) {
-        await ctx.db
-          .update(schema.cups)
-          .set({ status: "rating", updatedAt: now })
-          .where(eq(schema.cups.id, cup.id));
-
-        transitions.push({
-          cupId: cup.id,
-          from: "registration_closed",
-          to: "rating",
-        });
-
-        console.log(`[Phase Automation] Cup ${cup.id} (${cup.name}): rating phase started automatically`);
-        // TODO (post-MVP): Send notification to organizer via Resend
-      }
-
-      // Transition 3: rating -> completed
-      // When ratingEndAt is reached
-      const cupsToComplete = await ctx.db.query.cups.findMany({
-        where: (cups, { and: andFn, eq: eqFn, lte: lteFn, isNotNull: isNotNullFn }) =>
-          andFn(
-            eqFn(cups.status, "rating"),
-            isNotNullFn(cups.ratingEndAt),
-            lteFn(cups.ratingEndAt, now)
-          ),
-      });
-
-      for (const cup of cupsToComplete) {
-        await ctx.db
-          .update(schema.cups)
-          .set({ status: "completed", updatedAt: now })
-          .where(eq(schema.cups.id, cup.id));
-
-        transitions.push({
-          cupId: cup.id,
-          from: "rating",
-          to: "completed",
-        });
-
-        console.log(`[Phase Automation] Cup ${cup.id} (${cup.name}): cup completed automatically`);
-        // TODO (post-MVP): Send notification to organizer via Resend
-      }
-
-      return {
-        transitionsCount: transitions.length,
-        transitions,
-        executedAt: now,
-      };
+      return processDuePhaseTransitions(ctx.db);
     }),
 });
+
+/** Une transition de phase, telle que la rapporte le traitement planifié. */
+export type PhaseTransition = { cupId: string; from: string; to: string };
+
+/**
+ * Fait avancer les cups dont la date de phase est échue.
+ *
+ * Exporté hors de la procédure tRPC pour qu'un planificateur puisse l'appeler
+ * directement — comme `processDueAccountDeletions` — sans avoir à présenter
+ * CRON_SECRET ni à monter un contexte tRPC. Sans appelant, les dates saisies
+ * dans config/phases n'ont aucun effet et l'organisateur doit changer chaque
+ * statut à la main.
+ */
+export async function processDuePhaseTransitions(
+  db: typeof Database,
+  options: { now?: Date } = {}
+): Promise<{ transitionsCount: number; transitions: PhaseTransition[]; executedAt: Date }> {
+  const now = options.now ?? new Date();
+  const transitions: PhaseTransition[] = [];
+
+  // Chaque transition est conditionnée au statut de départ dans le WHERE de
+  // l'UPDATE : deux exécutions concurrentes du planificateur (ou un
+  // recouvrement avec une action manuelle de l'organisateur) ne peuvent pas
+  // faire sauter une phase.
+  const steps = [
+    {
+      from: "published" as const,
+      to: "registration_closed" as const,
+      dateColumn: schema.cups.registrationCloseAt,
+      label: "registration closed automatically",
+    },
+    {
+      from: "registration_closed" as const,
+      to: "rating" as const,
+      dateColumn: schema.cups.ratingStartAt,
+      label: "rating phase started automatically",
+    },
+    {
+      from: "rating" as const,
+      to: "completed" as const,
+      dateColumn: schema.cups.ratingEndAt,
+      label: "cup completed automatically",
+    },
+  ];
+
+  for (const step of steps) {
+    const moved = await db
+      .update(schema.cups)
+      .set({ status: step.to, updatedAt: now })
+      .where(
+        and(
+          eq(schema.cups.status, step.from),
+          isNotNull(step.dateColumn),
+          lte(step.dateColumn, now)
+        )
+      )
+      .returning({ id: schema.cups.id, name: schema.cups.name });
+
+    for (const cup of moved) {
+      transitions.push({ cupId: cup.id, from: step.from, to: step.to });
+      console.log(`[Phase Automation] Cup ${cup.id} (${cup.name}): ${step.label}`);
+      // TODO (post-MVP): Send notification to organizer via Resend
+    }
+  }
+
+  return {
+    transitionsCount: transitions.length,
+    transitions,
+    executedAt: now,
+  };
+}

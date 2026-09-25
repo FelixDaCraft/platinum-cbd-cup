@@ -9,20 +9,20 @@
  *   await notifyProductStatusChange(productId, oldStatus, newStatus);
  */
 
-import { Resend } from "resend";
 import { eq } from "drizzle-orm";
 import { db } from "~/server/db";
 import * as schema from "~/server/db/schema";
 import { env } from "~/env";
-
-const resend = new Resend(env.RESEND_API_KEY);
-
-/**
- * Return the single-tenant public base URL.
- */
-function getPortalBaseUrl(): string {
-  return process.env.NEXT_PUBLIC_APP_URL ?? env.BETTER_AUTH_URL;
-}
+import { getPortalBaseUrl } from "./app-url";
+import {
+  escapeHtml,
+  renderButton,
+  renderCallout,
+  renderEmailLayout,
+  renderGreeting,
+  renderParagraph,
+  sendEmail,
+} from "./email";
 
 /**
  * Product status labels for display in emails
@@ -97,42 +97,29 @@ export async function notifyProductStatusChange(
     }
 
     // Send email
-    const result = await resend.emails.send({
-      from: env.EMAIL_FROM,
+    const result = await sendEmail({
+      scope: "Product Notification",
+      ref: `product ${productId}`,
       to: user.email,
       subject: `${product.name} - Statut mis a jour`,
-      html: `
-        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px; background-color: #ffffff;">
-          <div style="text-align: center; margin-bottom: 32px;">
-            <h1 style="color: #f59e0b; font-size: 32px; margin: 0;">
-              <span style="color: #f59e0b;">Cup</span><span style="color: #1f2937;">Metrics</span>
-            </h1>
-          </div>
-
-          <h2 style="color: #1f2937; font-size: 24px; margin-bottom: 16px;">
-            Mise a jour du statut de votre produit
-          </h2>
-
-          <p style="color: #4b5563; font-size: 16px; line-height: 1.6; margin-bottom: 24px;">
-            Bonjour ${user.name ?? "Producteur"},
-          </p>
-
-          <p style="color: #4b5563; font-size: 16px; line-height: 1.6; margin-bottom: 24px;">
-            Le statut de votre produit <strong>${product.name}</strong> inscrit a la competition
-            <strong>${cup.name}</strong> a ete mis a jour.
-          </p>
+      html: renderEmailLayout({
+        title: "Mise a jour du statut de votre produit",
+        body: `
+      ${renderGreeting(user.name ?? "Producteur")}
+      ${renderParagraph(`Le statut de votre produit <strong>${escapeHtml(product.name)}</strong> inscrit a la competition
+            <strong>${escapeHtml(cup.name)}</strong> a ete mis a jour.`)}
 
           <div style="background-color: #f9fafb; border-radius: 8px; padding: 24px; margin-bottom: 24px;">
             <div style="display: flex; align-items: center; justify-content: center; gap: 16px;">
               <div style="text-align: center;">
                 <span style="display: inline-block; padding: 8px 16px; border-radius: 9999px; background-color: ${oldStatusInfo.color}20; color: ${oldStatusInfo.color}; font-weight: 500;">
-                  ${oldStatusInfo.label}
+                  ${escapeHtml(oldStatusInfo.label)}
                 </span>
               </div>
-              <div style="font-size: 24px; color: #9ca3af;">→</div>
+              <div style="font-size: 24px; color: #9ca3af;">&rarr;</div>
               <div style="text-align: center;">
                 <span style="display: inline-block; padding: 8px 16px; border-radius: 9999px; background-color: ${newStatusInfo.color}20; color: ${newStatusInfo.color}; font-weight: 600;">
-                  ${newStatusInfo.label}
+                  ${escapeHtml(newStatusInfo.label)}
                 </span>
               </div>
             </div>
@@ -140,32 +127,19 @@ export async function notifyProductStatusChange(
 
           ${getStatusExplanation(newStatus)}
 
-          <div style="text-align: center; margin-top: 32px;">
-            <a href="${portalBaseUrl}/producer/registrations"
-               style="display: inline-block; padding: 14px 28px; background-color: #f59e0b; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">
-              Voir mes inscriptions
-            </a>
-          </div>
-
-          <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 32px 0;" />
-
-          <p style="color: #9ca3af; font-size: 14px; text-align: center;">
-            Vous recevez cet email car vous avez active les notifications pour vos produits.
+          ${renderButton(`${portalBaseUrl}/producer/registrations`, "Voir mes inscriptions")}`,
+        footerHtml: `Vous recevez cet email car vous avez active les notifications pour vos produits.
             <br />
-            <a href="${portalBaseUrl}/producer/profile" style="color: #f59e0b;">
+            <a href="${portalBaseUrl}/producer/profile" style="color: #d4af37;">
               Gerer mes preferences de notification
-            </a>
-          </p>
-        </div>
-      `,
+            </a>`,
+      }),
     });
 
-    if (result.error) {
-      console.error("[Product Notification] Resend error:", result.error);
-      return { success: false, error: result.error.message };
+    if (!result.success) {
+      return { success: false, error: result.error };
     }
 
-    console.log(`[Product Notification] Email sent successfully to ${user.email}`);
     return { success: true };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
@@ -180,32 +154,29 @@ export async function notifyProductStatusChange(
 function getStatusExplanation(status: string): string {
   switch (status) {
     case "received":
-      return `
-        <div style="background-color: #eff6ff; border-radius: 8px; padding: 16px; margin-bottom: 24px; border-left: 4px solid #3b82f6;">
-          <p style="color: #1e40af; margin: 0; font-size: 14px;">
-            <strong>Echantillon recu</strong><br />
-            L'organisateur a confirme la reception de votre echantillon. Il sera bientot evalue par les jurys.
-          </p>
-        </div>
-      `;
+      return renderCallout({
+        content: `<strong>Echantillon recu</strong><br />
+            L'organisateur a confirme la reception de votre echantillon. Il sera bientot evalue par les jurys.`,
+        background: "#eff6ff",
+        textColor: "#1e40af",
+        borderColor: "#3b82f6",
+      });
     case "rating":
-      return `
-        <div style="background-color: #f5f3ff; border-radius: 8px; padding: 16px; margin-bottom: 24px; border-left: 4px solid #8b5cf6;">
-          <p style="color: #5b21b6; margin: 0; font-size: 14px;">
-            <strong>En cours de notation</strong><br />
-            Votre produit est actuellement en train d'etre evalue par les jurys. Les resultats seront disponibles une fois la notation terminee.
-          </p>
-        </div>
-      `;
+      return renderCallout({
+        content: `<strong>En cours de notation</strong><br />
+            Votre produit est actuellement en train d'etre evalue par les jurys. Les resultats seront disponibles une fois la notation terminee.`,
+        background: "#f5f3ff",
+        textColor: "#5b21b6",
+        borderColor: "#8b5cf6",
+      });
     case "rated":
-      return `
-        <div style="background-color: #f0fdf4; border-radius: 8px; padding: 16px; margin-bottom: 24px; border-left: 4px solid #22c55e;">
-          <p style="color: #166534; margin: 0; font-size: 14px;">
-            <strong>Notation terminee</strong><br />
-            La notation de votre produit est terminee. Connectez-vous pour consulter vos resultats detailles.
-          </p>
-        </div>
-      `;
+      return renderCallout({
+        content: `<strong>Notation terminee</strong><br />
+            La notation de votre produit est terminee. Connectez-vous pour consulter vos resultats detailles.`,
+        background: "#f0fdf4",
+        textColor: "#166534",
+        borderColor: "#22c55e",
+      });
     default:
       return "";
   }

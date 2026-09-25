@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, json } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, jsonb } from "drizzle-orm/pg-core";
 
 /**
  * Team member structure
@@ -26,13 +26,13 @@ export const organizationAbout = pgTable("organization_about", {
   values: text("values"),
 
   // Gallery images (array of URLs)
-  galleryImages: json("gallery_images").$type<string[]>().default([]),
+  galleryImages: jsonb("gallery_images").$type<string[]>().default([]),
 
   // Team members
-  teamMembers: json("team_members").$type<TeamMember[]>().default([]),
+  teamMembers: jsonb("team_members").$type<TeamMember[]>().default([]),
 
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export type OrganizationAbout = typeof organizationAbout.$inferSelect;

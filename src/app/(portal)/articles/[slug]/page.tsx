@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
 import { notFound } from "next/navigation";
@@ -6,9 +7,62 @@ import { db } from "~/server/db";
 import * as schema from "~/server/db/schema";
 import { Eyebrow } from "~/components/portal/platinum";
 import { getCategoryColor } from "~/server/db/schema/articles";
+import { baseUrl, imagePartage } from "../../_lib/seo";
 
 interface Props {
   params: Promise<{ slug: string }>;
+}
+
+/** Une image stockée dans /uploads est relative : Open Graph exige un absolu. */
+function absoluteUrl(url: string): string {
+  return url.startsWith("http") ? url : `${baseUrl()}${url}`;
+}
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { slug } = await params;
+
+  const article = await db.query.articles.findFirst({
+    where: eq(schema.articles.slug, slug),
+    columns: {
+      title: true,
+      excerpt: true,
+      status: true,
+      coverImage: true,
+      publishedAt: true,
+      updatedAt: true,
+    },
+  });
+
+  // Brouillon ou article supprimé : la page renvoie un 404, le crawler ne
+  // doit pas garder l'URL en mémoire.
+  if (!article || article.status !== "published") {
+    return { title: "Article introuvable", robots: { index: false, follow: false } };
+  }
+
+  const url = `${baseUrl()}/articles/${slug}`;
+  const description =
+    article.excerpt ?? `${article.title} — actualité de la Platinum CBD Cup.`;
+
+  return {
+    title: article.title,
+    description,
+    alternates: { canonical: url },
+    openGraph: {
+      type: "article",
+      title: article.title,
+      description,
+      url,
+      publishedTime: article.publishedAt?.toISOString(),
+      modifiedTime: article.updatedAt?.toISOString(),
+      images: imagePartage(article.coverImage, article.title),
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: article.title,
+      description,
+      ...(article.coverImage ? { images: [absoluteUrl(article.coverImage)] } : {}),
+    },
+  };
 }
 
 function formatDate(date: Date | null | undefined): string {

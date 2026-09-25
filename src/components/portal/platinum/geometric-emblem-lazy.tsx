@@ -10,42 +10,12 @@ import dynamic from "next/dynamic";
  * component actually mounts on the client.
  *
  * SSR is disabled because Three.js needs `window` to initialize.
+ *
+ * Ce module ne doit contenir aucun effet de bord : il est importé
+ * statiquement par le barrel platinum, donc par pratiquement toutes les
+ * pages. Le filtre dev-only du bruit GLTFLoader vit dans geometric-emblem.tsx,
+ * dans un effet du composant.
  */
-
-/**
- * Silence a known dev-only Three.js noise.
- *
- * The Drei `useGLTF` cache + React Strict Mode double-mount + Next dev
- * HMR race cause GLTFLoader to log
- *   "THREE.GLTFLoader: Couldn't load texture blob:http://..."
- * when the component unmounts before all embedded textures finish
- * parsing. The Canvas retries on remount and the model still renders
- * correctly, but Next.js' dev error overlay surfaces every console.error
- * as a blocking modal which hurts iteration speed.
- *
- * We filter exactly that prefix once, on the client, and leave every
- * other error untouched.
- *
- * Development only. This used to run in production too, where it silently
- * swallowed the very same message when a CSP rule blocked the textures for
- * real — the emblem rendered untextured with a clean console. Never hide a
- * loader error on a build where it is the only symptom left.
- */
-if (typeof window !== "undefined" && process.env.NODE_ENV === "development") {
-  const original = console.error;
-  // Three.js passes the prefix and message as separate console.error args
-  // ("THREE.GLTFLoader:", "Couldn't load texture blob:..."), so we can't
-  // just inspect args[0]. Join everything stringly and look for the unique
-  // substring instead.
-  console.error = (...args: unknown[]) => {
-    const joined = args
-      .map((a) => (typeof a === "string" ? a : ""))
-      .join(" ");
-    if (joined.includes("Couldn't load texture blob:")) return;
-    return original.apply(console, args as []);
-  };
-}
-
 export const GeometricEmblem = dynamic(
   () =>
     import("./geometric-emblem").then((m) => ({ default: m.GeometricEmblem })),

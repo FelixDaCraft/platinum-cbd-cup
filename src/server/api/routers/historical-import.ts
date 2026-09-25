@@ -5,13 +5,9 @@
 
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { eq } from "drizzle-orm";
+import { count, countDistinct, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
-import {
-  createTRPCRouter,
-  organizerProcedure,
-  protectedProcedure,
-} from "~/server/api/trpc";
+import { createTRPCRouter, organizerProcedure } from "~/server/api/trpc";
 import * as schema from "~/server/db/schema";
 import { historicalMedalEnum } from "~/server/db/schema/historical-imports";
 
@@ -88,8 +84,10 @@ export const historicalImportRouter = createTRPCRouter({
 
   /**
    * Get a single historical cup with its results
+   * Organisateur uniquement : les résultats importés portent les emails des
+   * producteurs historiques.
    */
-  getById: protectedProcedure
+  getById: organizerProcedure
     .input(z.object({ id: z.string().min(1) }))
     .query(async ({ ctx, input }) => {
       const historicalCup = await ctx.db.query.historicalCups.findFirst({
@@ -317,11 +315,30 @@ export const historicalImportRouter = createTRPCRouter({
         }
       }
 
+      // Recomptés depuis la base et non depuis le lot courant : un second
+      // import sur la même édition écrasait les compteurs avec ses seuls
+      // totaux, effaçant tout ce qui avait été importé avant lui.
+      const [productsTotal] = await ctx.db
+        .select({ value: count() })
+        .from(schema.historicalResults)
+        .where(
+          eq(schema.historicalResults.historicalCupId, input.historicalCupId)
+        );
+
+      const [producersTotal] = await ctx.db
+        .select({
+          value: countDistinct(schema.historicalResults.historicalProducerId),
+        })
+        .from(schema.historicalResults)
+        .where(
+          eq(schema.historicalResults.historicalCupId, input.historicalCupId)
+        );
+
       await ctx.db
         .update(schema.historicalCups)
         .set({
-          productsCount: resultsCreated,
-          producersCount: producersCreated,
+          productsCount: productsTotal?.value ?? resultsCreated,
+          producersCount: producersTotal?.value ?? producersCreated,
           updatedAt: new Date(),
         })
         .where(eq(schema.historicalCups.id, input.historicalCupId));

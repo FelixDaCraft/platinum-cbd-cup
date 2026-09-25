@@ -31,11 +31,17 @@ function ProductDetailsInline({
   productId: string;
   ratingScale: RatingScale;
 }) {
-  const { data: criteriaData, isLoading: loadingCriteria } =
-    api.producer.getMyProductCriteriaScores.useQuery({ productId }, { enabled: true });
+  const {
+    data: criteriaData,
+    isLoading: loadingCriteria,
+    isError: criteriaError,
+  } = api.producer.getMyProductCriteriaScores.useQuery({ productId }, { enabled: true });
 
-  const { data: juryData, isLoading: loadingJury } =
-    api.producer.getMyProductJuryScores.useQuery({ productId }, { enabled: true });
+  const {
+    data: juryData,
+    isLoading: loadingJury,
+    isError: juryError,
+  } = api.producer.getMyProductJuryScores.useQuery({ productId }, { enabled: true });
 
   const maxScale = getMaxScoreForScale(ratingScale);
 
@@ -157,10 +163,13 @@ function ProductDetailsInline({
             </>
           ) : (
             <p
+              role={criteriaError ? "alert" : undefined}
               className="text-center py-4 text-sm"
               style={{ color: "var(--n-text-disabled)" }}
             >
-              Aucune donnee disponible
+              {criteriaError
+                ? "[ERREUR] Analyse par critere indisponible"
+                : "Aucune donnee disponible"}
             </p>
           )}
         </div>
@@ -292,10 +301,13 @@ function ProductDetailsInline({
             )
           ) : (
             <p
+              role={juryError ? "alert" : undefined}
               className="text-center py-4 text-sm"
               style={{ color: "var(--n-text-disabled)" }}
             >
-              Aucune note de jury disponible
+              {juryError
+                ? "[ERREUR] Notes des jurys indisponibles"
+                : "Aucune note de jury disponible"}
             </p>
           )}
         </div>
@@ -305,7 +317,12 @@ function ProductDetailsInline({
 }
 
 export default function ProducerResultsPage() {
-  const { data: cups, isLoading } = api.producer.getMyResultsByCup.useQuery();
+  const {
+    data: cups,
+    isLoading,
+    isError,
+    refetch,
+  } = api.producer.getMyResultsByCup.useQuery();
   const [expandedCups, setExpandedCups] = useState<Set<string>>(new Set());
   const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
   const [downloadingPdf, setDownloadingPdf] = useState<string | null>(null);
@@ -361,6 +378,21 @@ export default function ProducerResultsPage() {
     );
   }
 
+  // Une requête en échec ne doit pas se confondre avec une liste vide :
+  // « vous n'avez rien » est plausible et masquerait l'incident.
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4 text-center">
+        <span role="alert" className="n-font-data text-sm tracking-widest" style={{ color: "var(--n-text-secondary)" }}>
+          [ERREUR] VOS RÉSULTATS N&apos;ONT PAS PU ÊTRE CHARGÉS
+        </span>
+        <button type="button" className="n-btn-secondary text-xs" onClick={() => void refetch()}>
+          RÉESSAYER
+        </button>
+      </div>
+    );
+  }
+
   const totalProducts = cups?.reduce((acc, cup) => acc + cup.products.length, 0) ?? 0;
   const totalLabels =
     cups?.reduce((acc, cup) => acc + cup.products.filter((p) => p.label).length, 0) ?? 0;
@@ -369,13 +401,8 @@ export default function ProducerResultsPage() {
     <div className="space-y-8">
       {/* Header */}
       <div className="flex items-center gap-4">
-        <Link href="/producer/dashboard">
-          <button
-            className="n-btn-ghost text-xs"
-            style={{ padding: "8px 12px" }}
-          >
-            ← RETOUR
-          </button>
+        <Link href="/producer/dashboard" className="n-btn-ghost text-xs" style={{ padding: "8px 12px" }}>
+          ← RETOUR
         </Link>
         <div>
           <div className="n-label mb-1" style={{ color: "var(--n-text-disabled)" }}>
@@ -413,8 +440,8 @@ export default function ProducerResultsPage() {
             Vos resultats apparaitront ici une fois que les organisateurs auront publie les
             resultats.
           </p>
-          <Link href="/producer/registrations">
-            <button className="n-btn-secondary text-xs">VOIR MES INSCRIPTIONS</button>
+          <Link href="/producer/registrations" className="n-btn-secondary text-xs">
+            VOIR MES INSCRIPTIONS
           </Link>
         </div>
       ) : (

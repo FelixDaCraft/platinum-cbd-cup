@@ -2,8 +2,10 @@ import Link from "next/link";
 import Image from "next/image";
 import { db } from "~/server/db";
 import { Eyebrow, Pill } from "~/components/portal/platinum";
+import { canonical } from "../_lib/seo";
 
 export const metadata = {
+  alternates: { canonical: canonical("/sponsors") },
   title: "Sponsors",
   description: "Les partenaires officiels de la Platinum CBD Cup.",
 };

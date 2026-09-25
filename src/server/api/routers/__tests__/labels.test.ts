@@ -1,4 +1,5 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { TRPCError } from "@trpc/server";
 
 import {
   createLabelSchema,
@@ -11,7 +12,8 @@ import {
   LABEL_COLOR_PALETTE,
 } from "~/lib/validations/labels";
 
-// Mock auth
+vi.mock("nanoid", () => ({ nanoid: () => "test-label-id" }));
+
 vi.mock("~/lib/auth", () => ({
   auth: {
     api: {
@@ -19,6 +21,55 @@ vi.mock("~/lib/auth", () => ({
     },
   },
 }));
+
+/** État de la base simulée (voir category.test.ts pour le détail du montage). */
+const dbState = vi.hoisted(() => ({
+  updates: [] as Record<string, unknown>[],
+  deleted: [] as true[],
+  inserted: [] as unknown[],
+}));
+
+const { updates, deleted, inserted } = dbState;
+
+vi.mock("~/server/db", () => ({
+  db: {
+    query: {
+      users: { findFirst: vi.fn() },
+      cups: { findFirst: vi.fn() },
+      cupLabels: { findFirst: vi.fn(), findMany: vi.fn() },
+    },
+    insert: () => ({
+      values: (values: unknown) => {
+        dbState.inserted.push(values);
+        return { returning: () => Promise.resolve([values]) };
+      },
+    }),
+    update: () => ({
+      set: (values: Record<string, unknown>) => {
+        dbState.updates.push(values);
+        return {
+          where: () => ({
+            returning: () => Promise.resolve([values]),
+            then: (resolve: (v: unknown) => unknown) =>
+              Promise.resolve(undefined).then(resolve),
+          }),
+        };
+      },
+    }),
+    delete: () => ({
+      where: () => {
+        dbState.deleted.push(true);
+        return Promise.resolve(undefined);
+      },
+    }),
+  },
+}));
+
+beforeEach(() => {
+  updates.length = 0;
+  deleted.length = 0;
+  inserted.length = 0;
+});
 
 describe("Labels Router", () => {
   describe("Input Validation - createLabelSchema", () => {
@@ -396,100 +447,287 @@ describe("Labels Router", () => {
     });
   });
 
-  describe("Business Logic - Modification After Publication", () => {
-    it("should block modification when cup is in rating phase", () => {
-      const cupStatus: string = "rating";
-
-      const shouldBlock = cupStatus === "rating" || cupStatus === "completed";
-
-      expect(shouldBlock).toBe(true);
-    });
-
-    it("should block modification when cup is completed", () => {
-      const cupStatus: string = "completed";
-
-      const shouldBlock = cupStatus === "rating" || cupStatus === "completed";
-
-      expect(shouldBlock).toBe(true);
-    });
-
-    it("should allow modification when cup is draft", () => {
-      const cupStatus: string = "draft";
-
-      const shouldBlock = cupStatus === "rating" || cupStatus === "completed";
-
-      expect(shouldBlock).toBe(false);
-    });
-
-    it("should allow modification when cup is published", () => {
-      const cupStatus: string = "published";
-
-      const shouldBlock = cupStatus === "rating" || cupStatus === "completed";
-
-      expect(shouldBlock).toBe(false);
-    });
-
-    it("should allow modification when cup is registration_closed", () => {
-      const cupStatus: string = "registration_closed";
-
-      const shouldBlock = cupStatus === "rating" || cupStatus === "completed";
-
-      expect(shouldBlock).toBe(false);
-    });
-  });
-
-  describe("Business Logic - Multi-tenancy Validation", () => {
-    it("validates label belongs to user organization via cup", () => {
-      const labelCupOrganizationId = "org-1";
-      const memberOrganizationId = "org-1";
-
-      expect(labelCupOrganizationId).toBe(memberOrganizationId);
-    });
-
-    it("detects cross-tenant access attempt", () => {
-      const labelCupOrganizationId: string = "org-1";
-      const attackerOrganizationId: string = "org-2";
-
-      expect(labelCupOrganizationId).not.toBe(attackerOrganizationId);
-      // Router would throw FORBIDDEN
-    });
-  });
-
-  describe("Business Logic - sortOrder Calculation", () => {
-    it("calculates next sortOrder correctly for empty list", () => {
-      const existingOrders: number[] = [];
-      const maxOrder = Math.max(...existingOrders, -1);
-      const nextOrder = maxOrder + 1;
-
-      expect(nextOrder).toBe(0);
-    });
-
-    it("calculates next sortOrder correctly for existing labels", () => {
-      const existingOrders = [0, 1, 2];
-      const maxOrder = Math.max(...existingOrders, -1);
-      const nextOrder = maxOrder + 1;
-
-      expect(nextOrder).toBe(3);
-    });
-
-    it("handles non-sequential sortOrders", () => {
-      const existingOrders = [0, 2, 5];
-      const maxOrder = Math.max(...existingOrders, -1);
-      const nextOrder = maxOrder + 1;
-
-      expect(nextOrder).toBe(6);
-    });
-  });
-
-  describe("Authorization Checks", () => {
-    it("identifies when no session exists", async () => {
+  // ---------------------------------------------------------------------
+  // Procédures du routeur
+  //
+  // Remplace les blocs « Business Logic » et « Multi-tenancy Validation »
+  // d'origine, qui réécrivaient la règle dans le test puis la vérifiaient
+  // contre elle-même. Le verrou réel est assertLabelsEditable() dans
+  // labels.ts : c'est lui qu'on exerce ici, à travers le routeur.
+  // ---------------------------------------------------------------------
+  describe("Procédures", () => {
+    async function signIn(row: { isAdmin?: boolean; role?: string } | null) {
       const { auth } = await import("~/lib/auth");
-      vi.mocked(auth.api.getSession).mockResolvedValueOnce(null);
+      const { db } = await import("~/server/db");
 
-      const session = await auth.api.getSession({ headers: new Headers() });
+      if (row === null) {
+        vi.mocked(auth.api.getSession).mockResolvedValue(null);
+        return;
+      }
 
-      expect(session).toBeNull();
-      // Router would throw UNAUTHORIZED
+      vi.mocked(auth.api.getSession).mockResolvedValue({
+        user: { id: "user-1", email: "test@example.com" },
+        session: { id: "session-1" },
+      } as never);
+      vi.mocked(db.query.users.findFirst).mockResolvedValue(row as never);
+    }
+
+    const asOrganizer = () => signIn({ isAdmin: false, role: "organizer" });
+    const asProducer = () => signIn({ isAdmin: false, role: "producer" });
+    const asAnonymous = () => signIn(null);
+
+    /** Place une cup dans le mock, avec le statut demandé. */
+    async function withCup(status: string, ratingScale = "0-20") {
+      const { db } = await import("~/server/db");
+      vi.mocked(db.query.cups.findFirst).mockResolvedValue({
+        id: "cup-1",
+        name: "Test Cup",
+        status,
+        ratingScale,
+      } as never);
+    }
+
+    async function createCaller() {
+      const { labelsRouter } = await import("../labels");
+      const { db } = await import("~/server/db");
+
+      return labelsRouter.createCaller({ headers: new Headers(), db } as never);
+    }
+
+    async function codeOf(fn: () => Promise<unknown>) {
+      try {
+        await fn();
+      } catch (error) {
+        expect(error).toBeInstanceOf(TRPCError);
+        return (error as TRPCError).code;
+      }
+      throw new Error("La procédure aurait dû lever une erreur");
+    }
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
+
+    it("refuse un appelant anonyme sur chaque procédure", async () => {
+      await asAnonymous();
+      const caller = await createCaller();
+
+      expect(await codeOf(() => caller.getCupLabels({ cupId: "cup-1" }))).toBe(
+        "UNAUTHORIZED"
+      );
+      expect(
+        await codeOf(() => caller.initializeDefaultLabels({ cupId: "cup-1" }))
+      ).toBe("UNAUTHORIZED");
+      expect(await codeOf(() => caller.delete({ labelId: "lab-1" }))).toBe(
+        "UNAUTHORIZED"
+      );
+      expect(
+        await codeOf(() => caller.reorder({ cupId: "cup-1", labelIds: ["lab-1"] }))
+      ).toBe("UNAUTHORIZED");
+    });
+
+    it("refuse un producteur authentifié sur chaque procédure", async () => {
+      await asProducer();
+      const caller = await createCaller();
+
+      expect(await codeOf(() => caller.getCupLabels({ cupId: "cup-1" }))).toBe(
+        "FORBIDDEN"
+      );
+      expect(await codeOf(() => caller.delete({ labelId: "lab-1" }))).toBe("FORBIDDEN");
+      expect(
+        await codeOf(() => caller.reorder({ cupId: "cup-1", labelIds: ["lab-1"] }))
+      ).toBe("FORBIDDEN");
+    });
+
+    it("renvoie NOT_FOUND quand la cup n'existe pas", async () => {
+      await asOrganizer();
+      const { db } = await import("~/server/db");
+      vi.mocked(db.query.cups.findFirst).mockResolvedValue(undefined as never);
+
+      const caller = await createCaller();
+      expect(await codeOf(() => caller.getCupLabels({ cupId: "inconnue" }))).toBe(
+        "NOT_FOUND"
+      );
+    });
+
+    it("expose canEdit=false dès que la notation a commencé", async () => {
+      await asOrganizer();
+      const { db } = await import("~/server/db");
+      vi.mocked(db.query.cupLabels.findMany).mockResolvedValue([] as never);
+
+      const caller = await createCaller();
+
+      await withCup("draft");
+      await expect(caller.getCupLabels({ cupId: "cup-1" })).resolves.toMatchObject({
+        canEdit: true,
+        scaleMax: 20,
+      });
+
+      await withCup("rating");
+      await expect(caller.getCupLabels({ cupId: "cup-1" })).resolves.toMatchObject({
+        canEdit: false,
+      });
+
+      await withCup("completed");
+      await expect(caller.getCupLabels({ cupId: "cup-1" })).resolves.toMatchObject({
+        canEdit: false,
+      });
+    });
+
+    // Un label modifié en pleine notation change le palmarès sous les pieds
+    // des jurés : le routeur doit refuser, pas seulement griser un bouton.
+    it.each(["rating", "completed"])(
+      "refuse toute modification de label quand la cup est en %s",
+      async (status) => {
+        await asOrganizer();
+        await withCup(status);
+
+        const { db } = await import("~/server/db");
+        vi.mocked(db.query.cupLabels.findFirst).mockResolvedValue({
+          id: "lab-1",
+          cupId: "cup-1",
+          minScore: 16,
+          maxScore: 18,
+          cup: { id: "cup-1", status, ratingScale: "0-20" },
+        } as never);
+
+        const caller = await createCaller();
+
+        expect(
+          await codeOf(() => caller.initializeDefaultLabels({ cupId: "cup-1" }))
+        ).toBe("BAD_REQUEST");
+        expect(
+          await codeOf(() =>
+            caller.create({
+              cupId: "cup-1",
+              name: "Or",
+              minScore: 16,
+              maxScore: 20,
+              color: "#FFD700",
+            })
+          )
+        ).toBe("BAD_REQUEST");
+        expect(await codeOf(() => caller.delete({ labelId: "lab-1" }))).toBe(
+          "BAD_REQUEST"
+        );
+        expect(
+          await codeOf(() => caller.reorder({ cupId: "cup-1", labelIds: ["lab-1"] }))
+        ).toBe("BAD_REQUEST");
+
+        expect(deleted).toHaveLength(0);
+        expect(updates).toHaveLength(0);
+      }
+    );
+
+    it.each(["draft", "published", "registration_closed"])(
+      "autorise la suppression d'un label quand la cup est en %s",
+      async (status) => {
+        await asOrganizer();
+        const { db } = await import("~/server/db");
+        vi.mocked(db.query.cupLabels.findFirst).mockResolvedValue({
+          id: "lab-1",
+          cupId: "cup-1",
+          cup: { id: "cup-1", status, ratingScale: "0-20" },
+        } as never);
+
+        const caller = await createCaller();
+        await expect(caller.delete({ labelId: "lab-1" })).resolves.toEqual({
+          success: true,
+        });
+        expect(deleted).toHaveLength(1);
+      }
+    );
+
+    it("refuse un réordonnancement contenant un label étranger à la cup", async () => {
+      await asOrganizer();
+      await withCup("draft");
+
+      const { db } = await import("~/server/db");
+      vi.mocked(db.query.cupLabels.findMany).mockResolvedValue([
+        { id: "lab-1" },
+        { id: "lab-2" },
+      ] as never);
+
+      const caller = await createCaller();
+      expect(
+        await codeOf(() =>
+          caller.reorder({ cupId: "cup-1", labelIds: ["lab-1", "lab-2", "lab-3"] })
+        )
+      ).toBe("BAD_REQUEST");
+      expect(updates).toHaveLength(0);
+    });
+
+    it("applique le rang de chaque label selon sa position", async () => {
+      await asOrganizer();
+      await withCup("draft");
+
+      const { db } = await import("~/server/db");
+      vi.mocked(db.query.cupLabels.findMany).mockResolvedValue([
+        { id: "lab-1" },
+        { id: "lab-2" },
+        { id: "lab-3" },
+      ] as never);
+
+      const caller = await createCaller();
+      await caller.reorder({
+        cupId: "cup-1",
+        labelIds: ["lab-3", "lab-1", "lab-2"],
+      });
+
+      expect(updates.map((u) => u.sortOrder)).toEqual([0, 1, 2]);
+    });
+
+    it("refuse d'initialiser les labels par défaut deux fois", async () => {
+      await asOrganizer();
+      await withCup("draft");
+
+      const { db } = await import("~/server/db");
+      vi.mocked(db.query.cupLabels.findFirst).mockResolvedValue({
+        id: "lab-1",
+      } as never);
+
+      const caller = await createCaller();
+      expect(
+        await codeOf(() => caller.initializeDefaultLabels({ cupId: "cup-1" }))
+      ).toBe("BAD_REQUEST");
+      expect(inserted).toHaveLength(0);
+    });
+
+    it("crée les labels par défaut à l'échelle de la cup", async () => {
+      await asOrganizer();
+      await withCup("draft", "0-10");
+
+      const { db } = await import("~/server/db");
+      vi.mocked(db.query.cupLabels.findFirst).mockResolvedValue(undefined as never);
+
+      const caller = await createCaller();
+      const result = await caller.initializeDefaultLabels({ cupId: "cup-1" });
+
+      expect(result.created).toBe(DEFAULT_LABELS.length);
+      expect(inserted).toHaveLength(1);
+    });
+
+    it("refuse un label dont le score dépasse l'échelle de la cup", async () => {
+      await asOrganizer();
+      // Échelle 0-10 : un minScore à 16 n'a aucun sens.
+      await withCup("draft", "0-10");
+
+      const { db } = await import("~/server/db");
+      vi.mocked(db.query.cupLabels.findMany).mockResolvedValue([] as never);
+
+      const caller = await createCaller();
+      expect(
+        await codeOf(() =>
+          caller.create({
+            cupId: "cup-1",
+            name: "Or",
+            minScore: 16,
+            maxScore: 20,
+            color: "#FFD700",
+          })
+        )
+      ).toBe("BAD_REQUEST");
+      expect(inserted).toHaveLength(0);
     });
   });
 });

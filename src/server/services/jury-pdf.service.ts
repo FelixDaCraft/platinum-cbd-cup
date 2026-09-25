@@ -265,24 +265,75 @@ interface JuryPdfData {
 /**
  * Resolve a logo URL to a source usable by react-pdf
  */
+/**
+ * Un logo de PDF vient d'un champ libre (cup.pdfLogoUrl, logo producteur).
+ * react-pdf télécharge l'URL depuis le serveur : on n'accepte donc qu'une
+ * adresse publique en https, jamais un hôte interne (réseau docker, LAN) ni
+ * une IP privée. Les chemins locaux, eux, doivent rester sous public/.
+ */
+function isSafeRemoteLogoUrl(url: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+
+  if (parsed.protocol !== "https:") return false;
+
+  const host = parsed.hostname.toLowerCase();
+
+  // Nom d'hôte sans point = service interne (docker compose, mDNS).
+  if (!host.includes(".")) return false;
+  if (host.endsWith(".local") || host.endsWith(".internal")) return false;
+
+  // Littéraux IP : on écarte loopback, lien-local et plages privées.
+  const ipv4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+  if (ipv4) {
+    const [a, b] = [Number(ipv4[1]), Number(ipv4[2])];
+    if (a === 10 || a === 127 || a === 0) return false;
+    if (a === 169 && b === 254) return false;
+    if (a === 172 && b >= 16 && b <= 31) return false;
+    if (a === 192 && b === 168) return false;
+  }
+  if (host.startsWith("[")) return false; // IPv6 littéral, dont [::1]
+
+  return true;
+}
+
+/**
+ * Chemin local sous public/, refusant toute remontée d'arborescence.
+ */
+function resolvePublicAssetPath(relativePath: string): string | null {
+  const publicDir = path.resolve(process.cwd(), "public");
+  // path.join("/", x) absorbe les "../" avant qu'ils ne sortent de public/.
+  const safeRelative = path.join("/", relativePath).slice(1);
+  const resolved = path.resolve(publicDir, safeRelative);
+  if (!resolved.startsWith(publicDir + path.sep)) {
+    return null;
+  }
+  return existsSync(resolved) ? resolved : null;
+}
+
 function resolveLogoForPdf(url: string | null): string | null {
   if (!url) return null;
 
   if (url.startsWith("http://") || url.startsWith("https://")) {
+    if (!isSafeRemoteLogoUrl(url)) {
+      console.warn("[Jury PDF] Logo URL rejetée (hôte non public) :", url);
+      return null;
+    }
     if (url.endsWith(".webp")) return url.replace(/\.webp$/, ".png");
     return url;
   }
 
   const pngPath = url.endsWith(".webp") ? url.replace(/\.webp$/, ".png") : url;
-  const fsPath = path.join(process.cwd(), "public", pngPath);
+  const fsPath = resolvePublicAssetPath(pngPath);
+  if (fsPath) return fsPath;
 
-  if (existsSync(fsPath)) {
-    return fsPath;
-  }
-
-  const originalFsPath = path.join(process.cwd(), "public", url);
-  if (existsSync(originalFsPath) && !url.endsWith(".webp")) {
-    return originalFsPath;
+  if (!url.endsWith(".webp")) {
+    const originalFsPath = resolvePublicAssetPath(url);
+    if (originalFsPath) return originalFsPath;
   }
 
   return null;

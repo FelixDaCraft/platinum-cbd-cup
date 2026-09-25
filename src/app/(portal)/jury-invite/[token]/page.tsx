@@ -27,6 +27,7 @@ import { useSession, signIn } from "~/lib/auth-client";
 import { PASSWORD_CRITERIA, passwordSchema } from "~/lib/validations/auth";
 import { useOrganization, usePortalTheme } from "~/lib/portal/context";
 import { api } from "~/trpc/react";
+import { getErrorMessage } from "../../_lib/errors";
 
 /**
  * Jury invite registration schema
@@ -80,7 +81,7 @@ export default function PortalJuryInvitePage() {
       <Card className="w-full max-w-md mx-auto">
         <CardContent className="flex flex-col items-center justify-center py-12">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground mb-4" />
-          <p className="text-muted-foreground">Verification de l&apos;invitation...</p>
+          <p className="text-muted-foreground">Vérification de l&apos;invitation...</p>
         </CardContent>
       </Card>
     );
@@ -109,7 +110,7 @@ export default function PortalJuryInvitePage() {
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>Erreur</AlertTitle>
             <AlertDescription>
-              Cette invitation n&apos;est plus valide. Elle a peut-etre expire ou a deja ete utilisee.
+              Cette invitation n&apos;est plus valide. Elle a peut-être expiré ou a déjà été utilisée.
               Contactez l&apos;organisateur pour obtenir une nouvelle invitation.
             </AlertDescription>
           </Alert>
@@ -185,7 +186,9 @@ function JuryAcceptInvitation({
       router.push("/jury/dashboard");
     },
     onError: (error) => {
-      toast.error(error.message || "Erreur lors de l'acceptation");
+      toast.error(
+        getErrorMessage(error, "Impossible d'accepter l'invitation pour le moment."),
+      );
       setIsAccepting(false);
     },
   });
@@ -214,7 +217,7 @@ function JuryAcceptInvitation({
           <CardTitle className="text-2xl">Invitation Jury</CardTitle>
         </div>
         <CardDescription>
-          Vous etes invite a rejoindre le jury pour{" "}
+          Vous êtes invité à rejoindre le jury pour{" "}
           <span className="font-semibold">{invitation.cup.name}</span>
         </CardDescription>
       </CardHeader>
@@ -315,12 +318,14 @@ function JuryRegisterForm({
         errorMessage.includes("already") ||
         errorMessage.includes("exists")
       ) {
-        toast.info("Ce compte existe deja. Connectez-vous pour accepter l'invitation.");
+        toast.info("Ce compte existe déjà. Connectez-vous pour accepter l'invitation.");
         router.push(`/login?callbackUrl=/jury-invite/${token}`);
         return;
       }
 
-      toast.error(error.message || "Une erreur est survenue. Veuillez reessayer.");
+      toast.error(
+        getErrorMessage(error, "Une erreur est survenue. Veuillez réessayer."),
+      );
     },
   });
 
@@ -556,14 +561,14 @@ function JuryRegisterForm({
                   Inscription...
                 </>
               ) : (
-                "Creer mon compte jury"
+                "Créer mon compte jury"
               )}
             </Button>
           </form>
         </CardContent>
         <CardFooter className="flex justify-center">
           <p className="text-sm text-muted-foreground">
-            Deja un compte ?{" "}
+            Déjà un compte ?{" "}
             <Link
               href={`/login?callbackUrl=/jury-invite/${token}`}
               className="text-primary hover:underline"

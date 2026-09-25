@@ -1,8 +1,14 @@
 "use client";
 
-import { Suspense, useRef } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { useGLTF, Environment, Center, OrbitControls } from "@react-three/drei";
+import {
+  useGLTF,
+  Environment,
+  Lightformer,
+  Center,
+  OrbitControls,
+} from "@react-three/drei";
 import type { Group } from "three";
 
 const MODEL_URL = "/models/geometric-emblem.glb";
@@ -49,8 +55,8 @@ interface GeometricEmblemProps {
  * Replaces the previous CSS-3D PlatinumTrophy. Uses @react-three/fiber +
  * Drei to render the .glb on a transparent canvas, with a soft halo glow
  * behind, a ground shadow that matches the rest of the brand vibe, and
- * an Environment HDRI ("city") to give the metallic/PBR materials some
- * specular life without needing custom lights.
+ * a procedural <Environment> (Lightformer softboxes, zero network payload)
+ * to give the metallic/PBR materials some specular life.
  */
 export function GeometricEmblem({
   size = 420,
@@ -60,6 +66,13 @@ export function GeometricEmblem({
   tiltX = 0,
   interactive = true,
 }: GeometricEmblemProps) {
+  useSilenceGltfTextureNoise();
+
+  // La rotation est pilotée par useFrame, hors d'atteinte de la règle CSS
+  // globale prefers-reduced-motion : il faut la couper ici (WCAG 2.3.3).
+  const reducedMotion = usePrefersReducedMotion();
+  const effectiveRotationSpeed = reducedMotion ? 0 : rotationSpeed;
+
   return (
     <div
       style={{
@@ -130,18 +143,60 @@ export function GeometricEmblem({
         <directionalLight position={[3, 4, 5]} intensity={1.1} />
         <directionalLight position={[-3, 2, -3]} intensity={0.4} />
 
+        {/* Environnement procédural, hors <Suspense> : rien à télécharger, donc
+            rien qui suspende, et le PMREM n'est plus rejoué quand le GLB finit
+            de charger. Il remplace un HDR de 1,5 Mo, depuis supprimé du dépôt (RGBE, un format
+            que gzip/brotli ne compriment quasiment pas) : sur la
+            home mobile c'était l'élément le plus lourd de la page, pour un simple
+            reflet sur un objet unique. Quatre softbox suffisent à donner sa vie
+            spéculaire au métal. */}
+        <Environment resolution={128}>
+          {/* Sans fond, le cube de réflexion est noir pur et l'or vire au
+              charbon : ce gris très sombre lui rend sa profondeur. */}
+          <color attach="background" args={["#14141a"]} />
+          {/* Key : grande surface chaude au-dessus et légèrement en avant. */}
+          <Lightformer
+            form="rect"
+            intensity={3}
+            position={[0, 4, 2]}
+            scale={[8, 6, 1]}
+            color="#fff6e2"
+          />
+          {/* Rim or en contre-plongée gauche — rappelle l'accent de la charte. */}
+          <Lightformer
+            form="rect"
+            intensity={2.2}
+            position={[-4.5, -1, 2]}
+            scale={[5, 4, 1]}
+            color="#d4af37"
+          />
+          {/* Contre-jour froid à droite : détache la silhouette du fond sombre. */}
+          <Lightformer
+            form="rect"
+            intensity={1.4}
+            position={[5, 1, -3]}
+            scale={[5, 5, 1]}
+            color="#9fb2d4"
+          />
+          {/* Bandeau horizontal : c'est lui qui produit la ligne de spéculaire
+              qui balaie les facettes pendant la rotation. */}
+          <Lightformer
+            form="rect"
+            intensity={1.8}
+            position={[0, 0.4, 5]}
+            scale={[10, 0.6, 1]}
+            color="#ffffff"
+          />
+        </Environment>
+
         <Suspense fallback={null}>
           <Center>
             <RotatingEmblem
-              rotationSpeed={rotationSpeed}
+              rotationSpeed={effectiveRotationSpeed}
               tiltZ={tiltZ}
               tiltX={tiltX}
             />
           </Center>
-          {/* Self-hosted HDR — same file Drei's `preset="city"` would fetch
-              from raw.githack.com, but shipped from /public so the 3D scene
-              loads offline, is CSP-clean, and is immune to CDN outages. */}
-          <Environment files="/hdri/potsdamer_platz_1k.hdr" />
         </Suspense>
 
         {/* Drag-to-orbit (interactive mode only). Auto-rotation comes from
@@ -160,6 +215,74 @@ export function GeometricEmblem({
       </Canvas>
     </div>
   );
+}
+
+// ─── Filtre de bruit dev-only du GLTFLoader ────────────────────────────────
+// Le cache `useGLTF` de Drei + le double montage du Strict Mode + le HMR de
+// Next font perdre la course au GLTFLoader, qui journalise
+//   "THREE.GLTFLoader: Couldn't load texture blob:http://..."
+// quand le composant est démonté avant la fin du parsing des textures. Le
+// Canvas réessaie au remontage et le modèle s'affiche correctement, mais
+// l'overlay d'erreur de Next transforme chaque console.error en modale
+// bloquante, ce qui ruine la boucle d'itération.
+//
+// Cette mutation de `console.error` était auparavant exécutée à l'import du
+// module enveloppe (geometric-emblem-lazy) : importer un composant altérait le
+// logging global de toute l'application. Elle vit désormais dans un effet du
+// composant 3D lui-même — donc seulement pendant qu'un emblème est monté, en
+// développement, et l'original est restauré au démontage.
+//
+// Le compteur gère les emblèmes multiples (home + backdrop mobile) : seul le
+// dernier démontage restaure `console.error`.
+let gltfNoiseFilterMounts = 0;
+let consoleErrorBeforeFilter: typeof console.error | null = null;
+
+function useSilenceGltfTextureNoise() {
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "development") return;
+
+    if (gltfNoiseFilterMounts++ === 0) {
+      const original = console.error;
+      consoleErrorBeforeFilter = original;
+      console.error = (...args: unknown[]) => {
+        // Three.js passe le préfixe et le message en arguments séparés
+        // ("THREE.GLTFLoader:", "Couldn't load texture blob:...") : on ne peut
+        // pas se contenter d'inspecter args[0].
+        const joined = args
+          .map((a) => (typeof a === "string" ? a : ""))
+          .join(" ");
+        if (joined.includes("Couldn't load texture blob:")) return;
+        return original.apply(console, args as []);
+      };
+    }
+
+    return () => {
+      if (--gltfNoiseFilterMounts === 0 && consoleErrorBeforeFilter) {
+        console.error = consoleErrorBeforeFilter;
+        consoleErrorBeforeFilter = null;
+      }
+    };
+  }, []);
+}
+
+/**
+ * Suit `prefers-reduced-motion` de façon réactive (l'utilisateur peut changer
+ * le réglage système sans recharger la page). Faux au premier rendu pour que
+ * SSR et hydratation concordent.
+ */
+function usePrefersReducedMotion(): boolean {
+  const [reduced, setReduced] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mql = window.matchMedia("(prefers-reduced-motion: reduce)");
+    setReduced(mql.matches);
+    const handler = (e: MediaQueryListEvent) => setReduced(e.matches);
+    mql.addEventListener("change", handler);
+    return () => mql.removeEventListener("change", handler);
+  }, []);
+
+  return reduced;
 }
 
 function RotatingEmblem({

@@ -18,7 +18,7 @@ export default function ProducersPage() {
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const utils = api.useUtils();
-  const { data: producers, isLoading } = api.producer.listByOrganization.useQuery();
+  const { data: producers, isLoading, isError, refetch } = api.producer.listByOrganization.useQuery();
 
   const deleteMutation = api.producer.deleteByOrganization.useMutation({
     onSuccess: () => {
@@ -57,6 +57,20 @@ export default function ProducersPage() {
         <span className="n-font-data" style={{ color: "var(--n-text-disabled)", fontSize: "13px", letterSpacing: "0.08em" }}>
           [LOADING...]
         </span>
+      </div>
+    );
+  }
+
+  // Une requête en échec ne doit pas se confondre avec une liste vide.
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4 text-center">
+        <span role="alert" className="n-font-data" style={{ color: "var(--n-text-secondary)", fontSize: "13px", letterSpacing: "0.08em" }}>
+          [ERREUR] LA LISTE DES PRODUCTEURS N&apos;A PAS PU ÊTRE CHARGÉE
+        </span>
+        <button type="button" className="n-btn-secondary text-xs" onClick={() => void refetch()}>
+          RÉESSAYER
+        </button>
       </div>
     );
   }

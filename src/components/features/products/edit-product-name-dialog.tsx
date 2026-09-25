@@ -77,9 +77,9 @@ export function EditProductNameDialog({
             <div className="rounded-full bg-green-100 p-3 mb-4">
               <CheckCircle className="h-8 w-8 text-green-600" />
             </div>
-            <h3 className="text-lg font-semibold">Nom modifie</h3>
+            <h3 className="text-lg font-semibold">Nom modifié</h3>
             <p className="text-sm text-muted-foreground mt-1">
-              Le nom du produit a ete mis a jour.
+              Le nom du produit a été mis à jour.
             </p>
           </div>
         )}
@@ -98,7 +98,7 @@ export function EditProductNameDialog({
               className="mt-4"
               onClick={() => setStatus("idle")}
             >
-              Reessayer
+              Réessayer
             </Button>
           </div>
         )}
