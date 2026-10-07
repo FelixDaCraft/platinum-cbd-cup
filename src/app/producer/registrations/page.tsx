@@ -234,7 +234,7 @@ export default function ProducerRegistrationsPage() {
             ACTIONS REQUISES
           </div>
           <div
-            className="grid grid-cols-3 gap-px"
+            className="grid grid-cols-1 gap-px sm:grid-cols-3"
             style={{ backgroundColor: "var(--n-border)" }}
           >
             {/* Products to send */}
@@ -341,10 +341,12 @@ export default function ProducerRegistrationsPage() {
                   className="n-card"
                   style={{ borderColor: "var(--n-accent)" }}
                 >
-                  <div className="flex items-center justify-between gap-4">
+                  {/* En colonne sur mobile : sur une seule ligne, le prix et le
+                      bouton (non compressibles) écrasaient le texte à 0 px. */}
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="min-w-0">
                       <p
-                        className="font-semibold truncate"
+                        className="font-semibold break-words sm:truncate"
                         style={{ color: "var(--n-text-display)" }}
                       >
                         {registration.cup.name}
@@ -355,8 +357,8 @@ export default function ProducerRegistrationsPage() {
                         {registration.products.length > 1 ? "S" : ""}
                       </p>
                     </div>
-                    <div className="flex items-center gap-4 shrink-0">
-                      <div className="text-right">
+                    <div className="flex flex-wrap items-center justify-between gap-3 sm:shrink-0 sm:flex-nowrap sm:justify-end sm:gap-4">
+                      <div className="sm:text-right">
                         <p
                           className="n-font-data font-bold text-lg"
                           style={{ color: "var(--n-text-display)" }}
@@ -627,12 +629,12 @@ export default function ProducerRegistrationsPage() {
               className="n-card"
               style={{ padding: "0", overflow: "hidden" }}
             >
-              {/* Table header */}
+              {/* Table header — masqué sur mobile, où chaque ligne passe en
+                  colonne (nom, puis actions) au lieu de tronquer le nom. */}
               <div
-                className="grid gap-0 px-6 py-3"
+                className="hidden md:grid md:grid-cols-[1fr_auto_auto_auto_auto] px-6 py-3"
                 style={{
                   borderBottom: "1px solid var(--n-border-visible)",
-                  gridTemplateColumns: "1fr auto auto auto auto",
                   gap: "16px",
                 }}
               >
@@ -671,14 +673,13 @@ export default function ProducerRegistrationsPage() {
                 return (
                   <div
                     key={registration.id}
-                    className="grid px-6 py-4 items-center"
+                    className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto_auto_auto] px-6 py-4 md:items-center"
                     style={{
                       borderBottom:
                         idx < completedCompetitions.length - 1
                           ? "1px solid var(--n-border)"
                           : undefined,
-                      gridTemplateColumns: "1fr auto auto auto auto",
-                      gap: "16px",
+                          gap: "16px",
                     }}
                   >
                     <div className="min-w-0">
