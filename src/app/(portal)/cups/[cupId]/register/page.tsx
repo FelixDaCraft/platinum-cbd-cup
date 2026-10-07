@@ -906,6 +906,22 @@ export default function RegisterPage() {
                 >
                   Paiement sécurisé Viva.com
                 </div>
+                {/* Logo viva.com : exigé par Viva sur les écrans de paiement
+                    (validation de la source de paiement). Logo sombre, posé
+                    sur un fond clair pour rester lisible en thème sombre. */}
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    padding: "8px 12px",
+                    marginBottom: 12,
+                    borderRadius: 8,
+                    background: "#ffffff",
+                  }}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="/viva-logo.svg" alt="viva.com" width={104} height={18} />
+                </span>
                 <p
                   style={{
                     fontSize: 13,
