@@ -499,6 +499,10 @@ select.field-input option{ background: var(--bg-2); color: var(--fg); }
 .home-link:hover{ text-decoration: underline; text-underline-offset: 4px; }
 
 .home-hero{ width: 100%; max-width: 1200px; margin: 0 auto; padding: 80px 0 72px; display: flex; flex-wrap: wrap; align-items: center; gap: 48px; }
+/* Bureau : le hero de l'accueil occupe tout l'écran sous l'en-tête. */
+@media (min-width: 881px){
+  .home-hero:not(.is-compact){ min-height: calc(100svh - var(--topbar-h, 73px)); padding-top: 48px; padding-bottom: 48px; }
+}
 .home-hero-text{ flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 28px; }
 .home-hero-title{ display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .home-hero-title h1{ margin: 0; }
@@ -657,12 +661,16 @@ select.field-input option{ background: var(--bg-2); color: var(--fg); }
 .pal-category{ padding: 32px 0 64px; display: flex; flex-direction: column; gap: 36px; border-top: 1px solid var(--line); }
 .pal-category-head{ display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 12px; padding-top: 32px; }
 .pal-category-head p{ margin: 0; font-size: 16px; color: var(--fg-2); }
-.pal-podium{ margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; align-items: end; }
-.pal-podium li{ padding: 32px; border-radius: 24px; background: var(--bg-2); border: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; min-height: 230px; }
-.pal-podium li.is-rank-1{ order: 2; min-height: 300px; padding: 40px 32px; border-color: var(--accent);
+/* Effet podium par décalage vertical, pas par hauteur minimale : les cartes
+   s'étirent à la hauteur de la plus remplie et le 2e et le 3e sont abaissés.
+   Un nom long (sur trois lignes) ne peut donc plus rendre le 3e plus haut
+   que le 1er. */
+.pal-podium{ margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; align-items: stretch; }
+.pal-podium li{ padding: 32px; border-radius: 24px; background: var(--bg-2); border: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; min-height: 200px; overflow-wrap: anywhere; }
+.pal-podium li.is-rank-1{ order: 2; padding: 40px 32px; border-color: var(--accent);
   background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 22%, transparent), color-mix(in srgb, var(--accent) 4%, transparent)); }
-.pal-podium li.is-rank-2{ order: 1; min-height: 250px; }
-.pal-podium li.is-rank-3{ order: 3; }
+.pal-podium li.is-rank-2{ order: 1; margin-top: 44px; }
+.pal-podium li.is-rank-3{ order: 3; margin-top: 76px; }
 .pal-podium-prize{ font-size: 14px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent-hi); }
 .pal-podium-rank{ font-size: 46px; font-weight: 600; letter-spacing: -.02em; line-height: .9; color: var(--fg-2); }
 .pal-podium-rank sup{ font-size: 24px; }
@@ -683,6 +691,11 @@ select.field-input option{ background: var(--bg-2); color: var(--fg); }
 .pal-list{ margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--line-strong); }
 .pal-list li{ display: flex; justify-content: space-between; align-items: baseline; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--line-strong); font-size: 17px; }
 .pal-rank{ display: inline-block; min-width: 44px; color: var(--fg-3); font-variant-numeric: tabular-nums; }
+.pal-ranking{ columns: 2 420px; column-gap: 40px; border-top: 0; }
+.pal-ranking li{ break-inside: avoid; }
+.pal-ranking-meta{ display: inline-flex; align-items: center; gap: 12px; flex-shrink: 0; }
+.pal-tag{ display: inline-flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; color: var(--fg-2); }
+.pal-tag .pal-medal-dot{ width: 10px; height: 10px; }
 .pal-score{ font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .pal-dq{ font-size: 14px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--danger); }
 .pal-note{ margin: 0; font-size: 15px; color: var(--fg-3); }
@@ -721,7 +734,7 @@ select.field-input option{ background: var(--bg-2); color: var(--fg); }
   .pal-category{ gap: 24px; padding-bottom: 40px; }
   .pal-category-head{ padding-top: 20px; }
   .pal-podium{ grid-template-columns: 1fr; gap: 14px; }
-  .pal-podium li, .pal-podium li.is-rank-1, .pal-podium li.is-rank-2{ order: 0; min-height: 0; padding: 22px; border-radius: 16px; gap: 6px; }
+  .pal-podium li, .pal-podium li.is-rank-1, .pal-podium li.is-rank-2, .pal-podium li.is-rank-3{ order: 0; min-height: 0; margin-top: 0; padding: 22px; border-radius: 16px; gap: 6px; }
   .pal-podium-rank{ font-size: 36px; }
   .pal-podium li.is-rank-1 .pal-podium-rank{ font-size: 46px; }
   .pal-podium-name, .pal-podium li.is-rank-1 .pal-podium-name{ font-size: 21px; }

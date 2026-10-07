@@ -506,16 +506,14 @@ export default async function PalmaresPage({
   // palmarès montre le classement sans aucun score (Thomas, 06/2026).
   const hideScores = year === 2023;
 
-  // Politique d'affichage public, selon le jury :
-  //  • PUBLIC → podium, puis les autres produits labellisés, groupés par
-  //    label. Rang et note sont publiés pour tous (décision du 07/10/2026,
-  //    qui remplace la règle « notes réservées au podium » de 06/2026). Le
-  //    premier de chaque catégorie reçoit le « Prix du public », jamais un
-  //    label de palier (Thomas, 06/2026).
-  //  • PRO → aucun label ; le podium, et le classement complet avec les
-  //    notes seulement si l'organisateur a choisi « all ».
-  // Un produit disqualifié est toujours montré, comme tel, en fin de liste.
-  const proShowsAll = (cup.resultsVisibility ?? "labels") === "all";
+  // Politique d'affichage (décision du 07/10/2026) : pour chaque jury, le
+  // classement COMPLET de la catégorie est publié, avec rang et note de
+  // chaque produit — primé ou non. Elle remplace la règle de 06/2026 (notes
+  // réservées au podium, produits non labellisés masqués) et ignore le
+  // réglage `resultsVisibility` de la cup. Côté public, le premier reçoit le
+  // « Prix du public », jamais un label de palier (Thomas, 06/2026), et les
+  // autres affichent leur label s'ils en ont un ; le jury pro n'en décerne
+  // pas. Un produit disqualifié est montré, comme tel, en fin de liste.
 
   const categories = allCategories.filter((c) =>
     ranking.rows.some((r) => r.categoryId === c.id),
@@ -543,16 +541,7 @@ export default async function PalmaresPage({
       .values(),
   );
 
-  const medalGroups = isPublic
-    ? tiers
-        .map((tier) => ({
-          tier,
-          rows: ranked.filter((r) => !r.isPodium && r.labelName === tier.key),
-        }))
-        .filter((g) => g.rows.length > 0)
-    : [];
-  const fullRanking =
-    !isPublic && proShowsAll ? ranked.filter((r) => !r.isPodium) : [];
+  const fullRanking = ranked.filter((r) => !r.isPodium);
 
   // 2025 : catégories dédoublées France / Europe. Les puces sont alors
   // groupées par région, sans répéter la région dans chaque libellé.
@@ -708,47 +697,10 @@ export default async function PalmaresPage({
           </ol>
         )}
 
-        {medalGroups.length > 0 && (
-          <div className="pal-medals">
-            <h3>Les autres médaillés</h3>
-            <div className="pal-medals-grid">
-              {medalGroups.map(({ tier, rows }) => (
-                <div key={tier.key}>
-                  <p className="pal-medal-title" style={{ color: tier.color ?? undefined }}>
-                    <span
-                      className="pal-medal-dot"
-                      style={{ background: tier.color ?? "var(--accent)" }}
-                      aria-hidden="true"
-                    />
-                    Label {titleCase(tier.key)}
-                  </p>
-                  <ul className="pal-list">
-                    {rows.map((r) => (
-                      <li key={r.code}>
-                        <span>
-                          <span className="pal-rank">{r.rank > 0 ? `${r.rank}e` : "—"}</span>
-                          <b>{r.productName || r.code}</b> ·{" "}
-                          <span className="pal-muted">{r.producerName}</span>
-                        </span>
-                        {!hideScores && (
-                          <span className="pal-score">{frScore(r.score, cup.ratingScale)}</span>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </div>
-            <p className="pal-note">
-              Le détail des notes par critère est envoyé à chaque producteur.
-            </p>
-          </div>
-        )}
-
         {fullRanking.length > 0 && (
           <div className="pal-medals">
-            <h3>Suite du classement</h3>
-            <ol className="pal-list">
+            <h3>Classement complet</h3>
+            <ol className="pal-list pal-ranking">
               {fullRanking.map((r) => (
                 <li key={r.code}>
                   <span>
@@ -756,12 +708,27 @@ export default async function PalmaresPage({
                     <b>{r.productName || r.code}</b> ·{" "}
                     <span className="pal-muted">{r.producerName}</span>
                   </span>
-                  {!hideScores && (
-                    <span className="pal-score">{frScore(r.score, cup.ratingScale)}</span>
-                  )}
+                  <span className="pal-ranking-meta">
+                    {isPublic && r.labelName && (
+                      <span className="pal-tag">
+                        <span
+                          className="pal-medal-dot"
+                          style={{ background: r.labelColor ?? "var(--accent)" }}
+                          aria-hidden="true"
+                        />
+                        {titleCase(r.labelName)}
+                      </span>
+                    )}
+                    {!hideScores && (
+                      <span className="pal-score">{frScore(r.score, cup.ratingScale)}</span>
+                    )}
+                  </span>
                 </li>
               ))}
             </ol>
+            <p className="pal-note">
+              Le détail des notes par critère est envoyé à chaque producteur.
+            </p>
           </div>
         )}
 
