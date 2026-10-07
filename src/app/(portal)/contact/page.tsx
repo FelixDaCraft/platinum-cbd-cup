@@ -13,7 +13,7 @@ const CONTACT_EMAIL = "contact@platinumcbdcup.eu";
 
 export default function ContactPage() {
   return (
-    <div className="pg">
+    <div className="pg editorial">
       <header className="pg-head">
         <p className="eyebrow">Contact</p>
         <h1 className="display">Écrivez-nous</h1>
@@ -23,14 +23,7 @@ export default function ContactPage() {
         </p>
       </header>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 340px), 1fr))",
-          gap: 32,
-          alignItems: "start",
-        }}
-      >
+      <div className="contact-layout">
         <ContactForm />
 
         <aside className="pg-tile" aria-labelledby="contact-direct">

@@ -23,7 +23,7 @@ export default async function SponsorsPage() {
   const sponsors = await getSponsors();
 
   return (
-    <div className="pg">
+    <div className="pg editorial">
       <header className="pg-head">
         <p className="eyebrow">Partenaires</p>
         <h1 className="display">Nos partenaires</h1>

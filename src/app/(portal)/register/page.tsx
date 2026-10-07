@@ -25,7 +25,7 @@ export default function PortalRegisterPage() {
   return (
     <Suspense
       fallback={
-        <div className="pg pg--form" role="status" style={{ alignItems: "center", paddingTop: 96 }}>
+        <div className="pg pg--form auth-page" role="status" style={{ alignItems: "center", paddingTop: 96 }}>
           <Loader2 className="h-8 w-8 animate-spin" style={{ color: "var(--accent)" }} aria-label="Chargement" />
         </div>
       }
@@ -129,7 +129,7 @@ function RegisterInner() {
   );
 
   return (
-    <div className="pg pg--form">
+    <div className="pg pg--form auth-page">
       <header className="pg-head">
         <h1 className="display">Créer un compte</h1>
         <p className="pg-lede">

@@ -17,7 +17,7 @@ import {
 
 export default function ResetPasswordPage() {
   return (
-    <div className="pg pg--form">
+    <div className="pg pg--form auth-page">
       <Suspense fallback={<ResetPending label="Chargement…" />}>
         <ResetPasswordCard />
       </Suspense>
@@ -29,8 +29,7 @@ export default function ResetPasswordPage() {
 function ResetPending({ label }: { label: string }) {
   return (
     <div
-      className="form-card"
-      style={{ marginTop: 72, alignItems: "center", padding: "56px 24px" }}
+      className="form-card auth-pending"
       role="status"
     >
       <Loader2 className="h-8 w-8 animate-spin" style={{ color: "var(--accent)" }} aria-hidden="true" />

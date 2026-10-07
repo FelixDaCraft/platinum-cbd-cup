@@ -71,16 +71,7 @@ const MAX_THC_LABEL = `${String(MAX_THC_PERCENT).replace(".", ",")} %`;
 function Stepper({ step }: { step: number }) {
   return (
     <nav aria-label="Étapes de l'inscription">
-      <ol
-        style={{
-          listStyle: "none",
-          margin: 0,
-          padding: 0,
-          display: "flex",
-          flexWrap: "wrap",
-          gap: 8,
-        }}
-      >
+      <ol className="reg-steps">
         {STEPS.map((s) => {
           const done = step > s.n;
           const cur = step === s.n;
@@ -88,27 +79,12 @@ function Stepper({ step }: { step: number }) {
             <li
               key={s.n}
               aria-current={cur ? "step" : undefined}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 8,
-                padding: "7px 12px",
-                borderRadius: "var(--radius-control)",
-                border: `1px solid ${cur ? "var(--accent)" : "var(--line-strong)"}`,
-                background: cur ? "var(--accent-dim)" : "transparent",
-                fontSize: 15,
-                fontWeight: cur ? 700 : 500,
-                color: cur ? "var(--fg)" : done ? "var(--fg-2)" : "var(--fg-3)",
-              }}
+              className={`reg-step${cur ? " is-current" : done ? " is-done" : ""}`}
             >
-              <span
-                aria-hidden="true"
-                className="tabular"
-                style={{ fontWeight: 700, color: cur ? "var(--accent-hi)" : "inherit" }}
-              >
+              <span aria-hidden="true" className="tabular reg-step-n">
                 {done ? "✓" : s.n}
               </span>
-              {s.l}
+              <span className="reg-step-label">{s.l}</span>
             </li>
           );
         })}
@@ -139,29 +115,13 @@ function CartLine({
   action?: React.ReactNode;
 }) {
   return (
-    <li
-      style={{
-        display: "flex",
-        flexWrap: "wrap",
-        alignItems: "center",
-        justifyContent: "space-between",
-        gap: "8px 16px",
-        padding: "16px 0",
-        borderBottom: "1px solid var(--line)",
-        opacity: muted ? 0.65 : 1,
-      }}
-    >
-      <span style={{ flex: "1 1 160px", minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
-        <span style={{ fontSize: 17, fontWeight: 600, overflowWrap: "anywhere" }}>{name}</span>
-        <span style={{ fontSize: 15, color: "var(--fg-2)" }}>{category}</span>
+    <li className="reg-line" style={{ opacity: muted ? 0.65 : 1 }}>
+      <span className="reg-line-info">
+        <span className="reg-line-name">{name}</span>
+        <span className="reg-line-cat">{category}</span>
       </span>
-      <span style={{ display: "flex", alignItems: "center", gap: 14 }}>
-        <span
-          className="tabular"
-          style={{ fontSize: 17, fontWeight: 700, whiteSpace: "nowrap" }}
-        >
-          {price}
-        </span>
+      <span className="reg-line-side">
+        <span className="tabular reg-line-price">{price}</span>
         {action}
       </span>
     </li>
@@ -492,7 +452,7 @@ export default function RegisterPage() {
   );
 
   return (
-    <div className="pg page-enter">
+    <div className="pg page-enter reg-flow" data-step={step}>
       {/* ── EN-TÊTE ───────────────────────────────────────────────────────── */}
       <header className="pg-head">
         <Eyebrow>Inscription · {cupData.cup.name}</Eyebrow>
@@ -515,24 +475,16 @@ export default function RegisterPage() {
       </header>
 
       {/* ── ÉTAPES ────────────────────────────────────────────────────────── */}
-      <div style={{ marginBottom: 28 }}>
+      <div className="reg-stepper">
         <Stepper step={step} />
       </div>
 
-      {/* ── DEUX COLONNES (une seule sur mobile) ──────────────────────────── */}
-      <div
-        style={{
-          display: "flex",
-          flexWrap: "wrap",
-          alignItems: "flex-start",
-          gap: 24,
-        }}
-      >
+      {/* ── DEUX COLONNES (une seule sur mobile et tablette portrait) ─────── */}
+      <div className="reg-layout">
         {/* ── GAUCHE : CONTENU DE L'ÉTAPE ─────────────────────────────────── */}
         <section
-          className="form-card"
+          className="form-card reg-main"
           aria-labelledby="register-step-title"
-          style={{ flex: "999 1 560px", minWidth: 0 }}
         >
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <p className="eyebrow" style={{ margin: 0 }}>
@@ -589,37 +541,16 @@ export default function RegisterPage() {
                         disabled={full}
                         aria-disabled={full}
                         aria-pressed={sel}
+                        className="reg-cat"
                         style={{
-                          width: "100%",
-                          textAlign: "left",
-                          padding: "18px 20px",
                           cursor: full ? "not-allowed" : "pointer",
                           opacity: full ? 0.55 : 1,
                           background: sel ? "var(--accent-dim)" : "var(--bg)",
                           border: `1px solid ${sel ? "var(--accent)" : "var(--line-strong)"}`,
-                          borderRadius: 12,
-                          color: "var(--fg)",
-                          font: "inherit",
-                          display: "flex",
-                          flexWrap: "wrap",
-                          alignItems: "baseline",
-                          justifyContent: "space-between",
-                          gap: "6px 16px",
-                          transition: "border-color .15s ease, background .15s ease",
                         }}
                       >
-                        <span
-                          style={{
-                            flex: "1 1 220px",
-                            minWidth: 0,
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: 6,
-                          }}
-                        >
-                          <span style={{ fontSize: 19, fontWeight: 600 }}>
-                            {category.name}
-                          </span>
+                        <span className="reg-cat-info">
+                          <span className="reg-cat-name">{category.name}</span>
                           {category.description && (
                             <span style={{ fontSize: 15, lineHeight: 1.5, color: "var(--fg-2)" }}>
                               {category.description}
@@ -642,13 +573,8 @@ export default function RegisterPage() {
                           )}
                         </span>
                         <span
-                          className="tabular"
-                          style={{
-                            fontSize: 19,
-                            fontWeight: 700,
-                            whiteSpace: "nowrap",
-                            color: sel ? "var(--accent-hi)" : "var(--fg)",
-                          }}
+                          className="tabular reg-cat-price"
+                          style={{ color: sel ? "var(--accent-hi)" : "var(--fg)" }}
                         >
                           {formatEuros(categoryPriceInCents(category))}
                         </span>
@@ -701,18 +627,7 @@ export default function RegisterPage() {
                 />
               </div>
               {/* Déclaratif laboratoire */}
-              <fieldset
-                style={{
-                  margin: 0,
-                  padding: 20,
-                  border: "1px solid var(--line)",
-                  borderRadius: 12,
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 18,
-                  minWidth: 0,
-                }}
-              >
+              <fieldset className="reg-fieldset">
                 <legend style={{ padding: "0 6px", fontSize: 17, fontWeight: 600 }}>
                   Analyse déclarée
                 </legend>
@@ -777,8 +692,7 @@ export default function RegisterPage() {
                         action={
                           <button
                             type="button"
-                            className="btn ghost"
-                            style={{ padding: "8px 14px", fontSize: 15 }}
+                            className="btn ghost reg-remove"
                             disabled={removeProduct.isPending}
                             onClick={() => void handleRemove(product.id)}
                             aria-label={`Retirer ${product.name}`}
@@ -838,25 +752,25 @@ export default function RegisterPage() {
               <div>
                 <div className="kv">
                   <span className="kv-k">Email du compte</span>
-                  <span className="kv-v" style={{ overflowWrap: "anywhere", textAlign: "right" }}>
+                  <span className="kv-v reg-kv-v">
                     {session.user.email ?? "—"}
                   </span>
                 </div>
                 <div className="kv">
                   <span className="kv-k">Raison sociale</span>
-                  <span className="kv-v" style={{ textAlign: "right" }}>
+                  <span className="kv-v reg-kv-v">
                     {producerProfile?.companyName ?? "—"}
                   </span>
                 </div>
                 <div className="kv">
                   <span className="kv-k">SIRET</span>
-                  <span className="kv-v" style={{ textAlign: "right" }}>
+                  <span className="kv-v reg-kv-v">
                     {producerProfile?.siret ?? "Non renseigné"}
                   </span>
                 </div>
                 <div className="kv">
                   <span className="kv-k">Téléphone</span>
-                  <span className="kv-v" style={{ textAlign: "right" }}>
+                  <span className="kv-v reg-kv-v">
                     {producerProfile?.phone ?? "Non renseigné"}
                   </span>
                 </div>
@@ -882,18 +796,7 @@ export default function RegisterPage() {
                 paiement hébergée par Viva.com, seule à voir les données de
                 carte. Le moyen de paiement se choisit là-bas.
               */}
-              <div
-                style={{
-                  padding: 20,
-                  border: "1px solid var(--line)",
-                  borderRadius: 12,
-                  background: "var(--bg)",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 12,
-                  alignItems: "flex-start",
-                }}
-              >
+              <div className="reg-pay-box">
                 <h3 style={{ margin: 0, fontSize: 18 }}>Paiement sécurisé par Viva.com</h3>
                 {/* Logo viva.com : exigé par Viva sur les écrans de paiement
                     (validation de la source de paiement). Logo sombre, posé
@@ -948,16 +851,7 @@ export default function RegisterPage() {
           )}
 
           {/* ── NAVIGATION ────────────────────────────────────────────────── */}
-          <div
-            style={{
-              display: "flex",
-              flexWrap: "wrap-reverse",
-              justifyContent: "space-between",
-              gap: 12,
-              paddingTop: 22,
-              borderTop: "1px solid var(--line)",
-            }}
-          >
+          <div className="reg-nav">
             <button
               type="button"
               className="btn ghost"
@@ -969,8 +863,6 @@ export default function RegisterPage() {
                 setStep((s) => (s === 1 ? STEP_CART : Math.max(1, s - 1)));
               }}
               style={{
-                flex: "1 1 auto",
-                maxWidth: "100%",
                 opacity: step === 1 && cartProducts.length === 0 ? 0.3 : 1,
               }}
             >
@@ -979,7 +871,6 @@ export default function RegisterPage() {
             <button
               type="button"
               className="btn accent"
-              style={{ flex: "1 1 auto", maxWidth: "100%" }}
               disabled={
                 submitting ||
                 (step === 1 && !selectedCategory) ||
@@ -1012,15 +903,8 @@ export default function RegisterPage() {
 
         {/* ── DROITE : RÉCAPITULATIF ──────────────────────────────────────── */}
         <aside
-          className="form-card"
+          className="form-card reg-summary"
           aria-labelledby="register-summary-title"
-          style={{
-            flex: "1 1 300px",
-            minWidth: 0,
-            position: "sticky",
-            top: 100,
-            gap: 0,
-          }}
         >
           <h2 id="register-summary-title" style={{ fontSize: 20, marginBottom: 8 }}>
             Récapitulatif

@@ -48,7 +48,7 @@ export default async function AboutPage() {
         <h2 id="about-juries" style={{ margin: 0, fontSize: 28 }}>
           Deux jurys, deux regards
         </h2>
-        <div className="pg-grid">
+        <div className="pg-grid pal-about-juries">
           {JURIES.map((j) => (
             <article key={j.title} className="pg-tile">
               <h3>{j.title}</h3>

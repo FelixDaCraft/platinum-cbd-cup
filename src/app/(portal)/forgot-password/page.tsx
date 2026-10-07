@@ -22,7 +22,7 @@ const RESET_REDIRECT_PATH = "/reset-password";
 
 export default function ForgotPasswordPage() {
   return (
-    <div className="pg pg--form">
+    <div className="pg pg--form auth-page">
       <ForgotPasswordForm />
     </div>
   );

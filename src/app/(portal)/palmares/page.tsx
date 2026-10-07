@@ -5,6 +5,7 @@ import { eq, desc, isNotNull, and, asc } from "drizzle-orm";
 import { db } from "~/server/db";
 import * as schema from "~/server/db/schema";
 import type { Cup } from "~/server/db/schema/cups";
+import { ActiveChipIntoView } from "./_components/active-chip-into-view";
 import { EditionSelect } from "./_components/edition-select";
 import {
   PORTAL_CACHE_TAGS,
@@ -640,6 +641,7 @@ export default async function PalmaresPage({
           )}
         </p>
 
+        {categories.length > 1 && <ActiveChipIntoView activeId={activeCategory.id} />}
         {categories.length > 1 && (
           <nav className="pal-cats" aria-label="Catégories">
             {chipGroups.map((group) => (
@@ -700,12 +702,21 @@ export default async function PalmaresPage({
         {fullRanking.length > 0 && (
           <div className="pal-medals">
             <h3>Classement complet</h3>
-            <ol className="pal-list pal-ranking">
+            <ol
+              className={[
+                "pal-list pal-ranking",
+                isPublic ? "has-labels" : null,
+                hideScores ? "no-scores" : null,
+              ]
+                .filter(Boolean)
+                .join(" ")}
+            >
               {fullRanking.map((r) => (
                 <li key={r.code}>
-                  <span>
-                    <span className="pal-rank">{r.rank > 0 ? `${r.rank}e` : "—"}</span>
-                    <b>{r.productName || r.code}</b> ·{" "}
+                  <span className="pal-rank">{r.rank > 0 ? `${r.rank}e` : "—"}</span>
+                  <span className="pal-ranking-id">
+                    <b>{r.productName || r.code}</b>
+                    <span className="pal-ranking-sep"> · </span>
                     <span className="pal-muted">{r.producerName}</span>
                   </span>
                   <span className="pal-ranking-meta">
@@ -735,11 +746,12 @@ export default async function PalmaresPage({
         {disqualified.length > 0 && (
           <div className="pal-medals">
             <h3>Disqualifiés</h3>
-            <ul className="pal-list">
+            <ul className="pal-list pal-ranking pal-ranking--dq">
               {disqualified.map((r) => (
                 <li key={r.code}>
-                  <span>
-                    <b>{r.productName || r.code}</b> ·{" "}
+                  <span className="pal-ranking-id">
+                    <b>{r.productName || r.code}</b>
+                    <span className="pal-ranking-sep"> · </span>
                     <span className="pal-muted">{r.producerName}</span>
                   </span>
                   <span className="pal-dq">Disqualifié</span>

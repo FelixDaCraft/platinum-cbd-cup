@@ -33,7 +33,10 @@ function ActivatePageContent() {
     error,
   } = api.juryCodes.getByCode.useQuery(
     { code: searchCode },
-    { enabled: !!searchCode }
+    // Un code inconnu ou expiré est une réponse définitive, pas une panne :
+    // sans `retry: false`, React Query relançait la requête trois fois et
+    // laissait un spinner ~8 s avant d'afficher l'erreur.
+    { enabled: !!searchCode, retry: false }
   );
 
   // Activate mutation
@@ -101,6 +104,10 @@ function ActivatePageContent() {
       <input
         id={id}
         placeholder="XXX-XXX-XXX"
+        autoCapitalize="characters"
+        autoCorrect="off"
+        spellCheck={false}
+        enterKeyHint="go"
         value={inputCode}
         onChange={(e) => setInputCode(formatCode(e.target.value))}
         className="field-input mono"
@@ -124,7 +131,7 @@ function ActivatePageContent() {
   // No code yet - show entry form
   if (!searchCode) {
     return (
-      <div className="pg pg--form">
+      <div className="pg pg--form auth-page">
         <PageHead
           title="Activer un code jury"
           lede="Saisissez le code d'invitation que vous avez reçu (par email ou sur QR code) pour rejoindre le jury."
@@ -145,7 +152,7 @@ function ActivatePageContent() {
   // Error state
   if (error) {
     return (
-      <div className="pg pg--form">
+      <div className="pg pg--form auth-page">
         <PageHead title="Code invalide" />
         <div className="form-card">
           <div className="notice is-error" role="alert">
@@ -170,7 +177,7 @@ function ActivatePageContent() {
     const isRevoked = data.reason === "revoked";
 
     return (
-      <div className="pg pg--form">
+      <div className="pg pg--form auth-page">
         <PageHead
           title={
             isExpired
@@ -226,7 +233,7 @@ function ActivatePageContent() {
   };
 
   return (
-    <div className="pg pg--form">
+    <div className="pg pg--form auth-page">
       <PageHead
         title={
           <>
@@ -387,10 +394,9 @@ function PageHead({
 /** État d'attente : session ou vérification du code. */
 function ActivatePending({ label }: { label: string }) {
   return (
-    <div className="pg pg--form">
+    <div className="pg pg--form auth-page">
       <div
-        className="form-card"
-        style={{ marginTop: 72, alignItems: "center", padding: "56px 24px" }}
+        className="form-card auth-pending"
         role="status"
       >
         <Loader2 className="h-8 w-8 animate-spin" style={{ color: "var(--accent)" }} aria-hidden="true" />

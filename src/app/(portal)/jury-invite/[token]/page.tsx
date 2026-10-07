@@ -59,10 +59,9 @@ export default function PortalJuryInvitePage() {
   // Show loading while validating
   if (isValidating) {
     return (
-      <div className="pg pg--form">
+      <div className="pg pg--form auth-page">
         <div
-          className="form-card"
-          style={{ marginTop: 72, alignItems: "center", padding: "56px 24px" }}
+          className="form-card auth-pending"
           role="status"
         >
           <Loader2 className="h-8 w-8 animate-spin" style={{ color: "var(--accent)" }} aria-hidden="true" />
@@ -77,7 +76,7 @@ export default function PortalJuryInvitePage() {
   // Show error if token is invalid
   if (validationError || !invitation) {
     return (
-      <div className="pg pg--form">
+      <div className="pg pg--form auth-page">
         <InviteHead title="Invitation invalide" />
         <div className="form-card">
           <div className="notice is-error" role="alert">
@@ -173,7 +172,7 @@ function JuryAcceptInvitation({
     .join(" ");
 
   return (
-    <div className="pg pg--form">
+    <div className="pg pg--form auth-page">
       <InviteHead
         title={
           <>
@@ -335,7 +334,7 @@ function JuryRegisterForm({
   );
 
   return (
-    <div className="pg pg--form">
+    <div className="pg pg--form auth-page">
       <InviteHead
         title={
           <>

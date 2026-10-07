@@ -64,6 +64,7 @@ export function PlatinumShell({ children, liveStatus = "idle" }: PlatinumShellPr
                 href={entry.href}
                 className={active ? "active" : undefined}
                 aria-current={active ? "page" : undefined}
+                data-hide-below={entry.hideBelow}
               >
                 {entry.label}
               </Link>
@@ -96,14 +97,9 @@ export function PlatinumShell({ children, liveStatus = "idle" }: PlatinumShellPr
       <MobileBottomNav />
 
       <footer className="footer">
-        <span className="brand-name" style={{ fontSize: 20, color: "var(--fg)" }}>
-          Platinum CBD Cup
-        </span>
+        <span className="brand-name footer-brand">Platinum CBD Cup</span>
 
-        <nav
-          style={{ display: "flex", gap: "10px 24px", alignItems: "center", flexWrap: "wrap" }}
-          aria-label="Liens du pied de page"
-        >
+        <nav className="footer-nav" aria-label="Liens du pied de page">
           {[
             { href: "/about", label: "Le concours" },
             { href: "/reglement", label: "Règlement" },

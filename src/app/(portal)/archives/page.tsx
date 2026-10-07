@@ -62,7 +62,7 @@ export default async function ArchivesPage() {
             </Link>
           </div>
         ) : (
-          <div className="pg-grid">
+          <div className="pg-grid pal-archives-grid">
             {editions.map((ed) => {
               const details = [
                 ed.eventDate ? formatDay(ed.eventDate) : null,

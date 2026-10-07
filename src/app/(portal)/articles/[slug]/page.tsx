@@ -185,9 +185,9 @@ export default async function ArticleDetailPage({ params }: Props) {
   if (!article || article.status !== "published") notFound();
 
   return (
-    <article className="pg pg--narrow">
+    <article className="pg pg--narrow editorial">
       <header className="pg-head">
-        <Link href="/articles" className="pg-link" style={{ fontSize: 15 }}>
+        <Link href="/articles" className="pg-link editorial-back" style={{ fontSize: 15 }}>
           Tous les articles
         </Link>
         <span className="pg-meta">
@@ -210,15 +210,7 @@ export default async function ArticleDetailPage({ params }: Props) {
       </header>
 
       {article.coverImage && (
-        <div
-          style={{
-            position: "relative",
-            aspectRatio: "16/9",
-            borderRadius: 14,
-            overflow: "hidden",
-            marginBottom: 40,
-          }}
-        >
+        <div className="editorial-cover">
           <Image
             src={article.coverImage}
             alt={article.title}

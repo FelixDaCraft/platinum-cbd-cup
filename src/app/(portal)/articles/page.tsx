@@ -41,7 +41,7 @@ export default async function ArticlesPage() {
   const articles = await getPublishedArticles();
 
   return (
-    <div className="pg">
+    <div className="pg editorial">
       <header className="pg-head">
         <p className="eyebrow">Journal</p>
         <h1 className="display">Articles</h1>

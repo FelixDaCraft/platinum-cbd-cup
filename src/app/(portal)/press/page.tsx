@@ -50,7 +50,7 @@ export default async function PressPage() {
   const showMediaKit = settings?.showMediaKit !== false && !!settings?.mediaKitUrl;
 
   return (
-    <div className="pg">
+    <div className="pg editorial">
       <header className="pg-head">
         <p className="eyebrow">Presse</p>
         <h1 className="display">Espace presse</h1>
@@ -83,7 +83,7 @@ export default async function PressPage() {
             </div>
             <a
               href={settings.mediaKitUrl}
-              className="btn accent"
+              className="btn accent editorial-cta"
               download={settings.mediaKitFileName ?? undefined}
             >
               Télécharger le kit média
@@ -195,7 +195,7 @@ export default async function PressPage() {
               </p>
             )}
             <div style={{ marginTop: 8 }}>
-              <Link href="/contact" className={showMediaKit ? "btn ghost" : "btn accent"}>
+              <Link href="/contact" className={`${showMediaKit ? "btn ghost" : "btn accent"} editorial-cta`}>
                 Formulaire de contact
               </Link>
             </div>

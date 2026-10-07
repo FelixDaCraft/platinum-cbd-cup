@@ -57,7 +57,7 @@ function sanitizeCallbackUrl(raw: string | null): string | null {
 
 export default function PortalLoginPage() {
   return (
-    <div className="pg pg--form">
+    <div className="pg pg--form auth-page">
       <Suspense fallback={<LoginPending label="Chargement…" />}>
         <PortalLoginForm />
       </Suspense>
@@ -69,8 +69,7 @@ export default function PortalLoginPage() {
 function LoginPending({ label }: { label: string }) {
   return (
     <div
-      className="form-card"
-      style={{ marginTop: 72, alignItems: "center", padding: "56px 24px" }}
+      className="form-card auth-pending"
       role="status"
     >
       <Loader2 className="h-8 w-8 animate-spin" style={{ color: "var(--accent)" }} aria-hidden="true" />
@@ -406,7 +405,7 @@ function PortalLoginForm() {
               <label htmlFor="password" className="field-label">
                 Mot de passe
               </label>
-              <Link href="/forgot-password" className="pg-link" style={{ fontSize: 15 }}>
+              <Link href="/forgot-password" className="pg-link auth-forgot" style={{ fontSize: 15 }}>
                 Mot de passe oublié ?
               </Link>
             </div>

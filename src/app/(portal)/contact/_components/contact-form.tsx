@@ -58,7 +58,20 @@ export function ContactForm({ defaultEmail }: ContactFormProps) {
     e.preventDefault();
     const found = validate();
     setErrors(found);
-    if (Object.keys(found).length > 0) return;
+    const firstError = (["name", "email", "message", "accept"] as const).find(
+      (k) => found[k],
+    );
+    if (firstError) {
+      // Sur mobile, le bouton d'envoi est loin sous les premiers champs :
+      // sans ce focus, l'erreur reste hors de l'écran et l'envoi semble ignoré.
+      const form = e.currentTarget;
+      const target =
+        firstError === "accept"
+          ? form.querySelector<HTMLElement>('input[type="checkbox"]')
+          : form.querySelector<HTMLElement>(`[name="${firstError}"]`);
+      target?.focus();
+      return;
+    }
 
     submit.mutate({
       senderName: name.trim(),
@@ -146,26 +159,19 @@ export function ContactForm({ defaultEmail }: ContactFormProps) {
         </label>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+          {/* Un vrai <label> : toute la ligne (texte compris) coche la case,
+              ce qui donne au toucher une cible bien plus large que le carré. */}
+          <label className="contact-consent">
             <Check
               on={accept}
               onClick={() => setAccept(!accept)}
               labelledBy="contact-consent-label"
             />
-            <span
-              id="contact-consent-label"
-              onClick={() => setAccept(!accept)}
-              style={{
-                fontSize: 15,
-                color: "var(--fg-2)",
-                lineHeight: 1.5,
-                cursor: "pointer",
-              }}
-            >
+            <span id="contact-consent-label" className="contact-consent-text">
               J&apos;accepte que mes données soient traitées pour répondre à mon
               message (RGPD).
             </span>
-          </div>
+          </label>
           {errors.accept && <span className="field-error">{errors.accept}</span>}
         </div>
       </div>

@@ -169,7 +169,7 @@ function JuryRegisterContent() {
   }
 
   return (
-    <div className="pg pg--form">
+    <div className="pg pg--form auth-page">
       <header className="pg-head">
         <p className="eyebrow">Jury</p>
         <h1 className="display">Inscription du jury</h1>
@@ -389,7 +389,7 @@ function JuryRegisterContent() {
 /** Code absent ou refusé : explication et retour à l'accueil. */
 function JuryCodeProblem({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="pg pg--form">
+    <div className="pg pg--form auth-page">
       <header className="pg-head">
         <p className="eyebrow">Jury</p>
         <h1 className="display">{title}</h1>
@@ -413,11 +413,10 @@ function JuryCodeProblem({ title, children }: { title: string; children: ReactNo
 
 function JuryPending({ label }: { label: string }) {
   return (
-    <div className="pg pg--form">
+    <div className="pg pg--form auth-page">
       <div
-        className="form-card"
+        className="form-card auth-pending"
         role="status"
-        style={{ marginTop: 72, alignItems: "center", padding: "56px 24px" }}
       >
         <Loader2 className="h-8 w-8 animate-spin" style={{ color: "var(--accent)" }} aria-hidden="true" />
         <p style={{ margin: 0, fontSize: 16, color: "var(--fg-2)" }}>{label}</p>

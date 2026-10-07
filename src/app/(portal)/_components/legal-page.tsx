@@ -36,18 +36,10 @@ interface LegalSectionProps {
  */
 export function LegalSection({ numeral, title, children }: LegalSectionProps) {
   return (
-    <section
-      id={`article-${numeral}`}
-      className="prose legal-section"
-      style={{
-        paddingTop: 36,
-        paddingBottom: 36,
-        borderTop: "1px solid var(--line)",
-        // La barre de navigation est collante : sans marge, le titre visé
-        // par une ancre passerait dessous.
-        scrollMarginTop: 96,
-      }}
-    >
+    // Marges et `scroll-margin-top` (la barre de navigation est collante : sans
+    // marge, le titre visé par une ancre passerait dessous) dans
+    // responsive/editorial-legal.ts, pour suivre la hauteur de l'en-tête.
+    <section id={`article-${numeral}`} className="prose legal-section">
       <h2 style={{ marginTop: 0, textWrap: "balance" }}>
         <span style={{ color: "var(--accent-hi)" }}>{numeral}.</span> {title}
       </h2>
@@ -63,40 +55,12 @@ function LegalToc({
   items: readonly { numeral: string; title: string }[];
 }) {
   return (
-    <nav
-      aria-label="Sommaire"
-      style={{
-        marginBottom: 16,
-        padding: "20px 22px",
-        borderRadius: 12,
-        border: "1px solid var(--line)",
-        background: "var(--bg-2)",
-      }}
-    >
-      <p style={{ margin: "0 0 12px", fontSize: 16, fontWeight: 700, color: "var(--fg)" }}>
-        Sommaire
-      </p>
-      <ol
-        style={{
-          margin: 0,
-          padding: 0,
-          listStyle: "none",
-          columns: "2 240px",
-          columnGap: 32,
-          fontSize: 15,
-          lineHeight: 1.5,
-        }}
-      >
+    <nav aria-label="Sommaire" className="legal-toc">
+      <p className="legal-toc-title">Sommaire</p>
+      <ol className="legal-toc-list">
         {items.map(({ numeral, title }) => (
-          <li key={numeral} style={{ breakInside: "avoid", padding: "4px 0" }}>
-            <a
-              href={`#article-${numeral}`}
-              style={{
-                color: "var(--fg-2)",
-                textDecorationColor: "var(--line-strong)",
-                textUnderlineOffset: 4,
-              }}
-            >
+          <li key={numeral}>
+            <a href={`#article-${numeral}`}>
               {numeral}. {title}
             </a>
           </li>
@@ -132,7 +96,7 @@ export function LegalPage({
   );
 
   return (
-    <div className="pg pg--narrow page-enter">
+    <div className="pg pg--narrow page-enter legal">
       <header className="pg-head">
         <h1 className="display">{title}</h1>
         <p className="pg-lede">{lede}</p>
@@ -169,40 +133,11 @@ export function KeyValues({
   rows: readonly { k: string; v: ReactNode }[];
 }) {
   return (
-    <dl
-      style={{
-        marginBottom: 0,
-        padding: "4px 22px",
-        borderRadius: 12,
-        border: "1px solid var(--line)",
-        background: "var(--bg-2)",
-        fontSize: 16,
-        lineHeight: 1.5,
-      }}
-    >
-      {rows.map(({ k, v }, i) => (
-        <div
-          key={k}
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            gap: "2px 20px",
-            padding: "12px 0",
-            borderTop: i === 0 ? 0 : "1px solid var(--line)",
-          }}
-        >
-          <dt style={{ flex: "0 0 190px", color: "var(--fg-3)" }}>{k}</dt>
-          <dd
-            style={{
-              flex: "1 1 260px",
-              minWidth: 0,
-              margin: 0,
-              color: "var(--fg)",
-              overflowWrap: "break-word",
-            }}
-          >
-            {v}
-          </dd>
+    <dl className="legal-kv">
+      {rows.map(({ k, v }) => (
+        <div key={k}>
+          <dt>{k}</dt>
+          <dd>{v}</dd>
         </div>
       ))}
     </dl>

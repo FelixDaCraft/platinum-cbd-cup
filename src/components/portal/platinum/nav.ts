@@ -8,14 +8,19 @@ type NavEntry = {
   href: string;
   /** Préfixe de chemin qui rend l'entrée active. */
   match: string;
+  /**
+   * Largeur (px) sous laquelle l'en-tête bureau masque l'entrée, faute de
+   * place sur une ligne. Réservé aux liens repris dans le pied de page.
+   */
+  hideBelow?: 960 | 1024;
 };
 
 export const PORTAL_NAV: NavEntry[] = [
-  { label: "Le concours", href: "/about", match: "/about" },
+  { label: "Le concours", href: "/about", match: "/about", hideBelow: 960 },
   { label: "Participer", href: "/cups", match: "/cups" },
   { label: "Palmarès", href: "/palmares", match: "/palmares" },
   { label: "Éditions", href: "/archives", match: "/archives" },
-  { label: "Presse", href: "/press", match: "/press" },
+  { label: "Presse", href: "/press", match: "/press", hideBelow: 1024 },
 ];
 
 export function isNavActive(entry: { match: string }, pathname: string): boolean {

@@ -73,9 +73,9 @@ export default async function SponsorDetailPage({ params }: Props) {
   ];
 
   return (
-    <div className="pg">
+    <div className="pg editorial">
       <header className="pg-head">
-        <Link href="/sponsors" className="pg-link" style={{ fontSize: 15 }}>
+        <Link href="/sponsors" className="pg-link editorial-back" style={{ fontSize: 15 }}>
           Tous les partenaires
         </Link>
         <p className="eyebrow">Partenaire</p>
@@ -103,7 +103,7 @@ export default async function SponsorDetailPage({ params }: Props) {
             {links.length > 0 && (
               <div className="pg-tile">
                 <h2 style={{ margin: 0, fontSize: 22 }}>Liens</h2>
-                <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 10 }}>
+                <ul className="sponsor-links" style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 10 }}>
                   {links.map((l) => (
                     <li key={l.href} style={{ fontSize: 16, display: "flex", flexWrap: "wrap", gap: "4px 12px" }}>
                       <span style={{ color: "var(--fg-2)", minWidth: 90 }}>{l.label}</span>
