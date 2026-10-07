@@ -1,6 +1,4 @@
-import type { ReactNode } from "react";
-
-import { Eyebrow } from "~/components/portal/platinum";
+import { Children, isValidElement, type ReactNode } from "react";
 
 /**
  * Identité de l'entité qui édite le site et organise le concours.
@@ -25,7 +23,7 @@ export const ASSOCIATION = {
 } as const;
 
 interface LegalSectionProps {
-  /** Numéro d'article, imprimé en vis-à-vis du titre. */
+  /** Numéro d'article, repris dans le titre et dans l'ancre. */
   numeral: string;
   title: string;
   children: ReactNode;
@@ -34,112 +32,136 @@ interface LegalSectionProps {
 /**
  * Un article du document. La numérotation n'est pas décorative : elle rend
  * les articles citables (« article 4 du règlement ») dans un échange avec un
- * participant ou une autorité.
+ * participant ou une autorité, et l'ancre `#article-N` permet d'y renvoyer.
  */
 export function LegalSection({ numeral, title, children }: LegalSectionProps) {
   return (
     <section
       id={`article-${numeral}`}
+      className="prose legal-section"
       style={{
-        display: "grid",
-        gridTemplateColumns: "52px minmax(0, 1fr)",
-        gap: 20,
-        paddingTop: 28,
-        paddingBottom: 28,
-        borderTop: "1px solid var(--line, rgba(255,255,255,.08))",
+        paddingTop: 36,
+        paddingBottom: 36,
+        borderTop: "1px solid var(--line)",
+        // La barre de navigation est collante : sans marge, le titre visé
+        // par une ancre passerait dessous.
+        scrollMarginTop: 96,
       }}
-      className="legal-section"
     >
-      <span
-        className="mono fg3"
-        style={{ fontSize: 13, paddingTop: 4, letterSpacing: ".06em" }}
-        aria-hidden="true"
-      >
-        {numeral}
-      </span>
-      <div style={{ minWidth: 0 }}>
-        <h2
-          style={{
-            fontSize: 20,
-            lineHeight: 1.25,
-            margin: "0 0 12px",
-            textWrap: "balance",
-          }}
-        >
-          {title}
-        </h2>
-        <div className="legal-body" style={{ maxWidth: "66ch" }}>
-          {children}
-        </div>
-      </div>
+      <h2 style={{ marginTop: 0, textWrap: "balance" }}>
+        <span style={{ color: "var(--accent-hi)" }}>{numeral}.</span> {title}
+      </h2>
+      {children}
     </section>
   );
 }
 
+/** Sommaire cliquable, construit à partir des articles du document. */
+function LegalToc({
+  items,
+}: {
+  items: readonly { numeral: string; title: string }[];
+}) {
+  return (
+    <nav
+      aria-label="Sommaire"
+      style={{
+        marginBottom: 16,
+        padding: "20px 22px",
+        borderRadius: 12,
+        border: "1px solid var(--line)",
+        background: "var(--bg-2)",
+      }}
+    >
+      <p style={{ margin: "0 0 12px", fontSize: 16, fontWeight: 700, color: "var(--fg)" }}>
+        Sommaire
+      </p>
+      <ol
+        style={{
+          margin: 0,
+          padding: 0,
+          listStyle: "none",
+          columns: "2 240px",
+          columnGap: 32,
+          fontSize: 15,
+          lineHeight: 1.5,
+        }}
+      >
+        {items.map(({ numeral, title }) => (
+          <li key={numeral} style={{ breakInside: "avoid", padding: "4px 0" }}>
+            <a
+              href={`#article-${numeral}`}
+              style={{
+                color: "var(--fg-2)",
+                textDecorationColor: "var(--line-strong)",
+                textUnderlineOffset: 4,
+              }}
+            >
+              {numeral}. {title}
+            </a>
+          </li>
+        ))}
+      </ol>
+    </nav>
+  );
+}
+
 interface LegalPageProps {
-  eyebrow: string;
-  eyebrowIdx?: number;
   title: string;
   lede: string;
   /** Date de dernière mise à jour, affichée en tête du document. */
   updatedAt: string;
+  /** Affiche le sommaire des articles (par défaut : oui). */
+  toc?: boolean;
   children: ReactNode;
 }
 
 export function LegalPage({
-  eyebrow,
-  eyebrowIdx = 8,
   title,
   lede,
   updatedAt,
+  toc = true,
   children,
 }: LegalPageProps) {
+  // Le sommaire est dérivé des <LegalSection> enfants : une seule source pour
+  // les titres, pas de liste à tenir à jour à côté du texte.
+  const items = Children.toArray(children).flatMap((child) =>
+    isValidElement<LegalSectionProps>(child) && child.type === LegalSection
+      ? [{ numeral: child.props.numeral, title: child.props.title }]
+      : [],
+  );
+
   return (
-    <div className="page-enter">
-      <section style={{ paddingTop: 40, paddingBottom: 40 }}>
-        <Eyebrow idx={eyebrowIdx}>{eyebrow}</Eyebrow>
-        <h1 className="display" style={{ marginTop: 20, marginBottom: 20 }}>
-          {title}
-          <em>.</em>
-        </h1>
-        <p className="lede" style={{ maxWidth: 560 }}>
-          {lede}
-        </p>
-        <p className="mono fg3" style={{ fontSize: 12, marginTop: 24 }}>
+    <div className="pg pg--narrow page-enter">
+      <header className="pg-head">
+        <h1 className="display">{title}</h1>
+        <p className="pg-lede">{lede}</p>
+        <p className="pg-meta" style={{ margin: 0 }}>
           Dernière mise à jour : {updatedAt}
         </p>
-      </section>
+      </header>
 
-      <div style={{ marginBottom: 80 }}>{children}</div>
+      {toc && items.length > 1 && <LegalToc items={items} />}
+
+      <div>{children}</div>
     </div>
   );
 }
 
-/** Paragraphe de corps de texte, avec l'interligne des documents longs. */
+/** Paragraphe de corps de texte (mis en forme par `.prose`). */
 export function P({ children }: { children: ReactNode }) {
-  return <p style={{ margin: "0 0 14px", lineHeight: 1.65 }}>{children}</p>;
+  return <p>{children}</p>;
 }
 
-/** Liste à puces sobre, alignée sur le corps de texte. */
+/** Liste à puces (mise en forme par `.prose`). */
 export function List({ children }: { children: ReactNode }) {
-  return (
-    <ul
-      style={{
-        margin: "0 0 14px",
-        paddingLeft: 18,
-        lineHeight: 1.65,
-        display: "grid",
-        gap: 6,
-      }}
-    >
-      {children}
-    </ul>
-  );
+  return <ul>{children}</ul>;
 }
 
 /**
  * Tableau clé / valeur, pour les blocs d'identité et les durées de
- * conservation. Défile horizontalement plutôt que de déborder sur mobile.
+ * conservation. Chaque ligne passe sur deux lignes quand la largeur manque
+ * (mobile) au lieu de déborder.
  */
 export function KeyValues({
   rows,
@@ -147,13 +169,42 @@ export function KeyValues({
   rows: readonly { k: string; v: ReactNode }[];
 }) {
   return (
-    <div className="card" style={{ marginBottom: 14, overflowX: "auto" }}>
-      {rows.map(({ k, v }) => (
-        <div key={k} className="kv">
-          <span className="kv-k">{k}</span>
-          <span className="kv-v">{v}</span>
+    <dl
+      style={{
+        marginBottom: 0,
+        padding: "4px 22px",
+        borderRadius: 12,
+        border: "1px solid var(--line)",
+        background: "var(--bg-2)",
+        fontSize: 16,
+        lineHeight: 1.5,
+      }}
+    >
+      {rows.map(({ k, v }, i) => (
+        <div
+          key={k}
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "2px 20px",
+            padding: "12px 0",
+            borderTop: i === 0 ? 0 : "1px solid var(--line)",
+          }}
+        >
+          <dt style={{ flex: "0 0 190px", color: "var(--fg-3)" }}>{k}</dt>
+          <dd
+            style={{
+              flex: "1 1 260px",
+              minWidth: 0,
+              margin: 0,
+              color: "var(--fg)",
+              overflowWrap: "break-word",
+            }}
+          >
+            {v}
+          </dd>
         </div>
       ))}
-    </div>
+    </dl>
   );
 }

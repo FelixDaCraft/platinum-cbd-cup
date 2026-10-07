@@ -2,7 +2,6 @@
 
 import { useEffect } from "react";
 import Link from "next/link";
-import { Eyebrow } from "~/components/portal/platinum";
 
 /**
  * Frontière d'erreur du portail public.
@@ -25,52 +24,39 @@ export default function PortalError({
   }, [error]);
 
   return (
-    <div className="page-enter">
-      <section
-        style={{
-          paddingTop: 72,
-          paddingBottom: 72,
-          maxWidth: 680,
-          margin: "0 auto",
-        }}
-      >
-        <Eyebrow>Erreur</Eyebrow>
-        <h1 className="display" style={{ marginTop: 18, marginBottom: 12 }}>
-          Une erreur est survenue<em>.</em>
-        </h1>
-        <p className="lede">
+    <div className="pg pg--narrow page-enter">
+      <header className="pg-head">
+        <h1 className="display">Une erreur est survenue</h1>
+        <p className="pg-lede">
           Cette page n&apos;a pas pu s&apos;afficher. Le problème vient de notre
-          côté et a été enregistré.
+          côté et a été enregistré. Vous pouvez réessayer dans un instant ou
+          revenir à l&apos;accueil.
         </p>
+      </header>
 
-        <div
-          style={{
-            display: "flex",
-            gap: 12,
-            marginTop: 36,
-            flexWrap: "wrap",
-          }}
-        >
-          <button type="button" onClick={reset} className="btn accent">
-            Réessayer <span className="btn-arrow">→</span>
-          </button>
-          <Link href="/" className="btn ghost">
-            Retour à l&apos;accueil
-          </Link>
-          <Link href="/contact" className="btn ghost">
-            Nous contacter
-          </Link>
-        </div>
+      <div className="home-actions">
+        <Link href="/" className="btn accent">
+          Retour à l&apos;accueil <span className="btn-arrow">→</span>
+        </Link>
+        <button type="button" onClick={reset} className="btn ghost">
+          Réessayer
+        </button>
+      </div>
 
-        {error.digest && (
-          <p
-            className="mono fg3"
-            style={{ marginTop: 28, fontSize: 11, letterSpacing: ".1em" }}
-          >
-            RÉFÉRENCE · {error.digest}
-          </p>
+      <p className="pg-meta" style={{ marginTop: 32, marginBottom: 0 }}>
+        Le problème persiste ?{" "}
+        <Link href="/contact" className="pg-link">
+          Contactez-nous
+        </Link>
+        {error.digest ? (
+          <>
+            {" "}
+            en indiquant la référence <b style={{ color: "var(--fg-2)" }}>{error.digest}</b>.
+          </>
+        ) : (
+          "."
         )}
-      </section>
+      </p>
     </div>
   );
 }

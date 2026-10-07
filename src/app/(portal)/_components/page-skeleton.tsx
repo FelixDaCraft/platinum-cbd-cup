@@ -11,7 +11,7 @@
  */
 export function PageSkeleton({ rows = 6 }: { rows?: number }) {
   return (
-    <div style={{ paddingTop: 40, paddingBottom: 40 }} aria-busy="true">
+    <div className="pg" aria-busy="true">
       <style>{`
         .sk { background: var(--line); border-radius: 8px; animation: sk-pulse 1.4s ease-in-out infinite; }
         @keyframes sk-pulse { 50% { opacity: .38; } }
@@ -20,21 +20,28 @@ export function PageSkeleton({ rows = 6 }: { rows?: number }) {
 
       <span className="sr-only">Chargement de la page…</span>
 
-      {/* Eyebrow + titre + chapô */}
-      <div className="sk" style={{ width: 160, height: 10, marginBottom: 22 }} />
-      <div className="sk" style={{ width: "min(420px, 80%)", height: 44, marginBottom: 18 }} />
-      <div className="sk" style={{ width: "min(560px, 95%)", height: 14, marginBottom: 8 }} />
-      <div className="sk" style={{ width: "min(400px, 70%)", height: 14 }} />
+      {/* En-tête : mêmes marges que .pg-head, titre à la hauteur de .display,
+          chapô sur deux lignes à la taille de .pg-lede. */}
+      <div className="pg-head">
+        <div
+          className="sk"
+          style={{ width: "min(520px, 85%)", height: "clamp(40px, 6vw, 76px)" }}
+        />
+        <div style={{ display: "grid", gap: 10, maxWidth: 640 }}>
+          <div className="sk" style={{ width: "95%", height: 18 }} />
+          <div className="sk" style={{ width: "70%", height: 18 }} />
+        </div>
+      </div>
 
-      {/* Lignes de contenu */}
-      <div style={{ marginTop: 44, display: "grid", gap: 12 }}>
+      {/* Contenu : blocs de la taille d'une tuile ou d'une ligne de liste. */}
+      <div style={{ display: "grid", gap: 14 }}>
         {Array.from({ length: rows }, (_, i) => (
           <div
             key={i}
             className="sk"
             style={{
-              height: 56,
-              borderRadius: "var(--radius)",
+              height: 72,
+              borderRadius: 16,
               // Dégradé d'opacité : la page semble se remplir du haut.
               opacity: 1 - i * 0.1,
             }}

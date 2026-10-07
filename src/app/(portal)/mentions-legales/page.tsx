@@ -21,8 +21,6 @@ export const metadata: Metadata = {
 export default function MentionsLegalesPage() {
   return (
     <LegalPage
-      eyebrow="Mentions légales"
-      eyebrowIdx={8}
       title="Mentions légales"
       lede="Informations exigées par l'article 6-III de la loi pour la confiance dans l'économie numérique."
       updatedAt="24 septembre 2026"

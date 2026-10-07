@@ -21,8 +21,6 @@ export const metadata: Metadata = {
 export default function ReglementPage() {
   return (
     <LegalPage
-      eyebrow="Règlement · conditions"
-      eyebrowIdx={10}
       title="Règlement"
       lede="Les conditions de participation à la Platinum CBD Cup. Elles valent conditions générales pour l'inscription des produits."
       updatedAt="24 septembre 2026"

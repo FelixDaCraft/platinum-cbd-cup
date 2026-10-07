@@ -22,8 +22,6 @@ export const metadata: Metadata = {
 export default function ConfidentialitePage() {
   return (
     <LegalPage
-      eyebrow="Données personnelles"
-      eyebrowIdx={9}
       title="Confidentialité"
       lede="Ce que nous collectons, pourquoi, combien de temps nous le gardons, et comment reprendre la main dessus."
       updatedAt="24 septembre 2026"
