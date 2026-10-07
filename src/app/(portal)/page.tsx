@@ -1,16 +1,30 @@
 import type { Metadata } from "next";
 import { unstable_cache } from "next/cache";
 import Link from "next/link";
+import { and, asc, between, eq, inArray, isNotNull } from "drizzle-orm";
 import { db } from "~/server/db";
-import { and, desc, isNotNull, eq, count, sql } from "drizzle-orm";
 import * as schema from "~/server/db/schema";
-import {
-  Eyebrow,
-  Countdown,
-  Ticker,
-} from "~/components/portal/platinum";
-import { MobileHomeHero } from "~/components/portal/mobile/mobile-home-hero";
+import { panelColumns } from "~/server/db/panel-columns";
+import type { JuryPanel } from "~/lib/enums";
 import { DesktopEmblem } from "./_components/desktop-emblem";
+import {
+  CategoryPrices,
+  EditionStatus,
+  EditionSteps,
+  JuriesExplainer,
+} from "./_components/edition-blocks";
+import {
+  editionYear,
+  formatNumber,
+  getCurrentEditionId,
+  getEditionDetails,
+  phaseOf,
+  resolveTier,
+  statusLine,
+  stepsOf,
+  tierName,
+  type LabelTier,
+} from "./_lib/edition";
 import { PORTAL_CACHE_TAGS, PORTAL_REVALIDATE } from "./_lib/cache";
 import { canonical } from "./_lib/seo";
 
@@ -29,320 +43,136 @@ export const metadata: Metadata = {
 };
 
 // ---------------------------------------------------------------------------
-// Helpers
+// Data
 // ---------------------------------------------------------------------------
 
-function categoryCode(name: string): string {
-  return name
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toUpperCase()
-    .replace(/[^A-Z]/g, "")
-    .slice(0, 2);
+async function getCurrentEdition() {
+  const id = await getCurrentEditionId();
+  return id ? getEditionDetails(id) : null;
 }
 
-// ---------------------------------------------------------------------------
-// Data fetchers
-// ---------------------------------------------------------------------------
-
-type CountdownState =
-  | {
-      kind: "registration";
-      target: number;
-      cupName: string;
-      specimenCount: number;
-      categoryCount: number;
-    }
-  | {
-      kind: "results";
-      target: number;
-      cupName: string;
-      specimenCount: number;
-      categoryCount: number;
-    }
-  | { kind: "next-year" };
-
-async function getCupStats(
-  cupId: string
-): Promise<{ specimenCount: number; categoryCount: number }> {
-  try {
-    const [specimens, cats] = await Promise.all([
-      db
-        .select({ total: count() })
-        .from(schema.products)
-        .innerJoin(
-          schema.registrations,
-          eq(schema.products.registrationId, schema.registrations.id)
-        )
-        .where(eq(schema.registrations.cupId, cupId)),
-      db
-        .select({ total: count() })
-        .from(schema.categories)
-        .where(eq(schema.categories.cupId, cupId)),
-    ]);
-    return {
-      specimenCount: specimens[0]?.total ?? 0,
-      categoryCount: cats[0]?.total ?? 0,
-    };
-  } catch {
-    return { specimenCount: 0, categoryCount: 0 };
-  }
-}
-
-async function getCountdownState(): Promise<CountdownState> {
-  const now = new Date();
-
-  // 1. Latest published cup with registrations still open
-  try {
-    const cup = await db.query.cups.findFirst({
-      where: (c, { and, eq: eqOp, isNotNull: nn, gt }) =>
-        and(
-          eqOp(c.status, "published"),
-          nn(c.registrationCloseAt),
-          gt(c.registrationCloseAt, now)
-        ),
-      orderBy: (c, { desc: dsc }) => [dsc(c.createdAt)],
-      columns: { id: true, name: true, registrationCloseAt: true },
-    });
-
-    if (cup?.registrationCloseAt) {
-      const stats = await getCupStats(cup.id);
-      return {
-        kind: "registration",
-        target: cup.registrationCloseAt.getTime(),
-        cupName: cup.name,
-        ...stats,
-      };
-    }
-  } catch {
-    // DB unavailable — fall through
-  }
-
-  // 2. Cup awaiting results (registrations closed / rating phase, results not yet published)
-  try {
-    const cup = await db.query.cups.findFirst({
-      where: (c, { and, inArray, isNotNull: nn, gt, isNull }) =>
-        and(
-          inArray(c.status, ["registration_closed", "rating"]),
-          nn(c.ratingEndAt),
-          gt(c.ratingEndAt, now),
-          isNull(c.resultsPublishedAt)
-        ),
-      orderBy: (c, { asc }) => [asc(c.ratingEndAt)],
-      columns: { id: true, name: true, ratingEndAt: true },
-    });
-
-    if (cup?.ratingEndAt) {
-      const stats = await getCupStats(cup.id);
-      return {
-        kind: "results",
-        target: cup.ratingEndAt.getTime(),
-        cupName: cup.name,
-        ...stats,
-      };
-    }
-  } catch {
-    // DB unavailable — fall through
-  }
-
-  return { kind: "next-year" };
+interface Teaser {
+  year: number;
+  cupId: string;
+  categoryId: string;
+  categoryName: string;
+  panel: JuryPanel;
+  /** Le palmarès propose-t-il les deux classements pour cette édition ? */
+  bothPanels: boolean;
+  labels: LabelTier[];
+  podium: {
+    rank: number;
+    productName: string;
+    producerName: string;
+    /** null quand l'édition ne publie pas ses notes (2023). */
+    score: number | null;
+  }[];
 }
 
 /**
- * Le bandeau ne montre que des résultats réels.
- *
- * Il affichait auparavant six scores inventés (« CF23 · FLOWER INDOOR · 94.2 »)
- * dès que la requête échouait — sur le site public d'un concours, rien ne
- * distinguait ces notes des vraies. Une base indisponible remonte désormais
- * l'erreur : `unstable_cache` ne mémorise pas un rejet, et la page masque
- * simplement le bandeau.
+ * Podium de la première catégorie de la dernière édition publiée : le
+ * classement du jury public d'abord (c'est lui qui décerne les labels), celui
+ * du jury pro à défaut. Mêmes règles que le palmarès : rien avant la
+ * publication, ni produit écarté, ni disqualifié.
  */
-async function getTickerItems(): Promise<string[]> {
-  {
-    // Classement public d'abord ; les éditions antérieures, à jury pro seul,
-    // n'ont de score que côté pro. Le code affiché est celui du même panel.
-    const finalScore = sql<string>`coalesce(${schema.products.finalScorePublic}, ${schema.products.finalScorePro})`;
-    const products = await db
+async function getPalmaresTeaser(): Promise<Teaser | null> {
+  const published = await db.query.cups.findMany({
+    where: (c, { isNotNull: nn }) => nn(c.resultsPublishedAt),
+    columns: { id: true, name: true, eventDate: true, ratingEndAt: true, createdAt: true },
+  });
+  if (published.length === 0) return null;
+
+  const year = Math.max(...published.map(editionYear));
+  const cupIds = published.filter((c) => editionYear(c) === year).map((c) => c.id);
+
+  const podiumFor = async (panel: JuryPanel) => {
+    const cols = panelColumns(panel);
+    return db
       .select({
-        anonymousCode: sql<string | null>`case when ${schema.products.finalScorePublic} is not null then ${schema.products.anonymousCodePublic} else ${schema.products.anonymousCodePro} end`,
-        finalScore,
+        cupId: schema.registrations.cupId,
+        rank: cols.categoryRank,
+        score: cols.finalScore,
+        productName: schema.products.name,
+        categoryId: schema.categories.id,
         categoryName: schema.categories.name,
+        companyName: schema.producers.companyName,
+        brandName: schema.producers.brandName,
       })
       .from(schema.products)
-      .innerJoin(
-        schema.categories,
-        eq(schema.products.categoryId, schema.categories.id)
-      )
-      .innerJoin(schema.cups, eq(schema.categories.cupId, schema.cups.id))
+      .innerJoin(schema.registrations, eq(schema.products.registrationId, schema.registrations.id))
+      .innerJoin(schema.producers, eq(schema.registrations.producerId, schema.producers.id))
+      .innerJoin(schema.categories, eq(schema.products.categoryId, schema.categories.id))
       .where(
         and(
-          sql`${finalScore} is not null`,
-          // Rien avant la publication officielle des résultats de l'édition.
-          isNotNull(schema.cups.resultsPublishedAt),
-          eq(schema.products.excludedFromResults, false)
-        )
+          inArray(schema.registrations.cupId, cupIds),
+          eq(schema.products.excludedFromResults, false),
+          eq(schema.products.disqualified, false),
+          isNotNull(cols.finalScore),
+          between(cols.categoryRank, 1, 3),
+        ),
       )
-      .orderBy(desc(schema.products.updatedAt))
-      .limit(6);
-
-    return products.map(
-      (p) =>
-        `${p.anonymousCode ?? "—"} · ${p.categoryName.toUpperCase()} · ${Number(p.finalScore).toFixed(1)}`
-    );
-  }
-}
-
-interface CategoryRow {
-  code: string;
-  name: string;
-  specimenCount: number;
-}
-
-interface LatestCupBadge {
-  /** "EDITION 04" — uppercase, padded edition number derived from cup year. */
-  edition: string;
-  /** Human-readable state in FR: "Inscriptions ouvertes" / "Notation en cours" / etc. */
-  state: string;
-}
-
-async function getLatestCupBadge(): Promise<LatestCupBadge> {
-  // Default fallback — picked so the eyebrow stays sensible when the DB
-  // is unreachable or there's literally no non-draft cup yet.
-  const fallback: LatestCupBadge = {
-    edition: "EDITION 04",
-    state: "À venir",
+      .orderBy(asc(schema.categories.sortOrder), asc(schema.categories.name), asc(cols.categoryRank));
   };
 
-  try {
-    const cup = await db.query.cups.findFirst({
-      where: (c, { ne }) => ne(c.status, "draft"),
-      orderBy: (c, { desc }) => [desc(c.createdAt)],
-      columns: { name: true, status: true, registrationCloseAt: true },
-    });
+  const [publicRows, proRows] = await Promise.all([podiumFor("public"), podiumFor("pro")]);
+  const panel: JuryPanel = publicRows.length > 0 ? "public" : "pro";
+  const rows = panel === "public" ? publicRows : proRows;
+  const first = rows[0];
+  if (!first) return null;
 
-    if (!cup) return fallback;
+  const podium = rows.filter((r) => r.categoryId === first.categoryId);
+  const labels =
+    panel === "public"
+      ? (
+          await db.query.cupLabels.findMany({
+            where: (l, { eq: e }) => e(l.cupId, first.cupId),
+            orderBy: (l, { desc }) => [desc(l.minScore)],
+          })
+        ).map((l) => ({ name: l.name, minScore: l.minScore, maxScore: l.maxScore, color: l.color }))
+      : [];
 
-    // Edition number = (year - 2022). 2023 = ed 1, 2026 = ed 4. Year is
-    // extracted from the cup name (format: "PlatinumCBD CUP YYYY ...").
-    const yearMatch = /\b(20\d{2})\b/.exec(cup.name);
-    const year = yearMatch ? parseInt(yearMatch[1]!, 10) : new Date().getFullYear();
-    const editionNum = Math.max(1, year - 2022);
-    const edition = `EDITION ${String(editionNum).padStart(2, "0")}`;
-
-    // Translate cup status → human-readable state.
-    let state: string;
-    switch (cup.status) {
-      case "published": {
-        const stillOpen =
-          cup.registrationCloseAt && cup.registrationCloseAt.getTime() > Date.now();
-        state = stillOpen ? "Inscriptions ouvertes" : "Inscriptions clôturées";
-        break;
-      }
-      case "registration_closed":
-        state = "Inscriptions clôturées";
-        break;
-      case "rating":
-        state = "Notation en cours";
-        break;
-      case "completed":
-        state = "Édition terminée";
-        break;
-      default:
-        state = "À venir";
-    }
-
-    return { edition, state };
-  } catch {
-    return fallback;
-  }
-}
-
-/** Même règle que le bandeau : aucune catégorie inventée, aucun effectif inventé. */
-async function getCategories(): Promise<CategoryRow[]> {
-  {
-    const cup = await db.query.cups.findFirst({
-      where: (c, { ne: neOp }) => neOp(c.status, "draft"),
-      orderBy: (c, { desc: dsc }) => [dsc(c.createdAt)],
-      with: {
-        categories: {
-          orderBy: (cat, { asc }) => [asc(cat.sortOrder)],
-        },
-      },
-    });
-
-    if (!cup || cup.categories.length === 0) return [];
-
-    // Count products per category, joined through registrations to scope to this cup
-    const counts = await db
-      .select({
-        categoryId: schema.products.categoryId,
-        total: count(),
-      })
-      .from(schema.products)
-      .innerJoin(
-        schema.registrations,
-        eq(schema.products.registrationId, schema.registrations.id)
-      )
-      .where(eq(schema.registrations.cupId, cup.id))
-      .groupBy(schema.products.categoryId);
-
-    const countMap = new Map(counts.map((r) => [r.categoryId, r.total]));
-
-    return cup.categories.map((c) => ({
-      code: categoryCode(c.name),
-      name: c.name,
-      specimenCount: countMap.get(c.id) ?? 0,
-    }));
-  }
+  return {
+    year,
+    cupId: first.cupId,
+    categoryId: first.categoryId,
+    categoryName: first.categoryName,
+    panel,
+    bothPanels: publicRows.length > 0 && proRows.length > 0,
+    labels,
+    podium: podium.map((r) => ({
+      rank: r.rank ?? 0,
+      productName: r.productName ?? "",
+      producerName: r.companyName ?? r.brandName ?? "—",
+      // L'édition 2023 a été classée sans notes chiffrées (cf. palmarès).
+      score: year === 2023 || r.score == null ? null : Number(r.score),
+    })),
+  };
 }
 
 // ---------------------------------------------------------------------------
 // Cache
 // ---------------------------------------------------------------------------
 
-/**
- * L'accueil enchaînait huit requêtes SQL à chaque affichage — pour un contenu
- * (édition en cours, catégories, derniers scores) qui bouge quelques fois par
- * an. Les quatre lecteurs ci-dessous ne renvoient que des valeurs primitives,
- * donc traversent sans dommage la sérialisation JSON du cache de données.
- *
- * Le compte à rebours reste juste : il transporte un horodatage cible, pas
- * une durée, et c'est le composant client qui décompte.
- */
 const cacheOptions = {
   revalidate: PORTAL_REVALIDATE,
   tags: [PORTAL_CACHE_TAGS.cups, PORTAL_CACHE_TAGS.results],
 };
 
-const getCachedCountdownState = unstable_cache(
-  getCountdownState,
-  ["home-countdown"],
+const getCachedCurrentEdition = unstable_cache(
+  getCurrentEdition,
+  ["home-current-edition"],
   cacheOptions,
 );
-const getCachedTickerItems = unstable_cache(
-  getTickerItems,
-  ["home-ticker"],
+const getCachedPalmaresTeaser = unstable_cache(
+  getPalmaresTeaser,
+  ["home-palmares-teaser"],
   cacheOptions,
 );
-const getCachedCategories = unstable_cache(
-  getCategories,
-  ["home-categories"],
-  cacheOptions,
-);
-const getCachedLatestCupBadge = unstable_cache(
-  getLatestCupBadge,
-  ["home-latest-cup-badge"],
-  cacheOptions,
-);
-
-// ---------------------------------------------------------------------------
-// Page
-// ---------------------------------------------------------------------------
 
 /**
  * Un lecteur qui échoue ne doit ni faire tomber l'accueil, ni inventer du
  * contenu : sa section disparaît, et rien n'est mémorisé — la requête suivante
- * retentera. `Promise.allSettled` isole chaque lecteur des trois autres.
+ * retentera.
  */
 async function sansPanne<T>(promesse: Promise<T>, repli: T): Promise<T> {
   const [issue] = await Promise.allSettled([promesse]);
@@ -351,335 +181,202 @@ async function sansPanne<T>(promesse: Promise<T>, repli: T): Promise<T> {
   return repli;
 }
 
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
+
 export default async function PortalHomePage() {
-  const [countdown, tickerItems, categories, latestBadge] = await Promise.all([
-    getCachedCountdownState(),
-    sansPanne(getCachedTickerItems(), [] as string[]),
-    sansPanne(getCachedCategories(), [] as CategoryRow[]),
-    getCachedLatestCupBadge(),
+  const [edition, teaser] = await Promise.all([
+    sansPanne(getCachedCurrentEdition(), null),
+    sansPanne(getCachedPalmaresTeaser(), null),
   ]);
 
+  const now = Date.now();
+  const phase = edition ? phaseOf(edition, now) : null;
+  const isOpen = phase === "open";
+  const heroYear = edition?.year ?? teaser?.year ?? null;
+  const tiers = edition?.labels.length ? edition.labels : (teaser?.labels ?? []);
+
+  const palmaresHref = teaser ? "/palmares" : "/archives";
+  const palmaresLabel = teaser ? `Voir le palmarès ${teaser.year}` : "Les éditions passées";
+  const registerHref = edition ? `/cups/${edition.id}/register` : "/cups";
+
+  const teaserHref = teaser
+    ? `/palmares?edition=${teaser.cupId}&cat=${teaser.categoryId}${teaser.bothPanels ? `&jury=${teaser.panel}` : ""}`
+    : null;
+
   return (
-    <div className="page-enter">
-      {/* ── HERO · DESKTOP (>880px) ──────────────────────────────────────── */}
-      <section
-        className="hero-desktop"
-        style={{ paddingTop: 40, paddingBottom: 60, position: "relative" }}
-      >
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1.1fr .9fr",
-            gap: 40,
-            alignItems: "center",
-          }}
-          className="hero-grid"
-        >
-          <div>
-            <Eyebrow>
-              <b>{latestBadge.edition}</b> · {latestBadge.state}
-            </Eyebrow>
-            <h1
-              className="display"
-              style={{ marginTop: 20, marginBottom: 24 }}
-            >
+    <div className="home">
+      {/* ── HERO ───────────────────────────────────────────────────────── */}
+      <section className="home-hero">
+        <div className="home-hero-text">
+          <EditionStatus
+            open={isOpen}
+            text={
+              edition && phase
+                ? statusLine(edition, phase)
+                : teaser
+                  ? `Palmarès ${teaser.year} publié · prochaine édition en préparation`
+                  : "Prochaine édition en préparation"
+            }
+          />
+
+          <div className="home-hero-title">
+            <h1 className="display display--brand">
               Platinum
               <br />
-              <em>CBD Cup</em> 2026.
+              CBD Cup{heroYear != null && <> <em>{heroYear}</em></>}
             </h1>
-            <div
-              className="mono"
-              style={{
-                fontSize: 11,
-                letterSpacing: ".18em",
-                color: "var(--fg-3)",
-                textTransform: "uppercase",
-                marginTop: -8,
-                marginBottom: 22,
-              }}
-            >
-              · Europe · Independent · Blind ·
-            </div>
-            <p className="lede">
-              La seule compétition européenne de CBD évaluée à l'aveugle par un
-              panel indépendant d'analystes, de sommeliers et de laboratoires
-              certifiés.
-            </p>
-            <div
-              style={{
-                display: "flex",
-                gap: 12,
-                marginTop: 36,
-                flexWrap: "wrap",
-              }}
-            >
-              <Link href="/cups" className="btn accent">
-                Postulez à la prochaine Edition <span className="btn-arrow">→</span>
-              </Link>
-              <Link href="/cups" className="btn ghost">
-                Voir l'édition en cours
-              </Link>
-            </div>
+            <img
+              className="home-hero-mark"
+              src="/brand/platinum-cbd-cup-logo.png"
+              alt=""
+              width={96}
+              height={96}
+              decoding="async"
+            />
           </div>
 
-          <div style={{ display: "grid", placeItems: "center" }}>
-            {/* Monté uniquement au-dessus de 881px : masquer ce canvas en CSS
-                laissait un second contexte WebGL vivant sous MobileHomeHero. */}
-            <DesktopEmblem size={735} tiltZ={-0.18} />
+          <p className="lede home-hero-lede">
+            Le concours européen du CBD. Chaque produit est noté à l&apos;aveugle
+            par deux jurys : des professionnels, et des consommateurs.
+          </p>
+
+          <div className="home-actions">
+            {isOpen ? (
+              <>
+                <Link href={registerHref} className="btn accent btn-lg">
+                  Inscrire mes produits
+                </Link>
+                <Link href={palmaresHref} className="btn ghost btn-lg">
+                  {palmaresLabel}
+                </Link>
+              </>
+            ) : (
+              <>
+                <Link href={palmaresHref} className="btn accent btn-lg">
+                  {palmaresLabel}
+                </Link>
+                <Link href="/about" className="btn ghost btn-lg">
+                  Découvrir le concours
+                </Link>
+              </>
+            )}
           </div>
+        </div>
+
+        <div className="home-hero-emblem" aria-hidden="true">
+          {/* Monté uniquement au-dessus de 881px : sur mobile, l'emblème
+              statique placé à côté du titre le remplace. */}
+          <DesktopEmblem size={460} tiltZ={-0.18} />
         </div>
       </section>
 
-      {/* ── HERO · MOBILE (≤880px) ───────────────────────────────────────── */}
-      <div className="hero-mobile">
-        <MobileHomeHero
-          edition={latestBadge.edition}
-          state={latestBadge.state}
-          primaryCta={{
-            label: "Postulez à la prochaine Edition",
-            href: "/cups",
-          }}
-          secondaryCta={{
-            label: "Voir l'édition en cours",
-            href: "/cups",
-          }}
-        />
-      </div>
+      {/* ── CALENDRIER ─────────────────────────────────────────────────── */}
+      {edition && <EditionSteps steps={stepsOf(edition, now)} year={edition.year} />}
 
-      {/* ── COUNTDOWN ────────────────────────────────────────────────────── */}
-      <section className="card" style={{ marginBottom: 24 }}>
-        {countdown.kind === "next-year" ? (
-          <div>
-            <Eyebrow>Prochaine édition</Eyebrow>
-            <div
-              style={{
-                fontFamily: "var(--mono)",
-                fontSize: "clamp(28px, 4vw, 44px)",
-                fontWeight: 300,
-                letterSpacing: "-0.02em",
-                marginTop: 14,
-                lineHeight: 1.1,
-              }}
-            >
-              Rendez-vous l'année prochaine.
-            </div>
-          </div>
-        ) : (
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "flex-end",
-              flexWrap: "wrap",
-              gap: 20,
-            }}
-          >
-            <div>
-              <Eyebrow>
-                {countdown.kind === "registration"
-                  ? "Clôture des inscriptions"
-                  : "Annonce des résultats"}
-              </Eyebrow>
-              <div style={{ marginTop: 14 }}>
-                <Countdown target={countdown.target} />
-              </div>
-            </div>
-            <div
-              style={{
-                textAlign: "right",
-                fontFamily: "var(--mono)",
-                fontSize: 11,
-                color: "var(--fg-3)",
-                letterSpacing: ".1em",
-              }}
-            >
-              <div>
-                STATUS ·{" "}
-                <span style={{ color: "var(--accent)" }}>
-                  {countdown.kind === "registration" ? "OPEN" : "RATING"}
-                </span>
-              </div>
-              <div style={{ marginTop: 6 }}>
-                SPECIMENS · {String(countdown.specimenCount).padStart(2, "0")}
-              </div>
-              <div style={{ marginTop: 6 }}>
-                CAT · {String(countdown.categoryCount).padStart(2, "0")}
-              </div>
-            </div>
-          </div>
-        )}
-      </section>
+      {/* ── DEUX JURYS ─────────────────────────────────────────────────── */}
+      <JuriesExplainer labels={tiers} />
 
-      {/* ── TICKER ───────────────────────────────────────────────────────── */}
-      {tickerItems.length > 0 && <Ticker items={tickerItems} />}
-
-      {/* ── THREE-UP ─────────────────────────────────────────────────────── */}
-      <section style={{ marginTop: 64 }}>
-        <h2 className="section-title">Ce qui se passe ici</h2>
-        <div className="grid g-3" style={{ marginTop: 32 }}>
-          {(
-            [
-              {
-                i: "01",
-                t: "Blind panel",
-                d: "Chaque spécimen reçoit un code anonyme à 5 caractères. Les jurés ne voient jamais les marques, les origines, ni les prix.",
-              },
-              {
-                i: "02",
-                t: "Lab-backed",
-                d: "Cannabinoïdes et terpènes sont mesurés par des laboratoires indépendants. Aucune analyse de contaminants.",
-              },
-              {
-                i: "03",
-                t: "Public ledger",
-                d: "Les scores, coefficients et méthodologies sont publiés intégralement. Tout est vérifiable. Rien n'est caché.",
-              },
-            ] as const
-          ).map((x) => (
-            <div key={x.i} className="card card-hover">
-              <div
-                style={{
-                  fontFamily: "var(--mono)",
-                  fontSize: 10,
-                  color: "var(--accent)",
-                  letterSpacing: ".15em",
-                }}
-              >
-                · {x.i}
-              </div>
-              <div
-                style={{
-                  fontFamily: "var(--mono)",
-                  fontSize: 22,
-                  marginTop: 18,
-                  letterSpacing: "-.01em",
-                }}
-              >
-                {x.t}
-              </div>
-              <p
-                style={{
-                  color: "var(--fg-2)",
-                  fontSize: 14,
-                  lineHeight: 1.5,
-                  marginTop: 12,
-                }}
-              >
-                {x.d}
-              </p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* ── CATEGORIES ───────────────────────────────────────────────────── */}
-      {categories.length > 0 && (
-      <section style={{ marginTop: 64 }}>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "baseline",
-            marginBottom: 24,
-          }}
-        >
-          <h2 className="section-title">
-            Catégories · {String(categories.length).padStart(2, "0")}
-          </h2>
-          <span className="eyebrow">Edition 2026</span>
-        </div>
-        <div className="grid g-3">
-          {categories.map((cat) => (
-            <div
-              key={cat.code + cat.name}
-              className="card card-hover"
-              style={{ display: "flex", alignItems: "center", gap: 18 }}
-            >
-              <div
-                style={{
-                  width: 58,
-                  height: 58,
-                  borderRadius: 12,
-                  border: "1px solid var(--line-strong)",
-                  display: "grid",
-                  placeItems: "center",
-                  fontFamily: "var(--mono)",
-                  fontSize: 18,
-                  color: "var(--fg)",
-                  letterSpacing: ".02em",
-                  flexShrink: 0,
-                  background: "var(--bg)",
-                }}
-              >
-                {cat.code}
-              </div>
-              <div>
-                <div style={{ fontFamily: "var(--mono)", fontSize: 15 }}>
-                  {cat.name}
-                </div>
-                <div
-                  style={{
-                    fontFamily: "var(--mono)",
-                    fontSize: 11,
-                    color: "var(--fg-3)",
-                    letterSpacing: ".1em",
-                    marginTop: 4,
-                  }}
-                >
-                  {cat.specimenCount > 0
-                    ? `${cat.specimenCount} SPECIMENS`
-                    : "—"}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
+      {/* ── CATÉGORIES ET TARIFS ───────────────────────────────────────── */}
+      {edition && phase && (
+        <CategoryPrices edition={edition} phase={phase} registerHref={registerHref} />
       )}
 
-      {/* ── PALMARÈS CTA ─────────────────────────────────────────────────── */}
-      <section style={{ marginTop: 64, marginBottom: 64 }}>
-        <div
-          className="card"
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr auto",
-            alignItems: "center",
-            gap: 28,
-          }}
-        >
-          <div>
-            <Eyebrow>Palmarès</Eyebrow>
-            <div
-              style={{
-                fontFamily: "var(--mono)",
-                fontSize: 22,
-                marginTop: 12,
-                lineHeight: 1.3,
-              }}
-            >
-              Découvrez les lauréats des éditions précédentes.
+      {/* ── PALMARÈS ───────────────────────────────────────────────────── */}
+      {teaser && teaserHref && (
+        <section className="home-band is-filled">
+          <div className="home-section home-palmares">
+            <div className="home-section-head is-split">
+              <div>
+                <p className="eyebrow">
+                  <b>
+                    Palmarès {teaser.year} · {teaser.categoryName} ·{" "}
+                    {teaser.panel === "public" ? "Jury public" : "Jury professionnel"}
+                  </b>
+                </p>
+                <h2 className="section-title">Les lauréats</h2>
+              </div>
+              <Link href="/palmares" className="home-link">
+                Tout le palmarès {teaser.year} →
+              </Link>
             </div>
+            <ol className="home-podium">
+              {teaser.podium.map((p) => {
+                const tier =
+                  teaser.panel === "public" && p.rank > 1 && p.score != null
+                    ? resolveTier(p.score, teaser.labels)
+                    : null;
+                const distinction =
+                  teaser.panel === "public" && p.rank === 1
+                    ? "Prix du public"
+                    : tier
+                      ? `Label ${tierName(tier.name)}`
+                      : null;
+                const score = p.score != null ? `${formatNumber(p.score)} / 20` : null;
+                return (
+                  <li key={`${p.rank}-${p.productName}`} className={p.rank === 1 ? "is-first" : undefined}>
+                    <span className="home-podium-rank">
+                      {p.rank}
+                      <sup>{p.rank === 1 ? "er" : "e"}</sup>
+                    </span>
+                    <span className="home-podium-name">{p.productName}</span>
+                    <span className="home-podium-producer">{p.producerName}</span>
+                    {(distinction ?? score) && (
+                      <span className="home-podium-meta">
+                        {[distinction, score].filter(Boolean).join(" · ")}
+                      </span>
+                    )}
+                  </li>
+                );
+              })}
+            </ol>
+            <Link href={teaserHref} className="home-link home-palmares-more">
+              Le classement complet de la catégorie →
+            </Link>
           </div>
-          <Link href="/palmares" className="btn ghost">
-            Voir le palmarès →
-          </Link>
-        </div>
-      </section>
+        </section>
+      )}
 
-      {/* ── DESKTOP / MOBILE HERO SWITCH ─────────────────────────────────
-          The desktop hero (with the 735px GeometricEmblem on the right) is
-          rendered as-is above 880px. Below 880px we render a different hero
-          (MobileHomeHero) that takes over the viewport with a scroll-driven
-          3D backdrop. CSS-only show/hide keeps SSR markup stable and avoids
-          hydration flashes. */}
-      <style>{`
-        .hero-mobile { display: none; }
-        @media (max-width: 880px) {
-          .hero-desktop { display: none; }
-          .hero-mobile { display: block; }
-        }
-      `}</style>
+      {/* ── PAR PUBLIC ─────────────────────────────────────────────────── */}
+      <section className="home-section">
+        <ul className="home-audiences">
+          {[
+            {
+              href: edition ? `/cups/${edition.id}` : "/cups",
+              title: "Producteur",
+              text: "Inscrire vos produits, suivre vos échantillons, recevoir vos notes détaillées.",
+              cta: "Participer",
+            },
+            {
+              href: "/palmares",
+              title: "Amateur",
+              text: "Découvrir les meilleurs CBD d'Europe, édition après édition.",
+              cta: "Le palmarès",
+            },
+            {
+              href: "/activate",
+              title: "Juré",
+              text: "Vous avez reçu un code ou un QR code ? Activez votre accès en une minute.",
+              cta: "Activer mon code",
+            },
+            {
+              href: "/press",
+              title: "Presse et partenaires",
+              text: "Kit média, visuels, contacts et dossier de partenariat.",
+              cta: "Espace presse",
+            },
+          ].map((a) => (
+            <li key={a.title}>
+              <Link href={a.href} className="home-audience">
+                <span className="home-audience-title">{a.title}</span>
+                <span className="home-audience-text">{a.text}</span>
+                <span className="home-audience-cta">{a.cta} →</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </section>
     </div>
   );
 }

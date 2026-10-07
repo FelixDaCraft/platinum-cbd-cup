@@ -1,338 +1,102 @@
 import type { Metadata } from "next";
 import { unstable_cache } from "next/cache";
 import Link from "next/link";
-import { count, inArray } from "drizzle-orm";
 import { db } from "~/server/db";
-import * as schema from "~/server/db/schema";
-import { Eyebrow, Pill, Countdown } from "~/components/portal/platinum";
-import type { Cup } from "~/server/db/schema/cups";
+import { EditionStatus } from "../_components/edition-blocks";
+import { PORTAL_CACHE_TAGS, PORTAL_REVALIDATE } from "../_lib/cache";
 import {
-  PORTAL_CACHE_TAGS,
-  PORTAL_REVALIDATE,
-  reviveCupDates,
-} from "../_lib/cache";
+  editionOrdinal,
+  editionYear,
+  formatDay,
+  formatPrice,
+  getEditionDetails,
+  phaseOf,
+  statusLine,
+  type EditionDetails,
+} from "../_lib/edition";
 import { baseUrl, OG_IMAGE_PAR_DEFAUT } from "../_lib/seo";
 
 export const metadata: Metadata = {
-  title: "Les éditions",
+  title: "Participer",
   description:
-    "Toutes les éditions de la Platinum CBD Cup : calendrier des inscriptions, catégories en compétition et résultats publiés.",
+    "Inscrire ses produits à la Platinum CBD Cup : éditions ouvertes, catégories, tarifs, calendrier, et les éditions passées.",
   alternates: { canonical: `${baseUrl()}/cups` },
   openGraph: {
-    title: "Les éditions | Platinum CBD Cup",
+    title: "Participer | Platinum CBD Cup",
     description:
-      "Toutes les éditions de la Platinum CBD Cup : calendrier, catégories et résultats.",
+      "Éditions ouvertes, catégories, tarifs et calendrier de la Platinum CBD Cup.",
     url: `${baseUrl()}/cups`,
     images: [OG_IMAGE_PAR_DEFAUT],
   },
 };
 
 // ---------------------------------------------------------------------------
-// DB queries
+// Data
 // ---------------------------------------------------------------------------
 
-async function getPublicCups() {
-  return db.query.cups.findMany({
-    where: (c, { ne }) => ne(c.status, "draft"),
-    orderBy: (c, { desc }) => [desc(c.createdAt)],
-  });
+interface PastEdition {
+  year: number;
+  location: string | null;
+  eventDate: number | null;
+  resultsPublished: boolean;
 }
 
 /**
- * La liste des éditions ne bouge qu'à la création ou à la publication d'une
- * cup : la relire à chaque affichage de /cups n'apportait rien.
+ * Éditions en cours (détaillées) et éditions passées, regroupées par année :
+ * les anciennes éditions comptaient une cup par jury.
  */
-const getCachedPublicCups = unstable_cache(getPublicCups, ["portal-public-cups"], {
+async function getEditions(): Promise<{ current: EditionDetails[]; past: PastEdition[] }> {
+  const cups = await db.query.cups.findMany({
+    where: (c, { ne }) => ne(c.status, "draft"),
+    orderBy: (c, { desc }) => [desc(c.createdAt)],
+    columns: {
+      id: true,
+      name: true,
+      status: true,
+      eventDate: true,
+      eventLocation: true,
+      ratingEndAt: true,
+      createdAt: true,
+      resultsPublishedAt: true,
+    },
+  });
+
+  const current = (
+    await Promise.all(
+      cups.filter((c) => c.status !== "completed").map((c) => getEditionDetails(c.id)),
+    )
+  ).filter((e): e is EditionDetails => e !== null);
+
+  const byYear = new Map<number, PastEdition>();
+  for (const cup of cups.filter((c) => c.status === "completed")) {
+    const year = editionYear(cup);
+    const entry = byYear.get(year) ?? {
+      year,
+      location: null,
+      eventDate: null,
+      resultsPublished: false,
+    };
+    entry.location ??= cup.eventLocation;
+    entry.eventDate ??= cup.eventDate ? cup.eventDate.getTime() : null;
+    entry.resultsPublished ||= cup.resultsPublishedAt != null;
+    byYear.set(year, entry);
+  }
+
+  return { current, past: [...byYear.values()].sort((a, b) => b.year - a.year) };
+}
+
+const getCachedEditions = unstable_cache(getEditions, ["portal-editions"], {
   revalidate: PORTAL_REVALIDATE,
-  tags: [PORTAL_CACHE_TAGS.cups],
+  tags: [PORTAL_CACHE_TAGS.cups, PORTAL_CACHE_TAGS.results],
 });
 
-/** Une Map ne survit pas à la sérialisation JSON du cache : on stocke les
- *  lignes brutes et la Map est reconstruite à la lecture. */
-async function getCategoryCountRows(cupIds: string[]) {
-  if (cupIds.length === 0) return [];
-  return db
-    .select({
-      cupId: schema.categories.cupId,
-      total: count(),
-    })
-    .from(schema.categories)
-    .where(inArray(schema.categories.cupId, cupIds))
-    .groupBy(schema.categories.cupId);
-}
-
-const getCachedCategoryCountRows = unstable_cache(
-  getCategoryCountRows,
-  ["portal-cups-category-counts"],
-  { revalidate: PORTAL_REVALIDATE, tags: [PORTAL_CACHE_TAGS.cups] },
-);
-
-async function getCategoryCounts(cupIds: string[]): Promise<Map<string, number>> {
-  const rows = await getCachedCategoryCountRows(cupIds);
-  return new Map(rows.map((r) => [r.cupId, r.total]));
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function formatDateShort(date: Date | null | undefined): string {
-  if (!date) return "—";
-  return new Intl.DateTimeFormat("fr-FR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  }).format(new Date(date));
-}
-
-function pad2(n: number): string {
-  return String(n).padStart(2, "0");
-}
-
-/** Derive 2-letter badge from cup name (first letters of first two words). */
-function cupCode(name: string): string {
-  const words = name.trim().split(/\s+/);
-  const a = words[0]?.[0] ?? "C";
-  const b = words[1]?.[0] ?? words[0]?.[1] ?? "P";
-  return (a + b).toUpperCase();
-}
-
-function getStatusPill(status: Cup["status"]): {
-  label: string;
-  accent: boolean;
-  dot: boolean;
-} {
-  switch (status) {
-    case "published":
-      return { label: "OPEN FOR SUBMISSIONS", accent: true, dot: true };
-    case "registration_closed":
-      return { label: "CLÔTURE", accent: false, dot: false };
-    case "rating":
-      return { label: "NOTATION EN COURS", accent: true, dot: true };
-    case "completed":
-      return { label: "TERMINÉE", accent: false, dot: false };
-    default:
-      return { label: String(status).toUpperCase(), accent: false, dot: false };
-  }
-}
-
-/** Resolve the "RÉSULTATS" cell value based on cup status. */
-function resultsCellValue(cup: Cup): string {
-  if (cup.resultsPublishedAt) return formatDateShort(cup.resultsPublishedAt);
-  if (cup.status === "rating" || cup.status === "completed") return "EN ATTENTE";
-  return "—";
-}
-
-/** Pick the live countdown target for an active cup, or null. */
-function pickCountdownTarget(cup: Cup): {
-  ts: number;
-  label: string;
-} | null {
-  const now = Date.now();
-  if (
-    cup.status === "published" &&
-    cup.registrationCloseAt &&
-    cup.registrationCloseAt.getTime() > now
-  ) {
-    return {
-      ts: cup.registrationCloseAt.getTime(),
-      label: "Clôture des inscriptions dans",
-    };
-  }
-  if (
-    cup.status === "rating" &&
-    cup.ratingEndAt &&
-    cup.ratingEndAt.getTime() > now
-  ) {
-    return { ts: cup.ratingEndAt.getTime(), label: "Annonce des résultats dans" };
-  }
-  return null;
-}
-
-// ---------------------------------------------------------------------------
-// Card sub-pieces
-// ---------------------------------------------------------------------------
-
-function GridCell({ label, value }: { label: string; value: string }) {
-  return (
-    <div
-      style={{
-        background: "var(--bg)",
-        padding: "12px 14px",
-        display: "flex",
-        flexDirection: "column",
-        gap: 6,
-        minHeight: 60,
-      }}
-    >
-      <div
-        className="mono"
-        style={{
-          fontSize: 9.5,
-          letterSpacing: ".15em",
-          color: "var(--fg-3)",
-          textTransform: "uppercase",
-        }}
-      >
-        {label}
-      </div>
-      <div
-        className="mono tabular"
-        style={{
-          fontSize: 13,
-          color: "var(--fg)",
-          letterSpacing: ".02em",
-        }}
-      >
-        {value}
-      </div>
-    </div>
-  );
-}
-
-function InstrumentCard({
-  cup,
-  categoryCount,
-  variant,
-}: {
-  cup: Cup;
-  categoryCount: number;
-  variant: "active" | "past";
-}) {
-  const pill = getStatusPill(cup.status);
-  const countdown = pickCountdownTarget(cup);
-  const isPast = variant === "past";
-  const code = cupCode(cup.name);
-  const href = isPast ? `/palmares?edition=${cup.id}` : `/cups/${cup.id}`;
-
-  return (
-    <div
-      className="card card-hover"
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        gap: 18,
-        padding: 18,
-      }}
-    >
-      {/* ── Header ───────────────────────────────────────────── */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 14,
-        }}
-      >
-        <div
-          style={{
-            width: 56,
-            height: 56,
-            borderRadius: 10,
-            border: "1px solid var(--line-strong)",
-            display: "grid",
-            placeItems: "center",
-            fontFamily: "var(--mono)",
-            fontSize: 18,
-            letterSpacing: ".02em",
-            background: "var(--bg)",
-            flexShrink: 0,
-            color: isPast ? "var(--fg-3)" : "var(--fg)",
-          }}
-        >
-          {code}
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div
-            className="mono"
-            style={{
-              fontSize: 15,
-              fontWeight: 500,
-              color: isPast ? "var(--fg-2)" : "var(--fg)",
-              lineHeight: 1.25,
-              wordBreak: "break-word",
-            }}
-          >
-            {cup.name}
-          </div>
-        </div>
-        <Pill
-          variant={pill.accent ? "accent" : "default"}
-          dot={pill.dot}
-        >
-          {pill.label}
-        </Pill>
-      </div>
-
-      {/* ── 2×3 Instrument Grid ──────────────────────────────── */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr 1fr",
-          gap: 1,
-          background: "var(--line)",
-          border: "1px solid var(--line)",
-          borderRadius: 8,
-          overflow: "hidden",
-        }}
-      >
-        <GridCell label="Ouverture" value={formatDateShort(cup.registrationOpenAt)} />
-        <GridCell label="Clôture" value={formatDateShort(cup.registrationCloseAt)} />
-        <GridCell label="Notation" value={formatDateShort(cup.ratingEndAt)} />
-        <GridCell label="Résultats" value={resultsCellValue(cup)} />
-        <GridCell label="Jurys" value="PRO · PUBLIC" />
-        <GridCell label="Catégories" value={pad2(categoryCount)} />
-      </div>
-
-      {/* ── Footer ───────────────────────────────────────────── */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 14,
-          marginTop: "auto",
-          paddingTop: 4,
-          flexWrap: "wrap",
-        }}
-      >
-        {countdown ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <div
-              className="mono"
-              style={{
-                fontSize: 9.5,
-                letterSpacing: ".15em",
-                color: "var(--fg-3)",
-                textTransform: "uppercase",
-              }}
-            >
-              {countdown.label}
-            </div>
-            <Countdown target={countdown.ts} compact />
-          </div>
-        ) : (
-          <div
-            className="mono"
-            style={{
-              fontSize: 10,
-              letterSpacing: ".12em",
-              color: "var(--fg-3)",
-              textTransform: "uppercase",
-            }}
-          >
-            {isPast ? "Édition archivée" : "Phase en cours"}
-          </div>
-        )}
-        <Link
-          href={href}
-          className="btn ghost"
-          style={{ fontSize: 12 }}
-        >
-          {isPast ? "Palmarès" : "Voir"} <span className="btn-arrow">→</span>
-        </Link>
-      </div>
-    </div>
-  );
+function lowestPrice(edition: EditionDetails): string | null {
+  const prices = edition.categories.map((c) => c.priceCents ?? 0);
+  if (prices.length === 0) return null;
+  const min = Math.min(...prices);
+  const all = prices.every((p) => p === min);
+  const label = formatPrice(min, edition.currency);
+  return min === 0 ? label : all ? `${label} par produit` : `dès ${label} par produit`;
 }
 
 // ---------------------------------------------------------------------------
@@ -340,101 +104,121 @@ function InstrumentCard({
 // ---------------------------------------------------------------------------
 
 export default async function CupsPage() {
-  const cups = (await getCachedPublicCups()).map(reviveCupDates);
-  const categoryCounts = await getCategoryCounts(cups.map((c) => c.id));
-
-  const activeCups = cups.filter((c) => c.status !== "completed");
-  const pastCups = cups.filter((c) => c.status === "completed");
-  const hasOpenCup = cups.some((c) => c.status === "published");
-
-  // ── Empty state ────────────────────────────────────────────────────────────
-  if (cups.length === 0) {
-    return (
-      <div className="page-enter">
-        <section style={{ paddingTop: 40, paddingBottom: 32 }}>
-          <Eyebrow idx={2}>Toutes les éditions</Eyebrow>
-          <h1 className="display" style={{ marginTop: 18, marginBottom: 8 }}>
-            Cups<em>.</em>
-          </h1>
-        </section>
-        <div className="card">
-          <Eyebrow>Aucune édition publiée</Eyebrow>
-          <p className="lede" style={{ marginTop: 12 }}>
-            La prochaine édition sera annoncée prochainement.
-          </p>
-        </div>
-      </div>
-    );
-  }
+  const { current, past } = await getCachedEditions();
+  const now = Date.now();
 
   return (
-    <div className="page-enter">
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <section style={{ paddingTop: 40, paddingBottom: 32 }}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "flex-end",
-            justifyContent: "space-between",
-            flexWrap: "wrap",
-            gap: 24,
-          }}
-        >
-          <div>
-            <Eyebrow idx={2}>Toutes les éditions</Eyebrow>
-            <h1
-              className="display"
-              style={{ marginTop: 18, marginBottom: 8 }}
-            >
-              Cups<em>.</em>
-            </h1>
-            <p className="lede" style={{ maxWidth: "52ch" }}>
-              Toutes les éditions de la Platinum CBD Cup — concours d'évaluation
-              aveugle par un panel indépendant de jurés certifiés.
-            </p>
-          </div>
-          <div>
-            <Pill variant={hasOpenCup ? "accent" : "default"} dot={hasOpenCup}>
-              {hasOpenCup ? "OPEN FOR SUBMISSIONS" : "ARCHIVE"}
-            </Pill>
-          </div>
+    <div className="home">
+      <section className="home-hero is-compact">
+        <div className="home-hero-text">
+          <h1 className="display">Participer</h1>
+          <p className="lede home-hero-lede">
+            Inscrivez vos produits dans une ou plusieurs catégories, en une seule
+            commande. Chaque produit est noté à l&apos;aveugle par le jury
+            professionnel et par le jury public.
+          </p>
         </div>
       </section>
 
-      {/* ── Active cups grid ───────────────────────────────────────────────── */}
-      {activeCups.length > 0 && (
-        <section style={{ marginBottom: 48 }}>
-          <div className={`grid ${activeCups.length === 1 ? "g-2" : "g-3"}`}>
-            {activeCups.map((cup) => (
-              <InstrumentCard
-                key={cup.id}
-                cup={cup}
-                categoryCount={categoryCounts.get(cup.id) ?? 0}
-                variant="active"
-              />
-            ))}
+      <section className="home-section" style={{ paddingTop: 0 }}>
+        {current.length === 0 ? (
+          <div className="pal-empty" style={{ marginBottom: 0 }}>
+            <h2>Aucune édition ouverte pour le moment</h2>
+            <p>
+              La prochaine édition sera annoncée ici. En attendant, découvrez le{" "}
+              <Link href="/palmares">palmarès</Link> des éditions passées.
+            </p>
           </div>
+        ) : (
+          <div className="eds-current">
+            {current.map((ed) => {
+              const phase = phaseOf(ed, now);
+              const price = lowestPrice(ed);
+              return (
+                <article key={ed.id} className="eds-card">
+                  <EditionStatus open={phase === "open"} text={statusLine(ed, phase, now)} />
+                  <div>
+                    <p className="eyebrow" style={{ margin: "0 0 8px" }}>
+                      <b>
+                        {ed.year} · {editionOrdinal(ed.year)}
+                      </b>
+                    </p>
+                    <h2>{ed.name}</h2>
+                  </div>
+                  <ul className="eds-card-facts">
+                    {ed.categories.length > 0 && (
+                      <li>
+                        <b>
+                          {ed.categories.length} catégorie
+                          {ed.categories.length > 1 ? "s" : ""}
+                        </b>
+                        {price ? ` · ${price}` : ""}
+                      </li>
+                    )}
+                    {ed.ratingStartAt != null && (
+                      <li>Notation à partir du {formatDay(ed.ratingStartAt)}</li>
+                    )}
+                    {ed.eventDate != null && (
+                      <li>
+                        Cérémonie le {formatDay(ed.eventDate)}
+                        {ed.eventLocation ? `, ${ed.eventLocation}` : ""}
+                      </li>
+                    )}
+                  </ul>
+                  <div className="home-actions">
+                    {phase === "open" && (
+                      <Link href={`/cups/${ed.id}/register`} className="btn accent">
+                        Inscrire mes produits
+                      </Link>
+                    )}
+                    <Link href={`/cups/${ed.id}`} className="btn ghost">
+                      Catégories et calendrier
+                    </Link>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      {past.length > 0 && (
+        <section className="home-section">
+          <h2 className="section-title">Les éditions passées</h2>
+          <ul className="eds-past">
+            {past.map((ed) => {
+              const meta = [
+                ed.eventDate != null ? formatDay(ed.eventDate) : null,
+                ed.location,
+              ]
+                .filter(Boolean)
+                .join(" · ");
+              const content = (
+                <>
+                  <span className="eds-past-year">
+                    {ed.year} · {editionOrdinal(ed.year)}
+                  </span>
+                  <span className="eds-past-meta">{meta}</span>
+                  <span className="eds-past-cta">
+                    {ed.resultsPublished ? "Le palmarès →" : "Résultats à venir"}
+                  </span>
+                </>
+              );
+              return (
+                <li key={ed.year}>
+                  {ed.resultsPublished ? (
+                    <Link href={`/palmares?edition=${ed.year}`}>{content}</Link>
+                  ) : (
+                    <div className="eds-past-row">{content}</div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
         </section>
       )}
 
-      {/* ── Past editions ──────────────────────────────────────────────────── */}
-      {pastCups.length > 0 && (
-        <section>
-          <div className="eyebrow" style={{ marginBottom: 24 }}>
-            Éditions passées · {pad2(pastCups.length)}
-          </div>
-          <div className="grid g-3">
-            {pastCups.map((cup) => (
-              <InstrumentCard
-                key={cup.id}
-                cup={cup}
-                categoryCount={categoryCounts.get(cup.id) ?? 0}
-                variant="past"
-              />
-            ))}
-          </div>
-        </section>
-      )}
+      <div className="home-section-spacer" />
     </div>
   );
 }
