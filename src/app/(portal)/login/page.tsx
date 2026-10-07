@@ -1,21 +1,16 @@
 "use client";
 
-import { Suspense, useState, useCallback, useEffect, useRef } from "react";
+import { Suspense, useState, useCallback, useEffect, useRef, type CSSProperties } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Eye, EyeOff, Loader2, ArrowRight, MailWarning } from "lucide-react";
+import { Eye, EyeOff, Loader2, MailWarning } from "lucide-react";
 import { toast } from "sonner";
 
-import { Button } from "~/components/ui/button";
-import { Input } from "~/components/ui/input";
-import { Label } from "~/components/ui/label";
 import { sendVerificationEmail, signIn, useSession } from "~/lib/auth-client";
 import { loginSchema, type LoginInput } from "~/lib/validations/auth";
-import { useOrganization, usePortalTheme } from "~/lib/portal/context";
-import { cn } from "~/lib/utils";
+import { useOrganization } from "~/lib/portal/context";
 
 type SessionUserRole = "organizer" | "producer" | "jury" | string | null | undefined;
 
@@ -61,49 +56,25 @@ function sanitizeCallbackUrl(raw: string | null): string | null {
 }
 
 export default function PortalLoginPage() {
-  const theme = usePortalTheme();
-
   return (
-    <div
-      className="min-h-screen w-full flex items-center justify-center p-4 relative overflow-hidden"
-      style={{
-        background: `radial-gradient(ellipse at top, ${theme.primaryColor}08 0%, transparent 50%),
-                     radial-gradient(ellipse at bottom right, ${theme.primaryColor}05 0%, transparent 50%),
-                     linear-gradient(to bottom, hsl(var(--background)), hsl(var(--background)))`,
-      }}
-    >
-      {/* Subtle grid pattern */}
-      <div
-        className="absolute inset-0 opacity-[0.02]"
-        style={{
-          backgroundImage: `linear-gradient(${theme.primaryColor} 1px, transparent 1px), linear-gradient(90deg, ${theme.primaryColor} 1px, transparent 1px)`,
-          backgroundSize: '60px 60px',
-        }}
-      />
-
-      {/* Floating orbs for depth */}
-      <div
-        className="absolute top-1/4 -left-20 w-96 h-96 rounded-full blur-3xl opacity-[0.03]"
-        style={{ backgroundColor: theme.primaryColor }}
-      />
-      <div
-        className="absolute bottom-1/4 -right-20 w-80 h-80 rounded-full blur-3xl opacity-[0.03]"
-        style={{ backgroundColor: theme.primaryColor }}
-      />
-
-      <Suspense
-        fallback={
-          <div className="w-full max-w-md animate-in fade-in zoom-in-95 duration-300">
-            <div className="bg-card/80 backdrop-blur-xl rounded-2xl border border-border/50 shadow-2xl shadow-black/5 p-8">
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-              </div>
-            </div>
-          </div>
-        }
-      >
+    <div className="pg pg--form">
+      <Suspense fallback={<LoginPending label="Chargement…" />}>
         <PortalLoginForm />
       </Suspense>
+    </div>
+  );
+}
+
+/** État d'attente : chargement de la session ou redirection. */
+function LoginPending({ label }: { label: string }) {
+  return (
+    <div
+      className="form-card"
+      style={{ marginTop: 72, alignItems: "center", padding: "56px 24px" }}
+      role="status"
+    >
+      <Loader2 className="h-8 w-8 animate-spin" style={{ color: "var(--accent)" }} aria-hidden="true" />
+      <p style={{ margin: 0, fontSize: 16, color: "var(--fg-2)" }}>{label}</p>
     </div>
   );
 }
@@ -111,12 +82,10 @@ export default function PortalLoginPage() {
 function PortalLoginForm() {
   const searchParams = useSearchParams();
   const organization = useOrganization();
-  const theme = usePortalTheme();
   const { data: session, isPending: isSessionLoading } = useSession();
   const [showPassword, setShowPassword] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [loginSuccess, setLoginSuccess] = useState(false);
-  const [focusedField, setFocusedField] = useState<string | null>(null);
   // Adresse dont la connexion a été refusée faute de vérification : sert à
   // proposer le renvoi du lien de confirmation.
   const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
@@ -373,273 +342,184 @@ function PortalLoginForm() {
     }
   }, [unverifiedEmail]);
 
-  // Show loading state
+  // Chargement de la session, connexion en cours ou redirection
   if (!isSessionDetermined || isLoggingIn || loginSuccess) {
-    return (
-      <div className="w-full max-w-md relative z-10 animate-in fade-in zoom-in-95 duration-300">
-        <div className="bg-card/80 backdrop-blur-xl rounded-2xl border border-border/50 shadow-2xl shadow-black/5 p-8">
-          <div className="flex flex-col items-center justify-center py-8 gap-4">
-            <Loader2 className="h-8 w-8 text-primary animate-spin" />
-            <p className="text-sm text-muted-foreground">
-              {loginSuccess ? "Redirection en cours..." : "Chargement..."}
-            </p>
-          </div>
-        </div>
-      </div>
-    );
+    return <LoginPending label={loginSuccess ? "Redirection en cours…" : "Chargement…"} />;
   }
 
-  // Don't render form if already logged in (will redirect via useEffect)
+  // Déjà connecté : la redirection part du useEffect ci-dessus
   if (session?.user) {
-    return (
-      <div className="w-full max-w-md relative z-10 animate-in fade-in zoom-in-95 duration-300">
-        <div className="bg-card/80 backdrop-blur-xl rounded-2xl border border-border/50 shadow-2xl shadow-black/5 p-8">
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          </div>
-        </div>
-      </div>
-    );
+    return <LoginPending label="Redirection en cours…" />;
   }
 
-  const logoUrl = theme.logoUrl || organization.logo;
+  const callbackUrl = searchParams.get("callbackUrl");
 
-  // Animation d'apparition en CSS (tw-animate-css) plutôt qu'en JS :
-  // framer-motion pesait ~70 Ko compressés dans le premier chargement des
-  // quatre pages d'authentification — celles que les jurés et producteurs
-  // ouvrent en premier — pour une simple apparition.
   return (
-    <div
-      className="w-full max-w-md relative z-10 animate-in fade-in slide-in-from-bottom-5 duration-500 ease-out"
-    >
-      {/* Premium Card */}
-      <div className="bg-card/80 backdrop-blur-xl rounded-2xl border border-border/50 shadow-2xl shadow-black/5 overflow-hidden">
-        {/* Accent line at top */}
-        <div
-          className="h-1 w-full"
-          style={{
-            background: `linear-gradient(90deg, transparent, ${theme.primaryColor}, transparent)`
-          }}
-        />
+    <>
+      <header className="pg-head">
+        <h1 className="display">Connexion</h1>
+        <p className="pg-lede">
+          Connectez-vous à votre espace {organization.name}.
+        </p>
+      </header>
 
-        <div className="p-8 sm:p-10">
-          {/* Header */}
-          <div className="text-center mb-8">
-            {logoUrl && (
-              <div className="flex justify-center mb-6">
-                <div className="relative">
-                  <Image
-                    src={logoUrl}
-                    alt={organization.name}
-                    width={140}
-                    height={70}
-                    className="object-contain"
-                  />
-                  {/* Subtle glow behind logo */}
-                  <div
-                    className="absolute inset-0 blur-2xl opacity-20 -z-10"
-                    style={{ backgroundColor: theme.primaryColor }}
-                  />
-                </div>
-              </div>
+      <div className="form-card">
+        <form
+          onSubmit={handleSubmit(onSubmit)}
+          className="form-stack"
+          noValidate
+          aria-busy={isSubmitting}
+        >
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <label htmlFor="email" className="field-label">
+              Email
+            </label>
+            <input
+              id="email"
+              type="email"
+              className="field-input"
+              placeholder="vous@exemple.com"
+              autoComplete="email"
+              aria-invalid={!!errors.email}
+              aria-required="true"
+              aria-describedby={errors.email ? "email-error" : undefined}
+              style={errors.email ? { borderColor: "var(--danger)" } : undefined}
+              {...register("email")}
+            />
+            {errors.email && (
+              <p id="email-error" className="field-error" style={{ margin: 0 }}>
+                {errors.email.message}
+              </p>
             )}
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
-              Bienvenue
-            </h1>
-            <p className="text-muted-foreground mt-2">
-              Connectez-vous à votre espace {organization.name}
-            </p>
           </div>
 
-          {/* Form */}
-          <form
-            onSubmit={handleSubmit(onSubmit)}
-            className="space-y-5"
-            noValidate
-            aria-busy={isSubmitting}
-          >
-            {/* Email Field */}
-            <div className="space-y-2">
-              <Label
-                htmlFor="email"
-                className={cn(
-                  "text-sm font-medium transition-colors duration-200",
-                  focusedField === "email" && "text-primary"
-                )}
-              >
-                Email
-              </Label>
-              <div className="relative">
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="vous@exemple.com"
-                  autoComplete="email"
-                  aria-invalid={!!errors.email}
-                  aria-required="true"
-                  aria-describedby={errors.email ? "email-error" : undefined}
-                  className={cn(
-                    "h-12 px-4 bg-background/50 border-border/50 rounded-xl transition-all duration-200",
-                    "focus:bg-background focus:border-primary/50 focus:ring-2 focus:ring-primary/20",
-                    errors.email && "border-destructive focus:border-destructive focus:ring-destructive/20"
-                  )}
-                  {...register("email")}
-                  onFocus={() => setFocusedField("email")}
-                  onBlur={() => setFocusedField(null)}
-                />
-              </div>
-              {errors.email && (
-                <p id="email-error" className="text-sm text-destructive">
-                  {errors.email.message}
-                </p>
-              )}
-            </div>
-
-            {/* Password Field */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label
-                  htmlFor="password"
-                  className={cn(
-                    "text-sm font-medium transition-colors duration-200",
-                    focusedField === "password" && "text-primary"
-                  )}
-                >
-                  Mot de passe
-                </Label>
-                <Link
-                  href="/forgot-password"
-                  className="text-xs text-muted-foreground hover:text-primary transition-colors"
-                >
-                  Mot de passe oublié ?
-                </Link>
-              </div>
-              <div className="relative">
-                <Input
-                  id="password"
-                  type={showPassword ? "text" : "password"}
-                  placeholder="••••••••"
-                  autoComplete="current-password"
-                  aria-invalid={!!errors.password}
-                  aria-required="true"
-                  aria-describedby={errors.password ? "password-error" : undefined}
-                  className={cn(
-                    "h-12 px-4 pr-12 bg-background/50 border-border/50 rounded-xl transition-all duration-200",
-                    "focus:bg-background focus:border-primary/50 focus:ring-2 focus:ring-primary/20",
-                    errors.password && "border-destructive focus:border-destructive focus:ring-destructive/20"
-                  )}
-                  {...register("password")}
-                  onFocus={() => setFocusedField("password")}
-                  onBlur={() => setFocusedField(null)}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-1 top-1/2 -translate-y-1/2 flex h-10 w-10 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  aria-label={
-                    showPassword
-                      ? "Masquer le mot de passe"
-                      : "Afficher le mot de passe"
-                  }
-                >
-                  {showPassword ? (
-                    <EyeOff className="h-4 w-4" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  )}
-                </button>
-              </div>
-              {errors.password && (
-                <p id="password-error" className="text-sm text-destructive">
-                  {errors.password.message}
-                </p>
-              )}
-            </div>
-
-            {/* Email non confirmé : renvoi du lien d'activation */}
-            {unverifiedEmail && (
-              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 space-y-3">
-                <div className="flex gap-3">
-                  <MailWarning className="h-5 w-5 shrink-0 text-amber-500" aria-hidden="true" />
-                  <p className="text-sm text-muted-foreground">
-                    Votre adresse <strong className="text-foreground">{unverifiedEmail}</strong>{" "}
-                    n'est pas encore confirmée. Ouvrez le lien reçu par email, ou
-                    demandez un nouvel envoi.
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full h-10 rounded-lg"
-                  onClick={handleResendVerification}
-                  disabled={isResendingVerification}
-                >
-                  {isResendingVerification ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Envoi en cours...
-                    </>
-                  ) : (
-                    "Renvoyer l'email de vérification"
-                  )}
-                </Button>
-              </div>
-            )}
-
-            {/* Submit Button */}
-            <div className="pt-2">
-              <Button
-                type="submit"
-                className="w-full h-12 rounded-xl text-base font-medium relative overflow-hidden group"
-                disabled={isSubmitting}
-                style={{
-                  backgroundColor: theme.primaryColor,
-                }}
-              >
-                <span className="relative z-10 flex items-center justify-center gap-2">
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Connexion...
-                    </>
-                  ) : (
-                    <>
-                      Se connecter
-                      <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-                    </>
-                  )}
-                </span>
-                {/* Hover glow effect */}
-                <div
-                  className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-                  style={{
-                    background: `linear-gradient(45deg, transparent, rgba(255,255,255,0.1), transparent)`,
-                  }}
-                />
-              </Button>
-            </div>
-          </form>
-
-          {/* Footer */}
-          <div className="mt-8 pt-6 border-t border-border/50 text-center">
-            <p className="text-sm text-muted-foreground">
-              Pas encore de compte ?{" "}
-              <Link
-                href={
-                  searchParams.get("callbackUrl")?.startsWith("/jury-invite/")
-                    ? searchParams.get("callbackUrl")!
-                    : "/register"
-                }
-                className="font-medium transition-colors hover:underline"
-                style={{ color: theme.primaryColor }}
-              >
-                Créer un compte
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                alignItems: "baseline",
+                justifyContent: "space-between",
+                gap: "4px 16px",
+              }}
+            >
+              <label htmlFor="password" className="field-label">
+                Mot de passe
+              </label>
+              <Link href="/forgot-password" className="pg-link" style={{ fontSize: 15 }}>
+                Mot de passe oublié ?
               </Link>
-            </p>
+            </div>
+            <div style={{ position: "relative" }}>
+              <input
+                id="password"
+                type={showPassword ? "text" : "password"}
+                className="field-input"
+                placeholder="••••••••"
+                autoComplete="current-password"
+                aria-invalid={!!errors.password}
+                aria-required="true"
+                aria-describedby={errors.password ? "password-error" : undefined}
+                style={{
+                  paddingRight: 52,
+                  ...(errors.password ? { borderColor: "var(--danger)" } : {}),
+                }}
+                {...register("password")}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                aria-label={
+                  showPassword
+                    ? "Masquer le mot de passe"
+                    : "Afficher le mot de passe"
+                }
+                className="pw-toggle"
+              >
+                {showPassword ? (
+                  <EyeOff className="h-4 w-4" aria-hidden="true" />
+                ) : (
+                  <Eye className="h-4 w-4" aria-hidden="true" />
+                )}
+              </button>
+            </div>
+            {errors.password && (
+              <p id="password-error" className="field-error" style={{ margin: 0 }}>
+                {errors.password.message}
+              </p>
+            )}
           </div>
-        </div>
-      </div>
 
-    </div>
+          {/* Email non confirmé : renvoi du lien d'activation */}
+          {unverifiedEmail && (
+            <div
+              className="notice is-info"
+              style={{ display: "flex", flexDirection: "column", gap: 14 }}
+            >
+              <div style={{ display: "flex", gap: 12 }}>
+                <MailWarning
+                  className="h-5 w-5"
+                  style={{ flexShrink: 0, marginTop: 2, color: "var(--accent-hi)" }}
+                  aria-hidden="true"
+                />
+                <p style={{ margin: 0 }}>
+                  Votre adresse <b>{unverifiedEmail}</b> n&apos;est pas encore
+                  confirmée. Ouvrez le lien reçu par email, ou demandez un nouvel
+                  envoi.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="btn ghost"
+                onClick={handleResendVerification}
+                disabled={isResendingVerification}
+                style={{ width: "100%" }}
+              >
+                {isResendingVerification ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                    Envoi en cours…
+                  </>
+                ) : (
+                  "Renvoyer l'email de confirmation"
+                )}
+              </button>
+            </div>
+          )}
+
+          <div className="form-actions" style={{ paddingTop: 4 }}>
+            <button
+              type="submit"
+              className="btn accent btn-lg"
+              disabled={isSubmitting}
+              style={{ width: "100%" }}
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                  Connexion…
+                </>
+              ) : (
+                "Se connecter"
+              )}
+            </button>
+          </div>
+        </form>
+
+        <p className="form-foot" style={{ margin: 0, paddingTop: 20, borderTop: "1px solid var(--line)" }}>
+          Pas encore de compte ?{" "}
+          <Link
+            href={
+              callbackUrl?.startsWith("/jury-invite/")
+                ? callbackUrl
+                : "/register"
+            }
+          >
+            Créer un compte
+          </Link>
+        </p>
+      </div>
+    </>
   );
 }
+

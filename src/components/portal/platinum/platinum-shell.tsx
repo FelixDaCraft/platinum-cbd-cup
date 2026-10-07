@@ -105,7 +105,7 @@ export function PlatinumShell({ children, liveStatus = "idle" }: PlatinumShellPr
           aria-label="Liens du pied de page"
         >
           {[
-            { href: "/about", label: "Le manifeste" },
+            { href: "/about", label: "Le concours" },
             { href: "/reglement", label: "Règlement" },
             { href: "/press", label: "Presse" },
             { href: "/sponsors", label: "Partenaires" },

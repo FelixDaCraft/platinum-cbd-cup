@@ -3,29 +3,14 @@
 import { useState, useCallback, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Eye, EyeOff, Check, X, Loader2, Scale, AlertCircle } from "lucide-react";
+import { Eye, EyeOff, Check, X, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
 
-import { Button } from "~/components/ui/button";
-import { Input } from "~/components/ui/input";
-import { Label } from "~/components/ui/label";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "~/components/ui/card";
-import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
-import { cn } from "~/lib/utils";
 import { useSession, signIn } from "~/lib/auth-client";
 import { PASSWORD_CRITERIA, passwordSchema } from "~/lib/validations/auth";
-import { useOrganization, usePortalTheme } from "~/lib/portal/context";
 import { api } from "~/trpc/react";
 import { getErrorMessage } from "../../_lib/errors";
 
@@ -57,8 +42,6 @@ type JuryInviteRegisterInput = z.infer<typeof juryInviteRegisterSchema>;
 export default function PortalJuryInvitePage() {
   const params = useParams();
   const token = params.token as string;
-  const organization = useOrganization();
-  const theme = usePortalTheme();
   const { data: session } = useSession();
 
   // Validate the invitation token
@@ -73,79 +56,70 @@ export default function PortalJuryInvitePage() {
 
   const invitation = invitationData?.invitation;
 
-  const logoUrl = theme.logoUrl || organization.logo;
-
   // Show loading while validating
   if (isValidating) {
     return (
-      <Card className="w-full max-w-md mx-auto">
-        <CardContent className="flex flex-col items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground mb-4" />
-          <p className="text-muted-foreground">Vérification de l&apos;invitation...</p>
-        </CardContent>
-      </Card>
+      <div className="pg pg--form">
+        <div
+          className="form-card"
+          style={{ marginTop: 72, alignItems: "center", padding: "56px 24px" }}
+          role="status"
+        >
+          <Loader2 className="h-8 w-8 animate-spin" style={{ color: "var(--accent)" }} aria-hidden="true" />
+          <p style={{ margin: 0, fontSize: 16, color: "var(--fg-2)" }}>
+            Vérification de l&apos;invitation…
+          </p>
+        </div>
+      </div>
     );
   }
 
   // Show error if token is invalid
   if (validationError || !invitation) {
     return (
-      <Card className="w-full max-w-md mx-auto">
-        <CardHeader className="text-center">
-          {logoUrl && (
-            <div className="flex justify-center mb-4">
-              <Image
-                src={logoUrl}
-                alt={organization.name}
-                width={120}
-                height={60}
-                className="object-contain"
-              />
-            </div>
-          )}
-          <CardTitle className="text-2xl">Invitation invalide</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Erreur</AlertTitle>
-            <AlertDescription>
-              Cette invitation n&apos;est plus valide. Elle a peut-être expiré ou a déjà été utilisée.
-              Contactez l&apos;organisateur pour obtenir une nouvelle invitation.
-            </AlertDescription>
-          </Alert>
-        </CardContent>
-        <CardFooter className="flex justify-center">
-          <Link href="/" className="text-primary hover:underline">
-            Retour a l&apos;accueil
-          </Link>
-        </CardFooter>
-      </Card>
+      <div className="pg pg--form">
+        <InviteHead title="Invitation invalide" />
+        <div className="form-card">
+          <div className="notice is-error" role="alert">
+            Cette invitation n&apos;est plus valide. Elle a peut-être expiré ou a
+            déjà été utilisée. Contactez l&apos;organisateur pour obtenir une
+            nouvelle invitation.
+          </div>
+          <p className="form-foot" style={{ margin: 0 }}>
+            <Link href="/">Retour à l&apos;accueil</Link>
+          </p>
+        </div>
+      </div>
     );
   }
 
   // If user is already logged in, show accept invitation button
   if (session) {
-    return (
-      <JuryAcceptInvitation
-        token={token}
-        invitation={invitation}
-        organization={{ id: organization.id, name: organization.name }}
-        logoUrl={logoUrl}
-      />
-    );
+    return <JuryAcceptInvitation token={token} invitation={invitation} />;
   }
 
   // Show registration form for new users
+  return <JuryRegisterForm token={token} invitation={invitation} />;
+}
+
+/** En-tête commun aux états de la page. */
+function InviteHead({
+  title,
+  lede,
+}: {
+  title: React.ReactNode;
+  lede?: React.ReactNode;
+}) {
   return (
-    <JuryRegisterForm
-      token={token}
-      invitation={invitation}
-      organization={{ id: organization.id, name: organization.name, slug: organization.slug ?? "" }}
-      logoUrl={logoUrl}
-    />
+    <header className="pg-head">
+      <p className="eyebrow">Invitation jury</p>
+      <h1 className="display">{title}</h1>
+      {lede && <p className="pg-lede">{lede}</p>}
+    </header>
   );
 }
+
+const errorBorder: React.CSSProperties = { borderColor: "var(--danger)" };
 
 /**
  * Invitation data from API
@@ -169,20 +143,16 @@ interface InvitationData {
 function JuryAcceptInvitation({
   token,
   invitation,
-  organization,
-  logoUrl,
 }: {
   token: string;
   invitation: InvitationData;
-  organization: { id: string; name: string };
-  logoUrl: string | null;
 }) {
   const router = useRouter();
   const [isAccepting, setIsAccepting] = useState(false);
 
   const acceptMutation = api.jury.acceptInvitation.useMutation({
     onSuccess: () => {
-      toast.success("Invitation acceptee ! Bienvenue dans le jury.");
+      toast.success("Invitation acceptée ! Bienvenue dans le jury.");
       router.push("/jury/dashboard");
     },
     onError: (error) => {
@@ -198,59 +168,60 @@ function JuryAcceptInvitation({
     acceptMutation.mutate({ token });
   }, [acceptMutation, token]);
 
-  return (
-    <Card className="w-full max-w-md mx-auto">
-      <CardHeader className="text-center">
-        {logoUrl && (
-          <div className="flex justify-center mb-4">
-            <Image
-              src={logoUrl}
-              alt={organization.name}
-              width={120}
-              height={60}
-              className="object-contain"
-            />
-          </div>
-        )}
-        <div className="flex items-center justify-center gap-2 mb-2">
-          <Scale className="h-6 w-6 text-primary" />
-          <CardTitle className="text-2xl">Invitation Jury</CardTitle>
-        </div>
-        <CardDescription>
-          Vous êtes invité à rejoindre le jury pour{" "}
-          <span className="font-semibold">{invitation.cup.name}</span>
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <Alert>
-          <Scale className="h-4 w-4" />
-          <AlertTitle>Invitation pour</AlertTitle>
-          <AlertDescription>
-            {invitation.firstName} {invitation.lastName} ({invitation.email})
-          </AlertDescription>
-        </Alert>
+  const invitee = [invitation.firstName, invitation.lastName]
+    .filter(Boolean)
+    .join(" ");
 
-        <Button
-          onClick={handleAccept}
-          className="w-full"
-          disabled={isAccepting}
-        >
-          {isAccepting ? (
+  return (
+    <div className="pg pg--form">
+      <InviteHead
+        title={
+          <>
+            Rejoindre le <em>jury</em>
+          </>
+        }
+        lede={
+          <>
+            Vous êtes invité à rejoindre le jury de{" "}
+            <strong style={{ color: "var(--fg)" }}>{invitation.cup.name}</strong>.
+          </>
+        }
+      />
+      <div className="form-card">
+        <div className="notice is-info">
+          Invitation adressée à{" "}
+          {invitee ? (
             <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Acceptation...
+              <b>{invitee}</b> ({invitation.email})
             </>
           ) : (
-            "Accepter l'invitation"
+            <b>{invitation.email}</b>
           )}
-        </Button>
-      </CardContent>
-      <CardFooter className="flex justify-center">
-        <Link href="/" className="text-muted-foreground hover:underline text-sm">
-          Retour a l&apos;accueil
-        </Link>
-      </CardFooter>
-    </Card>
+        </div>
+
+        <div className="form-actions">
+          <button
+            type="button"
+            onClick={handleAccept}
+            className="btn accent"
+            disabled={isAccepting}
+          >
+            {isAccepting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                Acceptation…
+              </>
+            ) : (
+              "Accepter l'invitation"
+            )}
+          </button>
+        </div>
+
+        <p className="form-foot" style={{ margin: 0 }}>
+          <Link href="/">Retour à l&apos;accueil</Link>
+        </p>
+      </div>
+    </div>
   );
 }
 
@@ -260,13 +231,9 @@ function JuryAcceptInvitation({
 function JuryRegisterForm({
   token,
   invitation,
-  organization,
-  logoUrl,
 }: {
   token: string;
   invitation: InvitationData;
-  organization: { id: string; name: string; slug: string };
-  logoUrl: string | null;
 }) {
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
@@ -302,7 +269,7 @@ function JuryRegisterForm({
         password: variables.password,
       });
       if (result.error) {
-        toast.info("Compte cree ! Connectez-vous pour acceder au jury.");
+        toast.info("Compte créé ! Connectez-vous pour accéder au jury.");
         router.push(`/login?callbackUrl=/jury/dashboard`);
         return;
       }
@@ -368,216 +335,239 @@ function JuryRegisterForm({
   );
 
   return (
-    <div className="w-full max-w-md mx-auto">
-      <Card>
-        <CardHeader className="text-center">
-          {logoUrl && (
-            <div className="flex justify-center mb-4">
-              <Image
-                src={logoUrl}
-                alt={organization.name}
-                width={120}
-                height={60}
-                className="object-contain"
-              />
-            </div>
-          )}
-          <div className="flex items-center justify-center gap-2 mb-2">
-            <Scale className="h-6 w-6 text-primary" />
-            <CardTitle className="text-2xl">Inscription Jury</CardTitle>
+    <div className="pg pg--form">
+      <InviteHead
+        title={
+          <>
+            Rejoindre le <em>jury</em>
+          </>
+        }
+        lede={
+          <>
+            Créez votre compte pour rejoindre le jury de{" "}
+            <strong style={{ color: "var(--fg)" }}>{invitation.cup.name}</strong>.
+          </>
+        }
+      />
+
+      <div className="form-card">
+        <form onSubmit={handleSubmit(onSubmit)} className="form-stack">
+          {/* Email, prérempli depuis l'invitation */}
+          <div className="field">
+            <label htmlFor="email" className="field-label">
+              Adresse email
+            </label>
+            <input
+              id="email"
+              type="email"
+              autoComplete="email"
+              aria-invalid={!!errors.email}
+              aria-describedby={errors.email ? "email-error" : undefined}
+              disabled
+              className="field-input"
+              style={{ opacity: 0.7, cursor: "not-allowed" }}
+              {...register("email")}
+            />
+            {errors.email && (
+              <p id="email-error" className="field-error" style={{ margin: 0 }}>
+                {errors.email.message}
+              </p>
+            )}
           </div>
-          <CardDescription>
-            Creez votre compte pour rejoindre le jury de{" "}
-            <span className="font-semibold">{invitation.cup.name}</span>
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            {/* Email Field - pre-filled from invitation */}
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                autoComplete="email"
-                aria-invalid={!!errors.email}
-                aria-describedby={errors.email ? "email-error" : undefined}
-                disabled
-                {...register("email")}
+
+          {/* Nom */}
+          <div className="field">
+            <label htmlFor="name" className="field-label">
+              Nom et prénom
+            </label>
+            <input
+              id="name"
+              type="text"
+              placeholder="Jean Dupont"
+              autoComplete="name"
+              aria-invalid={!!errors.name}
+              aria-describedby={errors.name ? "name-error" : undefined}
+              className="field-input"
+              style={errors.name ? errorBorder : undefined}
+              {...register("name")}
+            />
+            {errors.name && (
+              <p id="name-error" className="field-error" style={{ margin: 0 }}>
+                {errors.name.message}
+              </p>
+            )}
+          </div>
+
+          {/* Expertise */}
+          <div className="field">
+            <label htmlFor="expertise" className="field-label">
+              Expertise{" "}
+              <span style={{ fontWeight: 400, color: "var(--fg-3)" }}>(facultatif)</span>
+            </label>
+            <input
+              id="expertise"
+              type="text"
+              placeholder="Ex. : producteur, gérant de boutique, journaliste"
+              aria-invalid={!!errors.expertise}
+              aria-describedby={errors.expertise ? "expertise-error" : undefined}
+              className="field-input"
+              style={errors.expertise ? errorBorder : undefined}
+              {...register("expertise")}
+            />
+            {errors.expertise && (
+              <p id="expertise-error" className="field-error" style={{ margin: 0 }}>
+                {errors.expertise.message}
+              </p>
+            )}
+          </div>
+
+          {/* Mot de passe */}
+          <div className="field">
+            <label htmlFor="password" className="field-label">
+              Mot de passe
+            </label>
+            <div style={{ position: "relative" }}>
+              <input
+                id="password"
+                type={showPassword ? "text" : "password"}
+                placeholder="Votre mot de passe"
+                autoComplete="new-password"
+                aria-invalid={!!errors.password}
+                aria-describedby="password-criteria password-error"
+                className="field-input"
+                style={{ paddingRight: 48, ...(errors.password ? errorBorder : {}) }}
+                {...register("password")}
               />
-              {errors.email && (
-                <p id="email-error" className="text-sm text-destructive">
-                  {errors.email.message}
-                </p>
-              )}
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="pw-toggle"
+                aria-label={
+                  showPassword
+                    ? "Masquer le mot de passe"
+                    : "Afficher le mot de passe"
+                }
+              >
+                {showPassword ? (
+                  <EyeOff className="h-4 w-4" />
+                ) : (
+                  <Eye className="h-4 w-4" />
+                )}
+              </button>
             </div>
+            {errors.password && (
+              <p id="password-error" className="field-error" style={{ margin: 0 }}>
+                {errors.password.message}
+              </p>
+            )}
 
-            {/* Name Field */}
-            <div className="space-y-2">
-              <Label htmlFor="name">Votre nom</Label>
-              <Input
-                id="name"
-                type="text"
-                placeholder="Jean Dupont"
-                autoComplete="name"
-                aria-invalid={!!errors.name}
-                aria-describedby={errors.name ? "name-error" : undefined}
-                {...register("name")}
+            {/* Critères du mot de passe */}
+            <ul
+              id="password-criteria"
+              style={{
+                listStyle: "none",
+                margin: "4px 0 0",
+                padding: 0,
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                gap: "6px 16px",
+              }}
+            >
+              {PASSWORD_CRITERIA.map((criterion) => {
+                const isValid = checkCriteria(criterion.regex);
+                return (
+                  <li
+                    key={criterion.label}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      fontSize: 14,
+                      color: isValid ? "var(--fg)" : "var(--fg-3)",
+                    }}
+                  >
+                    {isValid ? (
+                      <Check className="h-4 w-4" style={{ color: "var(--accent)" }} aria-hidden="true" />
+                    ) : (
+                      <X className="h-4 w-4" aria-hidden="true" />
+                    )}
+                    <span>{criterion.label}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+
+          {/* Confirmation */}
+          <div className="field">
+            <label htmlFor="confirmPassword" className="field-label">
+              Confirmer le mot de passe
+            </label>
+            <div style={{ position: "relative" }}>
+              <input
+                id="confirmPassword"
+                type={showConfirmPassword ? "text" : "password"}
+                placeholder="Confirmez votre mot de passe"
+                autoComplete="new-password"
+                aria-invalid={!!errors.confirmPassword}
+                aria-describedby={
+                  errors.confirmPassword ? "confirm-password-error" : undefined
+                }
+                className="field-input"
+                style={{ paddingRight: 48, ...(errors.confirmPassword ? errorBorder : {}) }}
+                {...register("confirmPassword")}
               />
-              {errors.name && (
-                <p id="name-error" className="text-sm text-destructive">
-                  {errors.name.message}
-                </p>
-              )}
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                className="pw-toggle"
+                aria-label={
+                  showConfirmPassword
+                    ? "Masquer la confirmation"
+                    : "Afficher la confirmation"
+                }
+              >
+                {showConfirmPassword ? (
+                  <EyeOff className="h-4 w-4" />
+                ) : (
+                  <Eye className="h-4 w-4" />
+                )}
+              </button>
             </div>
+            {errors.confirmPassword && (
+              <p
+                id="confirm-password-error"
+                className="field-error"
+                style={{ margin: 0 }}
+              >
+                {errors.confirmPassword.message}
+              </p>
+            )}
+          </div>
 
-            {/* Expertise Field */}
-            <div className="space-y-2">
-              <Label htmlFor="expertise">Expertise (optionnel)</Label>
-              <Input
-                id="expertise"
-                type="text"
-                placeholder="Sommelier, Expert vin, etc."
-                aria-invalid={!!errors.expertise}
-                aria-describedby={errors.expertise ? "expertise-error" : undefined}
-                {...register("expertise")}
-              />
-              {errors.expertise && (
-                <p id="expertise-error" className="text-sm text-destructive">
-                  {errors.expertise.message}
-                </p>
-              )}
-            </div>
-
-            {/* Password Field */}
-            <div className="space-y-2">
-              <Label htmlFor="password">Mot de passe</Label>
-              <div className="relative">
-                <Input
-                  id="password"
-                  type={showPassword ? "text" : "password"}
-                  placeholder="Votre mot de passe"
-                  autoComplete="new-password"
-                  aria-invalid={!!errors.password}
-                  aria-describedby="password-criteria password-error"
-                  className="pr-10"
-                  {...register("password")}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  aria-label={
-                    showPassword
-                      ? "Masquer le mot de passe"
-                      : "Afficher le mot de passe"
-                  }
-                >
-                  {showPassword ? (
-                    <EyeOff className="h-4 w-4" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  )}
-                </button>
-              </div>
-              {errors.password && (
-                <p id="password-error" className="text-sm text-destructive">
-                  {errors.password.message}
-                </p>
-              )}
-
-              {/* Password Criteria */}
-              <div id="password-criteria" className="mt-3 space-y-1.5">
-                {PASSWORD_CRITERIA.map((criterion) => {
-                  const isValid = checkCriteria(criterion.regex);
-                  return (
-                    <div
-                      key={criterion.label}
-                      className={cn(
-                        "flex items-center gap-2 text-sm transition-colors",
-                        isValid ? "text-green-600" : "text-muted-foreground"
-                      )}
-                    >
-                      {isValid ? (
-                        <Check className="h-4 w-4" />
-                      ) : (
-                        <X className="h-4 w-4" />
-                      )}
-                      <span>{criterion.label}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Confirm Password Field */}
-            <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Confirmer le mot de passe</Label>
-              <div className="relative">
-                <Input
-                  id="confirmPassword"
-                  type={showConfirmPassword ? "text" : "password"}
-                  placeholder="Confirmez votre mot de passe"
-                  autoComplete="new-password"
-                  aria-invalid={!!errors.confirmPassword}
-                  aria-describedby={
-                    errors.confirmPassword ? "confirm-password-error" : undefined
-                  }
-                  className="pr-10"
-                  {...register("confirmPassword")}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  aria-label={
-                    showConfirmPassword
-                      ? "Masquer la confirmation"
-                      : "Afficher la confirmation"
-                  }
-                >
-                  {showConfirmPassword ? (
-                    <EyeOff className="h-4 w-4" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  )}
-                </button>
-              </div>
-              {errors.confirmPassword && (
-                <p
-                  id="confirm-password-error"
-                  className="text-sm text-destructive"
-                >
-                  {errors.confirmPassword.message}
-                </p>
-              )}
-            </div>
-
-            {/* Submit Button */}
-            <Button type="submit" className="w-full" disabled={registerMutation.isPending}>
+          <div className="form-actions">
+            <button
+              type="submit"
+              className="btn accent"
+              disabled={registerMutation.isPending}
+            >
               {registerMutation.isPending ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Inscription...
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                  Inscription…
                 </>
               ) : (
                 "Créer mon compte jury"
               )}
-            </Button>
-          </form>
-        </CardContent>
-        <CardFooter className="flex justify-center">
-          <p className="text-sm text-muted-foreground">
-            Déjà un compte ?{" "}
-            <Link
-              href={`/login?callbackUrl=/jury-invite/${token}`}
-              className="text-primary hover:underline"
-            >
-              Se connecter
-            </Link>
-          </p>
-        </CardFooter>
-      </Card>
+            </button>
+          </div>
+        </form>
+
+        <p className="form-foot" style={{ margin: 0 }}>
+          Déjà un compte ?{" "}
+          <Link href={`/login?callbackUrl=/jury-invite/${token}`}>Se connecter</Link>
+        </p>
+      </div>
     </div>
   );
 }

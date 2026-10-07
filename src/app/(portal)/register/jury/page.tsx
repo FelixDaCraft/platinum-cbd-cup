@@ -1,30 +1,17 @@
 "use client";
 
-import { useState, useCallback, useEffect, Suspense } from "react";
+import { useState, useCallback, useEffect, Suspense, type CSSProperties, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Eye, EyeOff, Check, X, Loader2, Scale, AlertCircle } from "lucide-react";
+import { Eye, EyeOff, Check, X, Loader2, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
 
-import { Button } from "~/components/ui/button";
-import { Input } from "~/components/ui/input";
-import { Label } from "~/components/ui/label";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "~/components/ui/card";
-import { cn } from "~/lib/utils";
 import { signUp } from "~/lib/auth-client";
 import { PASSWORD_CRITERIA, passwordSchema } from "~/lib/validations/auth";
-import { useOrganization, usePortalTheme } from "~/lib/portal/context";
+import { useOrganization } from "~/lib/portal/context";
 import { api } from "~/trpc/react";
 
 // Le mot de passe reprend `passwordSchema`, la règle appliquée côté serveur
@@ -48,7 +35,6 @@ function JuryRegisterContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const organization = useOrganization();
-  const theme = usePortalTheme();
 
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -158,262 +144,284 @@ function JuryRegisterContent() {
     [passwordValue]
   );
 
-  const logoUrl = theme.logoUrl || organization.logo;
-
-  // Show error if no code provided
+  // Code absent de l'URL
   if (!invitationCode) {
     return (
-      <div className="w-full max-w-md mx-auto">
-        <Card>
-          <CardHeader className="text-center">
-            <div className="flex items-center justify-center gap-2 text-destructive mb-2">
-              <AlertCircle className="h-6 w-6" />
-              <CardTitle className="text-xl">Code manquant</CardTitle>
-            </div>
-            <CardDescription>
-              Un code d&apos;invitation est nécessaire pour s&apos;inscrire en tant que jury.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="text-center">
-            <Button asChild>
-              <Link href="/">Retour à l&apos;accueil</Link>
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
+      <JuryCodeProblem title="Code manquant">
+        Un code d&apos;invitation est nécessaire pour s&apos;inscrire en tant que
+        juré.
+      </JuryCodeProblem>
     );
   }
 
-  // Show loading while validating code
+  // Validation du code en cours
   if (isValidatingCode) {
-    return (
-      <div className="w-full max-w-md mx-auto">
-        <Card>
-          <CardContent className="py-12 text-center">
-            <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
-            <p className="mt-4 text-muted-foreground">Validation du code...</p>
-          </CardContent>
-        </Card>
-      </div>
-    );
+    return <JuryPending label="Validation du code…" />;
   }
 
-  // Show error if code is invalid
+  // Code refusé
   if (!codeValidation?.valid) {
     return (
-      <div className="w-full max-w-md mx-auto">
-        <Card>
-          <CardHeader className="text-center">
-            <div className="flex items-center justify-center gap-2 text-destructive mb-2">
-              <AlertCircle className="h-6 w-6" />
-              <CardTitle className="text-xl">Code invalide</CardTitle>
-            </div>
-            <CardDescription>
-              {codeValidation?.message ?? "Ce code d'invitation n'est pas valide ou a expiré."}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="text-center">
-            <Button asChild>
-              <Link href="/">Retour à l&apos;accueil</Link>
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
+      <JuryCodeProblem title="Code invalide">
+        {codeValidation?.message ?? "Ce code d'invitation n'est pas valide ou a expiré."}
+      </JuryCodeProblem>
     );
   }
 
   return (
-    <div className="w-full max-w-md mx-auto">
-      <Card>
-        <CardHeader className="text-center">
-          {logoUrl && (
-            <div className="flex justify-center mb-4">
-              <Image
-                src={logoUrl}
-                alt={organization.name}
-                width={120}
-                height={60}
-                className="object-contain"
-              />
-            </div>
+    <div className="pg pg--form">
+      <header className="pg-head">
+        <p className="eyebrow">Jury</p>
+        <h1 className="display">Inscription du jury</h1>
+        <p className="pg-lede">
+          Créez votre compte pour rejoindre{" "}
+          {codeValidation.cup?.name ? (
+            <strong style={{ color: "var(--fg)" }}>{codeValidation.cup.name}</strong>
+          ) : (
+            organization.name
           )}
-          <div className="flex items-center justify-center gap-2 mb-2">
-            <Scale className="h-6 w-6 text-primary" />
-            <CardTitle className="text-2xl">Inscription Jury</CardTitle>
-          </div>
-          <CardDescription>
-            Créez votre compte pour rejoindre <strong>{codeValidation.cup?.name}</strong>
-          </CardDescription>
+          .
+        </p>
+      </header>
 
-          {/* Code validation badge */}
-          <div className="mt-4 p-3 rounded-lg bg-green-500/10 border border-green-500/20">
-            <p className="text-sm text-green-600 dark:text-green-400 font-medium">
-              Code valide : {invitationCode}
+      <div className="form-card">
+        {/* Rappel du code validé */}
+        <div className="notice is-success" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <p style={{ margin: 0, fontWeight: 600 }}>
+            Code valide :{" "}
+            <span style={{ fontFamily: "var(--mono)", letterSpacing: ".04em" }}>
+              {invitationCode}
+            </span>
+          </p>
+          {codeValidation.categories && codeValidation.categories.length > 0 && (
+            <p style={{ margin: 0, fontSize: 15, color: "var(--fg-2)" }}>
+              Catégories : {codeValidation.categories.map((c) => c.name).join(", ")}
             </p>
-            {codeValidation.categories && codeValidation.categories.length > 0 && (
-              <p className="text-xs text-muted-foreground mt-1">
-                Catégories: {codeValidation.categories.map((c) => c.name).join(", ")}
+          )}
+        </div>
+
+        {/* `noValidate` : sans lui, les bulles de validation natives du
+            navigateur (en anglais, hors charte) se superposent aux messages
+            zod en français. `aria-busy` annonce l'envoi aux lecteurs
+            d'écran, comme sur /login et /register. */}
+        <form
+          onSubmit={handleSubmit(onSubmit)}
+          className="form-stack"
+          noValidate
+          aria-busy={isSubmitting}
+        >
+          <div className="field">
+            <label htmlFor="email" className="field-label">
+              Email
+            </label>
+            <input
+              id="email"
+              type="email"
+              className="field-input"
+              placeholder="vous@exemple.com"
+              autoComplete="email"
+              aria-invalid={!!errors.email}
+              aria-describedby={errors.email ? "email-error" : undefined}
+              style={errors.email ? errorBorder : undefined}
+              {...register("email")}
+            />
+            {errors.email && (
+              <p id="email-error" className="field-error" style={{ margin: 0 }}>
+                {errors.email.message}
               </p>
             )}
           </div>
-        </CardHeader>
 
-        <CardContent>
-          {/* `noValidate` : sans lui, les bulles de validation natives du
-              navigateur (en anglais, hors charte) se superposent aux messages
-              zod en français. `aria-busy` annonce l'envoi aux lecteurs
-              d'écran, comme sur /login et /register. */}
-          <form
-            onSubmit={handleSubmit(onSubmit)}
-            className="space-y-4"
-            noValidate
-            aria-busy={isSubmitting}
-          >
-            {/* Email Field */}
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="vous@exemple.com"
-                autoComplete="email"
-                aria-invalid={!!errors.email}
-                aria-describedby={errors.email ? "email-error" : undefined}
-                {...register("email")}
+          <div className="field">
+            <label htmlFor="name" className="field-label">
+              Votre nom
+            </label>
+            <input
+              id="name"
+              type="text"
+              className="field-input"
+              placeholder="Jean Dupont"
+              autoComplete="name"
+              aria-invalid={!!errors.name}
+              aria-describedby={errors.name ? "name-error" : undefined}
+              style={errors.name ? errorBorder : undefined}
+              {...register("name")}
+            />
+            {errors.name && (
+              <p id="name-error" className="field-error" style={{ margin: 0 }}>
+                {errors.name.message}
+              </p>
+            )}
+          </div>
+
+          <div className="field">
+            <label htmlFor="password" className="field-label">
+              Mot de passe
+            </label>
+            <div style={{ position: "relative" }}>
+              <input
+                id="password"
+                type={showPassword ? "text" : "password"}
+                className="field-input"
+                placeholder="Votre mot de passe"
+                autoComplete="new-password"
+                aria-invalid={!!errors.password}
+                aria-describedby="password-criteria password-error"
+                style={{ paddingRight: 52, ...(errors.password ? errorBorder : {}) }}
+                {...register("password")}
               />
-              {errors.email && (
-                <p id="email-error" className="text-sm text-destructive">
-                  {errors.email.message}
-                </p>
-              )}
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                aria-label={showPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+                className="pw-toggle"
+              >
+                {showPassword ? (
+                  <EyeOff className="h-4 w-4" aria-hidden="true" />
+                ) : (
+                  <Eye className="h-4 w-4" aria-hidden="true" />
+                )}
+              </button>
             </div>
+            {errors.password && (
+              <p id="password-error" className="field-error" style={{ margin: 0 }}>
+                {errors.password.message}
+              </p>
+            )}
 
-            {/* Name Field */}
-            <div className="space-y-2">
-              <Label htmlFor="name">Votre nom</Label>
-              <Input
-                id="name"
-                type="text"
-                placeholder="Jean Dupont"
-                autoComplete="name"
-                aria-invalid={!!errors.name}
-                aria-describedby={errors.name ? "name-error" : undefined}
-                {...register("name")}
+            {/* Critères du mot de passe */}
+            <div id="password-criteria" className="pw-criteria">
+              {PASSWORD_CRITERIA.map((criterion) => {
+                const isValid = checkCriteria(criterion.regex);
+                return (
+                  <div
+                    key={criterion.label}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      fontSize: 14,
+                      color: isValid ? "var(--fg)" : "var(--fg-3)",
+                    }}
+                  >
+                    {isValid ? (
+                      <Check className="h-4 w-4" style={{ flexShrink: 0, color: "var(--accent)" }} aria-hidden="true" />
+                    ) : (
+                      <X className="h-4 w-4" style={{ flexShrink: 0 }} aria-hidden="true" />
+                    )}
+                    <span>{criterion.label}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="field">
+            <label htmlFor="confirmPassword" className="field-label">
+              Confirmer le mot de passe
+            </label>
+            <div style={{ position: "relative" }}>
+              <input
+                id="confirmPassword"
+                type={showConfirmPassword ? "text" : "password"}
+                className="field-input"
+                placeholder="Confirmez votre mot de passe"
+                autoComplete="new-password"
+                aria-invalid={!!errors.confirmPassword}
+                aria-describedby={errors.confirmPassword ? "confirm-password-error" : undefined}
+                style={{ paddingRight: 52, ...(errors.confirmPassword ? errorBorder : {}) }}
+                {...register("confirmPassword")}
               />
-              {errors.name && (
-                <p id="name-error" className="text-sm text-destructive">
-                  {errors.name.message}
-                </p>
-              )}
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                aria-label={showConfirmPassword ? "Masquer la confirmation" : "Afficher la confirmation"}
+                className="pw-toggle"
+              >
+                {showConfirmPassword ? (
+                  <EyeOff className="h-4 w-4" aria-hidden="true" />
+                ) : (
+                  <Eye className="h-4 w-4" aria-hidden="true" />
+                )}
+              </button>
             </div>
+            {errors.confirmPassword && (
+              <p id="confirm-password-error" className="field-error" style={{ margin: 0 }}>
+                {errors.confirmPassword.message}
+              </p>
+            )}
+          </div>
 
-            {/* Password Field */}
-            <div className="space-y-2">
-              <Label htmlFor="password">Mot de passe</Label>
-              <div className="relative">
-                <Input
-                  id="password"
-                  type={showPassword ? "text" : "password"}
-                  placeholder="Votre mot de passe"
-                  autoComplete="new-password"
-                  aria-invalid={!!errors.password}
-                  aria-describedby="password-criteria password-error"
-                  className="pr-10"
-                  {...register("password")}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  aria-label={showPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
-                >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-              {errors.password && (
-                <p id="password-error" className="text-sm text-destructive">
-                  {errors.password.message}
-                </p>
-              )}
-
-              {/* Password Criteria */}
-              <div id="password-criteria" className="mt-3 space-y-1.5">
-                {PASSWORD_CRITERIA.map((criterion) => {
-                  const isValid = checkCriteria(criterion.regex);
-                  return (
-                    <div
-                      key={criterion.label}
-                      className={cn(
-                        "flex items-center gap-2 text-sm transition-colors",
-                        isValid ? "text-green-600" : "text-muted-foreground"
-                      )}
-                    >
-                      {isValid ? <Check className="h-4 w-4" /> : <X className="h-4 w-4" />}
-                      <span>{criterion.label}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Confirm Password Field */}
-            <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Confirmer le mot de passe</Label>
-              <div className="relative">
-                <Input
-                  id="confirmPassword"
-                  type={showConfirmPassword ? "text" : "password"}
-                  placeholder="Confirmez votre mot de passe"
-                  autoComplete="new-password"
-                  aria-invalid={!!errors.confirmPassword}
-                  aria-describedby={errors.confirmPassword ? "confirm-password-error" : undefined}
-                  className="pr-10"
-                  {...register("confirmPassword")}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  aria-label={showConfirmPassword ? "Masquer la confirmation" : "Afficher la confirmation"}
-                >
-                  {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-              {errors.confirmPassword && (
-                <p id="confirm-password-error" className="text-sm text-destructive">
-                  {errors.confirmPassword.message}
-                </p>
-              )}
-            </div>
-
-            {/* Submit Button */}
-            <Button type="submit" className="w-full" disabled={isSubmitting}>
+          <div className="form-actions" style={{ paddingTop: 4 }}>
+            <button
+              type="submit"
+              className="btn accent btn-lg"
+              disabled={isSubmitting}
+              style={{ width: "100%" }}
+            >
               {isSubmitting ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Inscription...
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                  Inscription…
                 </>
               ) : (
-                "Créer mon compte jury"
+                "Créer mon compte de juré"
               )}
-            </Button>
-          </form>
-        </CardContent>
+            </button>
+          </div>
+        </form>
 
-        <CardFooter className="flex justify-center">
-          <p className="text-sm text-muted-foreground">
-            Déjà un compte ?{" "}
-            {/* La page /login lit `callbackUrl`, pas `redirect` : le lien
-                renvoyait l'utilisateur au tableau de bord au lieu du code. */}
-            <Link
-              href={`/login?callbackUrl=${encodeURIComponent(`/activate?code=${invitationCode}`)}`}
-              className="text-primary hover:underline"
-            >
-              Se connecter
-            </Link>
-          </p>
-        </CardFooter>
-      </Card>
+        <p className="form-foot">
+          Déjà un compte ?{" "}
+          {/* La page /login lit `callbackUrl`, pas `redirect` : le lien
+              renvoyait l'utilisateur au tableau de bord au lieu du code. */}
+          <Link
+            href={`/login?callbackUrl=${encodeURIComponent(`/activate?code=${invitationCode}`)}`}
+          >
+            Se connecter
+          </Link>
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/** Code absent ou refusé : explication et retour à l'accueil. */
+function JuryCodeProblem({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="pg pg--form">
+      <header className="pg-head">
+        <p className="eyebrow">Jury</p>
+        <h1 className="display">{title}</h1>
+      </header>
+      <div className="notice is-error" role="alert" style={{ display: "flex", gap: 12 }}>
+        <AlertCircle
+          className="h-5 w-5"
+          style={{ flexShrink: 0, marginTop: 2, color: "var(--danger)" }}
+          aria-hidden="true"
+        />
+        <p style={{ margin: 0 }}>{children}</p>
+      </div>
+      <div className="form-actions" style={{ marginTop: 24 }}>
+        <Link href="/" className="btn accent">
+          Retour à l&apos;accueil
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+function JuryPending({ label }: { label: string }) {
+  return (
+    <div className="pg pg--form">
+      <div
+        className="form-card"
+        role="status"
+        style={{ marginTop: 72, alignItems: "center", padding: "56px 24px" }}
+      >
+        <Loader2 className="h-8 w-8 animate-spin" style={{ color: "var(--accent)" }} aria-hidden="true" />
+        <p style={{ margin: 0, fontSize: 16, color: "var(--fg-2)" }}>{label}</p>
+      </div>
     </div>
   );
 }
@@ -424,19 +432,10 @@ function JuryRegisterContent() {
  */
 export default function PortalJuryRegisterPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="w-full max-w-md mx-auto">
-          <Card>
-            <CardContent className="py-12 text-center">
-              <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
-              <p className="mt-4 text-muted-foreground">Chargement...</p>
-            </CardContent>
-          </Card>
-        </div>
-      }
-    >
+    <Suspense fallback={<JuryPending label="Chargement…" />}>
       <JuryRegisterContent />
     </Suspense>
   );
 }
+
+const errorBorder: CSSProperties = { borderColor: "var(--danger)" };

@@ -774,7 +774,22 @@ a.pg-tile:hover{ border-color: var(--accent); }
 .form-row{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 18px; }
 .form-actions{ display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; }
 .form-actions .btn{ min-width: 180px; }
-.form-foot{ font-size: 15px; color: var(--fg-2); }
+.form-foot{ margin: 0; padding-top: 20px; border-top: 1px solid var(--line); font-size: 15px; color: var(--fg-2); }
+.field{ display: flex; flex-direction: column; gap: 8px; }
+.field-input.is-error{ border-color: var(--danger); }
+/* Mot de passe : bouton « afficher » posé dans le champ, critères en grille. */
+.pw-toggle{ position: absolute; right: 2px; top: 50%; transform: translateY(-50%); width: 40px; height: 40px;
+  display: grid; place-items: center; border: 0; border-radius: var(--radius-control); background: transparent; color: var(--fg-2); cursor: pointer; }
+.pw-toggle:hover{ color: var(--fg); }
+.pw-toggle:focus-visible{ outline: 2px solid var(--accent-hi); outline-offset: -2px; }
+.pw-criteria{ margin: 6px 0 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 6px 16px; font-size: 14px; }
+/* Liste libellé / valeur qui passe sur deux lignes en mobile. */
+.pg-dl{ margin: 0; display: flex; flex-direction: column; }
+.pg-dl > div{ display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 16px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.pg-dl > div:last-child{ border-bottom: 0; }
+.pg-dl dt{ color: var(--fg-2); }
+.pg-dl dd{ margin: 0; color: var(--fg); font-weight: 600; text-align: right; }
+[id]{ scroll-margin-top: 96px; }
 .form-foot a{ color: var(--accent-hi); font-weight: 600; }
 .field-label{ font-size: 15px; font-weight: 600; color: var(--fg); }
 .field-hint{ font-size: 14px; line-height: 1.45; color: var(--fg-3); }
