@@ -76,6 +76,7 @@ fait foi :
 | `0007_quotas_categories.sql` | Quotas d'inscription par catégorie (`max_products`, `max_products_per_producer`) et réservation des places pendant le paiement (`registrations.payment_reserved_until`). Purement additive. |
 | `0008_double_jury_ajout.sql` | Cup unique à deux jurys, étape 1 : `cup_juries.panel`, codes / scores / rangs doublés en `*_pro` et `*_public` sur `products`, avec **report** des données existantes dans les colonnes du panel de leur cup. N'efface rien. |
 | `0009_double_jury_retrait.sql` | Étape 2 : retrait de `cups.type` et des anciennes colonnes `anonymous_code`, `final_score`, `category_rank`. **Destructive** — ne s'applique qu'après 0008, dans la même chaîne. |
+| `0010_commandes_complementaires.sql` | Plusieurs inscriptions (paiements) par producteur et par cup ; un seul panier `pending_payment` à la fois (index unique partiel). |
 | `meta/` | Snapshots et `_journal.json` que drizzle-kit utilise pour calculer le diff suivant. **Se committe avec le SQL**, sinon la migration suivante repart d'un état faux. |
 
 Procédure pour tout changement de schéma :
@@ -103,7 +104,7 @@ le libellé est faux depuis la bascule, la commande exécutée est bien
 `drizzle-kit migrate`.
 
 Reprendre une migration à froid sur une base vide (nouvel environnement) :
-`pnpm db:migrate` suffit, les fichiers `0000` → `0009` s'appliquent dans
+`pnpm db:migrate` suffit, les fichiers `0000` → `0010` s'appliquent dans
 l'ordre du journal. Ne pas lancer `baseline-migrations.mjs` sur une base
 vierge : il marquerait `0000_baseline_production` comme appliquée alors que
 rien n'existe, et les migrations suivantes échoueraient sur des tables

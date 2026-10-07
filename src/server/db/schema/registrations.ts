@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, integer, unique, index, check } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, integer, uniqueIndex, index, check } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 import { generateId } from "./id";
 import { cups, type Currency } from "./cups";
@@ -69,8 +69,16 @@ export const registrations = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    // A producer can only have one registration per cup
-    unique("registration_producer_cup_unique").on(table.cupId, table.producerId),
+    // Un producteur peut payer plusieurs fois pour une même cup : chaque
+    // paiement est une inscription, avec sa facture (la première, puis des
+    // commandes complémentaires). Mais une seule peut être en attente de
+    // paiement à la fois : c'est le panier en cours, que `getOrCreate`
+    // retrouve au lieu d'en ouvrir un second.
+    uniqueIndex("registrations_one_pending_per_producer_cup")
+      .on(table.cupId, table.producerId)
+      .where(sql`${table.status} = 'pending_payment'`),
+    // Toutes les lectures « inscriptions d'un producteur sur une cup ».
+    index("registrations_cup_producer_idx").on(table.cupId, table.producerId),
     // L'unique ci-dessus ne couvre que cup_id : le tableau de bord producteur
     // et la suppression en cascade d'un producteur filtrent par producer_id.
     index("registrations_producer_id_idx").on(table.producerId),

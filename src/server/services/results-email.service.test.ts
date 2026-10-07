@@ -26,6 +26,13 @@ vi.mock("~/server/db", () => ({
   },
 }));
 
+// Commandes d'un même producteur : chaque inscription des tests est seule,
+// sauf quand un test dit le contraire.
+vi.mock("./producer-orders", () => ({
+  getProducerCupRegistrationIds: vi.fn(async (_db: unknown, id: string) => [id]),
+  getProductsOfRegistrations: vi.fn(async () => []),
+}));
+
 vi.mock("./results-pdf.service", () => ({
   generateProducerSynthesisPdf: mockPdf,
 }));
@@ -51,6 +58,7 @@ import { sendBulkResultsEmails, sendResultsEmail } from "./results-email.service
 function registrationRow(id: string, overrides: Record<string, unknown> = {}) {
   return {
     id,
+    producerId: `producteur-${id}`,
     status: "confirmed",
     producer: {
       companyName: `Producteur ${id}`,
@@ -110,6 +118,20 @@ describe("Results Email Service", () => {
   });
 
   describe("sendBulkResultsEmails", () => {
+    it("n'envoie qu'un e-mail par producteur, commandes complémentaires comprises", async () => {
+      mockFindMany.mockResolvedValue([
+        registrationRow("reg-1", { producerId: "p-1" }),
+        registrationRow("reg-1-bis", { producerId: "p-1" }),
+        registrationRow("reg-2", { producerId: "p-2" }),
+      ]);
+      mockFindFirst.mockImplementation(async () => registrationRow("reg-x"));
+
+      const bilan = await sendBulkResultsEmails("cup-1");
+
+      expect(bilan.results.map((r) => r.registrationId)).toEqual(["reg-1", "reg-2"]);
+      expect(mockSend).toHaveBeenCalledTimes(2);
+    });
+
     it("poursuit le lot et rend compte de chacun quand un envoi échoue", async () => {
       mockFindMany.mockResolvedValue([
         registrationRow("reg-1"),

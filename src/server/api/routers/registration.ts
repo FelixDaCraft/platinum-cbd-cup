@@ -31,6 +31,7 @@ import {
   assertCartWithinQuotas,
   countByCategory,
   getCategoryOccupancy,
+  getProducerPaidProducts,
   lockCategoryQuotas,
   PAYMENT_ORDER_TIMEOUT_SECONDS,
   PAYMENT_RESERVATION_MS,
@@ -310,8 +311,11 @@ export const registrationRouter = createTRPCRouter({
 
       assertRegistrationOpen(cup);
 
-      // Check if registration already exists
-      const existingRegistration = await ctx.db.query.registrations.findFirst({
+      // Un producteur peut regler plusieurs fois pour une meme cup : chaque
+      // paiement est une inscription (la premiere, puis des commandes
+      // complementaires), avec sa facture. Une seule peut etre en attente de
+      // paiement : c'est le panier en cours, qu'on retrouve ici.
+      const existingRegistrations = await ctx.db.query.registrations.findMany({
         where: (reg, { eq: eqFn, and: andFn }) =>
           andFn(
             eqFn(reg.cupId, input.cupId),
@@ -324,63 +328,103 @@ export const registrationRouter = createTRPCRouter({
             },
           },
         },
+        orderBy: (reg, { asc }) => [asc(reg.createdAt)],
       });
 
-      if (existingRegistration) {
-        // If cancelled, reactivate it
-        if (existingRegistration.status === "cancelled") {
-          // Remise a zero et purge des produits dans la meme transaction, et
-          // `paymentOrderCode` efface : la commande Viva de la tentative
-          // annulee ne doit pas pouvoir regler le nouveau panier.
-          await ctx.db.transaction(async (tx) => {
-            await lockRegistrationForBilling(tx, existingRegistration.id);
+      // Produits deja regles sur cette cup : le panier en cours est alors une
+      // commande complementaire, et l'ecran le dit au producteur.
+      const paidProductsCount = existingRegistrations
+        .filter((reg) => reg.status === "confirmed")
+        .reduce((sum, reg) => sum + reg.products.length, 0);
+      const isSupplement = paidProductsCount > 0;
 
-            await tx
-              .update(schema.registrations)
-              .set({
-                status: "pending_payment",
-                totalAmount: 0,
-                paymentOrderCode: null,
-                paymentReservedUntil: null,
-                updatedAt: new Date(),
-              })
-              .where(eq(schema.registrations.id, existingRegistration.id));
-
-            // Delete any old products from cancelled registration
-            await tx
-              .delete(schema.products)
-              .where(eq(schema.products.registrationId, existingRegistration.id));
-          });
-
-          return {
-            ...existingRegistration,
-            status: "pending_payment" as const,
-            totalAmount: 0,
-            paymentOrderCode: null,
-            products: [],
-          };
-        }
-
-        return existingRegistration;
+      const pendingRegistration = existingRegistrations.find(
+        (reg) => reg.status === "pending_payment"
+      );
+      if (pendingRegistration) {
+        return { ...pendingRegistration, isSupplement, paidProductsCount };
       }
 
-      // Create new registration
-      const registrationId = nanoid();
+      const cancelledRegistration = existingRegistrations.find(
+        (reg) => reg.status === "cancelled"
+      );
+      if (cancelledRegistration) {
+        // Remise a zero et purge des produits dans la meme transaction, et
+        // `paymentOrderCode` efface : la commande Viva de la tentative
+        // annulee ne doit pas pouvoir regler le nouveau panier.
+        await ctx.db.transaction(async (tx) => {
+          await lockRegistrationForBilling(tx, cancelledRegistration.id);
+
+          await tx
+            .update(schema.registrations)
+            .set({
+              status: "pending_payment",
+              totalAmount: 0,
+              paymentOrderCode: null,
+              paymentReservedUntil: null,
+              updatedAt: new Date(),
+            })
+            .where(eq(schema.registrations.id, cancelledRegistration.id));
+
+          // Delete any old products from cancelled registration
+          await tx
+            .delete(schema.products)
+            .where(eq(schema.products.registrationId, cancelledRegistration.id));
+        });
+
+        return {
+          ...cancelledRegistration,
+          status: "pending_payment" as const,
+          totalAmount: 0,
+          paymentOrderCode: null,
+          paymentReservedUntil: null,
+          products: [],
+          isSupplement,
+          paidProductsCount,
+        };
+      }
+
+      // Nouveau panier : premiere inscription, ou commande complementaire si
+      // le producteur a deja regle des produits sur cette cup.
       const [registration] = await ctx.db
         .insert(schema.registrations)
         .values({
-          id: registrationId,
+          id: nanoid(),
           cupId: input.cupId,
           producerId: producer.id,
           status: "pending_payment",
           totalAmount: 0,
           currency: cup.currency ?? "EUR",
         })
+        // Deux onglets ouverts en meme temps : l'index unique partiel
+        // n'autorise qu'un panier en attente, le second appel le reprend.
+        .onConflictDoNothing()
         .returning();
 
+      if (!registration) {
+        const concurrent = await ctx.db.query.registrations.findFirst({
+          where: (reg, { eq: eqFn, and: andFn }) =>
+            andFn(
+              eqFn(reg.cupId, input.cupId),
+              eqFn(reg.producerId, producer.id),
+              eqFn(reg.status, "pending_payment")
+            ),
+          with: { products: { with: { category: true } } },
+        });
+        if (!concurrent) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "Inscription en cours de creation, rechargez la page.",
+          });
+        }
+        return { ...concurrent, isSupplement, paidProductsCount };
+      }
+
       return {
-        ...registration!,
+        ...registration,
         products: [],
+        isSupplement,
+        paidProductsCount,
       };
     }),
 
@@ -510,7 +554,13 @@ export const registrationRouter = createTRPCRouter({
           assertCartWithinQuotas(
             [category],
             countByCategory([...cartProducts, { categoryId: input.categoryId }]),
-            await getCategoryOccupancy(tx, registration.cupId, input.registrationId)
+            await getCategoryOccupancy(tx, registration.cupId, input.registrationId),
+            await getProducerPaidProducts(
+              tx,
+              registration.cupId,
+              producer.id,
+              input.registrationId
+            )
           );
 
           const [created] = await tx
@@ -864,7 +914,8 @@ export const registrationRouter = createTRPCRouter({
         assertCartWithinQuotas(
           categories,
           cart,
-          await getCategoryOccupancy(tx, registration.cupId, registration.id)
+          await getCategoryOccupancy(tx, registration.cupId, registration.id),
+          await getProducerPaidProducts(tx, registration.cupId, producer.id, registration.id)
         );
 
         await tx
@@ -1162,7 +1213,8 @@ export const registrationRouter = createTRPCRouter({
         assertCartWithinQuotas(
           categories,
           cart,
-          await getCategoryOccupancy(tx, registration.cupId, registration.id)
+          await getCategoryOccupancy(tx, registration.cupId, registration.id),
+          await getProducerPaidProducts(tx, registration.cupId, producer.id, registration.id)
         );
 
         const invoiceNumber = await allocateInvoiceNumber(tx, registration.id, now);

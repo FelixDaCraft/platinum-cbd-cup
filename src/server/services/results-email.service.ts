@@ -3,7 +3,7 @@
  * Handles sending synthesis PDFs to producers via email with tracking
  */
 
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, inArray, sql } from "drizzle-orm";
 import { db } from "~/server/db";
 import * as schema from "~/server/db/schema";
 import { env } from "~/env";
@@ -24,6 +24,10 @@ import {
   sendEmail,
 } from "./email";
 import { hasAnyResult, scoreFor } from "~/server/db/panel-columns";
+import {
+  getProducerCupRegistrationIds,
+  getProductsOfRegistrations,
+} from "./producer-orders";
 
 /** Nom de l'organisateur : mono-tenant, c'est toujours le concours lui-même. */
 const ORGANIZER_NAME = "Platinum CBD Cup";
@@ -38,10 +42,11 @@ const ORGANIZER_NAME = "Platinum CBD Cup";
  * n'apprendrait même pas lesquels sont déjà partis.
  */
 async function updateEmailStatus(
-  registrationId: string,
+  registrationIds: string[],
   success: boolean,
   error?: string
 ): Promise<boolean> {
+  const registrationId = registrationIds.join(", ");
   try {
     await db
       .update(schema.registrations)
@@ -51,7 +56,7 @@ async function updateEmailStatus(
         synthesisEmailAttempts: sql`COALESCE(${schema.registrations.synthesisEmailAttempts}, 0) + 1`,
         updatedAt: new Date(),
       })
-      .where(eq(schema.registrations.id, registrationId));
+      .where(inArray(schema.registrations.id, registrationIds));
     return true;
   } catch (trackingError) {
     console.error(
@@ -119,8 +124,16 @@ export async function sendResultsEmail(
     const cup = registration.cup;
     const user = producer.user;
 
+    // Un e-mail par producteur : ses produits de toutes ses commandes sur la
+    // cup (première inscription et commandes complémentaires).
+    const orderIds = await getProducerCupRegistrationIds(db, registrationId);
+    const allProducts =
+      orderIds.length > 1
+        ? await getProductsOfRegistrations(db, orderIds)
+        : registration.products;
+
     // Check if there are products with results
-    const productsWithResults = registration.products.filter(hasAnyResult);
+    const productsWithResults = allProducts.filter(hasAnyResult);
 
     if (productsWithResults.length === 0) {
       return { success: false, error: "Aucun produit avec resultats" };
@@ -192,12 +205,12 @@ export async function sendResultsEmail(
 
     if (!result.success) {
       // Story 8.7 : l'échec est tracé sur l'inscription pour permettre une relance ciblée.
-      await updateEmailStatus(registrationId, false, result.error);
+      await updateEmailStatus(orderIds, false, result.error);
       return { success: false, error: result.error };
     }
 
-    // Update status as sent - Story 8.7
-    const tracked = await updateEmailStatus(registrationId, true);
+    // Update status as sent - Story 8.7 — sur toutes les commandes couvertes.
+    const tracked = await updateEmailStatus(orderIds, true);
 
     return {
       success: true,
@@ -208,7 +221,7 @@ export async function sendResultsEmail(
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
     console.error("[Results Email] Error:", errorMessage);
     // Update status with error - Story 8.7
-    await updateEmailStatus(registrationId, false, errorMessage);
+    await updateEmailStatus([registrationId], false, errorMessage);
     return { success: false, error: errorMessage };
   }
 }
@@ -247,13 +260,27 @@ export async function sendBulkResultsEmails(
       },
       products: true,
     },
+    orderBy: (reg, { asc }) => [asc(reg.createdAt)],
   });
+
+  // Un envoi par producteur : ses commandes complémentaires sont jointes à
+  // sa première inscription (voir sendResultsEmail), qui porte l'envoi.
+  const ordersByProducer = new Map<string, typeof registrations>();
+  for (const registration of registrations) {
+    const orders = ordersByProducer.get(registration.producerId) ?? [];
+    orders.push(registration);
+    ordersByProducer.set(registration.producerId, orders);
+  }
+  const producerRegistrations = [...ordersByProducer.values()].map((orders) => ({
+    ...orders[0]!,
+    products: orders.flatMap((order) => order.products),
+  }));
 
   // Parallélisme borné : chaque envoi regénère un PDF de synthèse (1 à 2 s).
   // En séquence, 68 producteurs dépassaient la coupure du proxy à 100 s et
   // l'organisateur relançait alors que les envois étaient encore en cours.
   const results = await mapWithConcurrency(
-    registrations,
+    producerRegistrations,
     EMAIL_SEND_CONCURRENCY,
     async (registration) => {
       // Le lot ne doit jamais tomber en entier sur une inscription : un rejet

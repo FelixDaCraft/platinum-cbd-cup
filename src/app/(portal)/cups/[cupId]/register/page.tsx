@@ -384,6 +384,17 @@ export default function RegisterPage() {
         <p className="lede" style={{ marginTop: 0 }}>
           Cinq étapes. Douze minutes. Spécimen anonymisé automatiquement dès réception.
         </p>
+        {getOrCreate.data?.isSupplement && (
+          <p
+            className="mono"
+            style={{ marginTop: 16, fontSize: 12.5, color: "var(--accent)", lineHeight: 1.6 }}
+          >
+            Commande complémentaire : vous avez déjà {getOrCreate.data.paidProductsCount}{" "}
+            produit{getOrCreate.data.paidProductsCount > 1 ? "s" : ""} réglé
+            {getOrCreate.data.paidProductsCount > 1 ? "s" : ""} pour cette cup. Ce nouveau
+            produit fait l&apos;objet d&apos;un paiement et d&apos;une facture séparés.
+          </p>
+        )}
       </section>
 
       {/* ── STEPPER ───────────────────────────────────────────────────────── */}

@@ -61,6 +61,27 @@ describe("assertCartWithinQuotas", () => {
     ).toThrow("Vous ne pouvez inscrire que 2 produit(s)");
   });
 
+  it("compte les produits déjà réglés dans une commande précédente", () => {
+    // Un produit payé lors de la première inscription : la commande
+    // complémentaire n'en admet plus qu'un dans la catégorie.
+    expect(() =>
+      assertCartWithinQuotas(
+        [fleurs],
+        new Map([["cat-fleurs", 1]]),
+        new Map(),
+        new Map([["cat-fleurs", 1]])
+      )
+    ).not.toThrow();
+    expect(() =>
+      assertCartWithinQuotas(
+        [fleurs],
+        new Map([["cat-fleurs", 2]]),
+        new Map(),
+        new Map([["cat-fleurs", 1]])
+      )
+    ).toThrow("et vous en avez déjà 1");
+  });
+
   it("ne limite pas une catégorie sans quota", () => {
     expect(() =>
       assertCartWithinQuotas(

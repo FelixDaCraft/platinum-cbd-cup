@@ -469,6 +469,17 @@ export default function ProducerRegistrationsPage() {
                                 {registration.products.length > 1 ? "S" : ""} ·{" "}
                                 {formatDate(registration.createdAt)}
                               </div>
+                              {/* Inscription réglée, cup encore ouverte : un autre
+                                  produit passe par une commande complémentaire. */}
+                              {registration.cup.status === "published" && (
+                                <Link
+                                  href={`/cups/${registration.cup.id}/register`}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="n-btn-secondary text-xs inline-block mt-3"
+                                >
+                                  + AJOUTER UN PRODUIT
+                                </Link>
+                              )}
                             </div>
                             <div className="shrink-0 text-right">
                               <div

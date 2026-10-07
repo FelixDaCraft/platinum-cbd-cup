@@ -21,6 +21,7 @@ import * as schema from "~/server/db/schema";
 import { formatScoreForScale, getMaxScoreForScale } from "~/lib/validations/labels";
 import { formatTerpeneAroma } from "~/lib/lab-analysis/terpene-sensory";
 import { weightedAverageOrNull } from "./weighted-score";
+import { getProducerCupRegistrationIds, getProductsOfRegistrations } from "./producer-orders";
 import { JURY_PANEL_LABELS, juryPanelEnum, type JuryPanel } from "~/lib/enums";
 import { codeFor, panelColumns, rankFor, scoreFor } from "~/server/db/panel-columns";
 import path from "path";
@@ -1891,9 +1892,17 @@ export async function generateProducerSynthesisPdf(
     throw new Error(`Registration not found: ${registrationId}`);
   }
 
+  // Synthèse par producteur : les produits de toutes ses commandes sur la
+  // cup (première inscription et commandes complémentaires).
+  const orderIds = await getProducerCupRegistrationIds(db, registrationId);
+  const orderProducts =
+    orderIds.length > 1
+      ? await getProductsOfRegistrations(db, orderIds)
+      : registration.products;
+
   // Get detailed data for each product
   const productsData: ProductResultData[] = [];
-  for (const product of registration.products) {
+  for (const product of orderProducts) {
     productsData.push(...(await getProductResultsForAllPanels(product.id)));
   }
 

@@ -1,7 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { nanoid } from "nanoid";
-import { eq, and, or, count, isNotNull, ne, desc, sql } from "drizzle-orm";
+import { eq, and, or, count, isNotNull, ne, desc, asc, sql } from "drizzle-orm";
 import {
   hasAnyResult,
   panelColumns,
@@ -657,8 +657,9 @@ export const producerRouter = createTRPCRouter({
         });
       }
 
-      // Get registration for this producer and cup
-      const registration = await ctx.db.query.registrations.findFirst({
+      // Toutes les commandes du producteur sur la cup (première inscription
+      // puis commandes complémentaires) : les résultats se lisent ensemble.
+      const orders = await ctx.db.query.registrations.findMany({
         where: and(
           eq(schema.registrations.cupId, cupId),
           eq(schema.registrations.producerId, producerId)
@@ -671,7 +672,16 @@ export const producerRouter = createTRPCRouter({
             },
           },
         },
+        orderBy: [asc(schema.registrations.createdAt)],
       });
+      const registration = orders[0]
+        ? {
+            ...(orders.find((o) => o.status === "confirmed") ?? orders[0]),
+            products: orders
+              .filter((o) => o.status === "confirmed")
+              .flatMap((o) => o.products),
+          }
+        : undefined;
 
       if (!registration) {
         throw new TRPCError({

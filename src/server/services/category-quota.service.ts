@@ -99,24 +99,33 @@ export interface CategoryQuota {
  *   d'ajout compris.
  * @param occupancy - places prises par les AUTRES inscriptions
  *   (`getCategoryOccupancy` avec l'inscription du panier exclue).
+ * @param heldByProducer - produits déjà réglés par le même producteur sur la
+ *   cup, dans ses inscriptions précédentes (`getProducerPaidProducts`) : le
+ *   maximum par producteur porte sur toutes ses commandes, pas sur le seul
+ *   panier en cours.
  * @throws TRPCError CONFLICT avec un message lisible par le producteur.
  */
 export function assertCartWithinQuotas(
   categories: CategoryQuota[],
   cart: Map<string, number>,
-  occupancy: Map<string, number>
+  occupancy: Map<string, number>,
+  heldByProducer: Map<string, number> = new Map()
 ): void {
   for (const category of categories) {
     const wanted = cart.get(category.id) ?? 0;
     if (wanted === 0) continue;
 
+    const held = heldByProducer.get(category.id) ?? 0;
     if (
       category.maxProductsPerProducer !== null &&
-      wanted > category.maxProductsPerProducer
+      wanted + held > category.maxProductsPerProducer
     ) {
       throw new TRPCError({
         code: "CONFLICT",
-        message: `Vous ne pouvez inscrire que ${category.maxProductsPerProducer} produit(s) dans la catégorie « ${category.name} ».`,
+        message:
+          held > 0
+            ? `Vous ne pouvez inscrire que ${category.maxProductsPerProducer} produit(s) dans la catégorie « ${category.name} », et vous en avez déjà ${held}.`
+            : `Vous ne pouvez inscrire que ${category.maxProductsPerProducer} produit(s) dans la catégorie « ${category.name} ».`,
       });
     }
 
@@ -133,6 +142,31 @@ export function assertCartWithinQuotas(
       }
     }
   }
+}
+
+/**
+ * Produits déjà réglés par un producteur sur une cup, par catégorie, hors
+ * panier en cours (ses inscriptions confirmées : première commande et
+ * commandes complémentaires).
+ */
+export async function getProducerPaidProducts(
+  db: TxClient | DbClient,
+  cupId: string,
+  producerId: string,
+  excludeRegistrationId: string
+): Promise<Map<string, number>> {
+  const rows = await db.execute<{ category_id: string; held: number }>(sql`
+    SELECT p.category_id, count(*)::int AS held
+    FROM products p
+    JOIN registrations r ON r.id = p.registration_id
+    WHERE r.cup_id = ${cupId}
+      AND r.producer_id = ${producerId}
+      AND r.status = 'confirmed'
+      AND r.id <> ${excludeRegistrationId}
+    GROUP BY p.category_id
+  `);
+
+  return new Map(rows.rows.map((row) => [row.category_id, Number(row.held)]));
 }
 
 /** Compte les produits d'un panier par catégorie. */
