@@ -171,7 +171,6 @@ async function creerEditionOuverte(): Promise<EditionOuverte> {
   const cupNom = `E2E-PROD-${suf}`;
   const cup = await trpcMutate<{ id: string }>(organisateur, "cup.create", {
     name: cupNom,
-    type: "public",
     ratingScale: "0-20",
   });
   expect(cup.data?.id, `création de l'édition ${cupNom}`).toBeTruthy();

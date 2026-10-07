@@ -117,7 +117,7 @@ async function editionsClassees() {
        from cups c
        join registrations r on r.cup_id = c.id
        join products p on p.registration_id = r.id
-        and p.final_score is not null
+        and coalesce(p.final_score_public, p.final_score_pro) is not null
         and p.excluded_from_results = false
       where c.results_published_at is not null
       group by c.id, c.name, annee
@@ -732,7 +732,7 @@ async function producteurAvecDistinctions() {
        join products p on p.registration_id = r.id
         and p.excluded_from_results = false
         and p.disqualified = false
-        and (p.label_id is not null or (p.category_rank is not null and p.category_rank <= 3))
+        and (p.label_id is not null or p.category_rank_pro <= 3 or p.category_rank_public <= 3)
       group by pr.id, nom
       order by count(*) desc, pr.id
       limit 1`

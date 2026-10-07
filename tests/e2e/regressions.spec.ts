@@ -713,8 +713,12 @@ test.describe("Accueil : tout ce qui s'affiche vient de la base", () => {
 
     const codes = new Set(
       (
+        // Le bandeau affiche le code du jury public, ou du jury pro pour les
+        // éditions antérieures : les deux colonnes font foi.
         await lireEnBase<{ anonymous_code: string }>(
-          `select distinct anonymous_code from products where anonymous_code is not null`
+          `select anonymous_code_pro as anonymous_code from products where anonymous_code_pro is not null
+           union
+           select anonymous_code_public from products where anonymous_code_public is not null`
         )
       ).map((l) => l.anonymous_code)
     );

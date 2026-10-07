@@ -158,7 +158,6 @@ interface Edition {
  */
 async function creerEdition(
   org: APIRequestContext,
-  type: "public" | "pro",
   etiquette: string
 ): Promise<Edition> {
   const nom = `E2E-JURE-${etiquette}`;
@@ -167,7 +166,6 @@ async function creerEdition(
   const cup = exige(
     await mutation<{ id: string }>(org, "cup.create", {
       name: nom,
-      type,
       ratingScale: "0-20",
     }),
     "cup.create"
@@ -217,7 +215,10 @@ async function creerEdition(
 
 interface ProduitInscrit {
   productId: string;
+  /** Code du jury public : celui des jurés entrés par code ou jeton QR. */
   code: string;
+  /** Code du jury pro : celui des jurés invités nominativement. */
+  codePro: string;
 }
 
 /**
@@ -250,7 +251,10 @@ async function inscrireProducteur(
 
   const confirmation = exige(
     await mutation<{
-      anonymizedProducts: Array<{ productId: string; anonymousCode: string }>;
+      anonymizedProducts: Array<{
+        productId: string;
+        codes: { pro: string; public: string };
+      }>;
     }>(prod, "registration.confirmFreeRegistration", {
       registrationId: inscription.id,
     }),
@@ -259,7 +263,8 @@ async function inscrireProducteur(
 
   return confirmation.anonymizedProducts.map((p) => ({
     productId: p.productId,
-    code: p.anonymousCode,
+    code: p.codes.public,
+    codePro: p.codes.pro,
   }));
 }
 
@@ -383,8 +388,8 @@ test.describe("Activation du compte juré @P0", () => {
     test.setTimeout(600_000);
     org = await ouvrirContexte(playwright, ORGANISATEUR);
     const sfx = suffixe();
-    editionCode = await creerEdition(org, "public", `ACT-CODE-${sfx}`);
-    editionJeton = await creerEdition(org, "public", `ACT-QR-${sfx}`);
+    editionCode = await creerEdition(org, `ACT-CODE-${sfx}`);
+    editionJeton = await creerEdition(org, `ACT-QR-${sfx}`);
     code = await genererCode(org, editionCode);
     jeton = await genererJeton(org, editionJeton);
   });
@@ -444,22 +449,21 @@ test.describe("Activation du compte juré @P0", () => {
 test.describe("Conflit d'intérêts producteur / juré @P0", () => {
   test.describe.configure({ mode: "serial" });
 
+  // Une édition réunit un jury pro et un jury public. La porte d'entrée fixe
+  // le panel : invitation nominative -> pro, code ou jeton QR -> public. Seul
+  // le jury public est fermé au producteur qui concourt.
+
   let org: APIRequestContext;
   let prod: APIRequestContext;
 
-  /** Édition PUBLIQUE où le producteur concourt : les trois portes doivent refuser. */
-  let publiqueAvecConcurrent: Edition;
-  let codePublique: string;
-  let jetonPublique: string;
-  let invitationPublique: InvitationEnvoyee;
-
-  /** Édition PRO où le producteur concourt : contre-épreuve, l'accès est dû. */
-  let proAvecConcurrent: Edition;
-  let jetonPro: string;
+  /** Édition où le producteur concourt. */
+  let avecConcurrent: Edition;
+  let codePublic: string;
+  let jetonPublic: string;
   let invitationPro: InvitationEnvoyee;
 
-  /** Édition PUBLIQUE où le producteur ne concourt pas : l'accès est dû aussi. */
-  let publiqueSansInscription: Edition;
+  /** Édition où le producteur ne concourt pas : le jury public lui est ouvert. */
+  let sansInscription: Edition;
   let codeSansInscription: string;
 
   test.beforeAll(async ({ playwright }) => {
@@ -468,35 +472,14 @@ test.describe("Conflit d'intérêts producteur / juré @P0", () => {
     prod = await ouvrirContexte(playwright, PRODUCTEUR);
     const sfx = suffixe();
 
-    publiqueAvecConcurrent = await creerEdition(org, "public", `CONF-PUB-${sfx}`);
-    await inscrireProducteur(prod, publiqueAvecConcurrent, [
-      `E2E-PRODUIT-PUB-${sfx}`,
-    ]);
-    codePublique = await genererCode(org, publiqueAvecConcurrent);
-    jetonPublique = await genererJeton(org, publiqueAvecConcurrent);
-    invitationPublique = await inviterNominativement(
-      org,
-      publiqueAvecConcurrent.cupId,
-      PRODUCTEUR
-    );
+    avecConcurrent = await creerEdition(org, `CONF-${sfx}`);
+    await inscrireProducteur(prod, avecConcurrent, [`E2E-PRODUIT-CONF-${sfx}`]);
+    codePublic = await genererCode(org, avecConcurrent);
+    jetonPublic = await genererJeton(org, avecConcurrent);
+    invitationPro = await inviterNominativement(org, avecConcurrent.cupId, PRODUCTEUR);
 
-    proAvecConcurrent = await creerEdition(org, "pro", `CONF-PRO-${sfx}`);
-    await inscrireProducteur(prod, proAvecConcurrent, [
-      `E2E-PRODUIT-PRO-${sfx}`,
-    ]);
-    jetonPro = await genererJeton(org, proAvecConcurrent);
-    invitationPro = await inviterNominativement(
-      org,
-      proAvecConcurrent.cupId,
-      PRODUCTEUR
-    );
-
-    publiqueSansInscription = await creerEdition(
-      org,
-      "public",
-      `CONF-LIBRE-${sfx}`
-    );
-    codeSansInscription = await genererCode(org, publiqueSansInscription);
+    sansInscription = await creerEdition(org, `CONF-LIBRE-${sfx}`);
+    codeSansInscription = await genererCode(org, sansInscription);
   });
 
   test.afterAll(async () => {
@@ -504,57 +487,40 @@ test.describe("Conflit d'intérêts producteur / juré @P0", () => {
     await prod?.dispose();
   });
 
-  test("édition publique : le code d'invitation est refusé au producteur qui y concourt", async ({
+  test("jury public : le code d'invitation est refusé au producteur qui concourt", async ({
     page,
   }) => {
     await connexion(page, PRODUCTEUR);
 
-    await page.goto(`/activate?code=${codePublique}`);
+    await page.goto(`/activate?code=${codePublic}`);
     await page
       .getByRole("button", { name: /Activer ce code et devenir jury/i })
       .click();
 
     await expect(page.getByText(REFUS_CONFLIT)).toBeVisible();
     await expect(page).toHaveURL(/\/activate/);
-    expect(await estJure(prod, publiqueAvecConcurrent.cupId)).toBe(false);
+    expect(await estJure(prod, avecConcurrent.cupId)).toBe(false);
   });
 
-  test("édition publique : le jeton public (QR) est refusé au producteur qui y concourt", async ({
+  test("jury public : le jeton public (QR) est refusé au producteur qui concourt", async ({
     page,
   }) => {
     await connexion(page, PRODUCTEUR);
 
-    await page.goto(`/jury/public/${jetonPublique}`);
+    await page.goto(`/jury/public/${jetonPublic}`);
     await page
       .getByRole("button", { name: /Utiliser ce token et devenir jury/i })
       .click();
 
     await expect(page.getByText(REFUS_CONFLIT)).toBeVisible();
-    await expect(page).toHaveURL(new RegExp(`/jury/public/${jetonPublique}`));
-    expect(await estJure(prod, publiqueAvecConcurrent.cupId)).toBe(false);
+    await expect(page).toHaveURL(new RegExp(`/jury/public/${jetonPublic}`));
+    expect(await estJure(prod, avecConcurrent.cupId)).toBe(false);
   });
 
-  test("édition publique : l'invitation nominative est refusée au producteur qui y concourt", async ({
+  test("jury pro : l'invitation nominative est acceptée du producteur qui concourt", async ({
     page,
   }) => {
     // L'envoi n'aboutit pas en développement : on vérifie qu'il a été tenté.
-    expect(invitationPublique.sentAt).not.toBeNull();
-
-    await connexion(page, PRODUCTEUR);
-
-    await page.goto(`/jury-invite/${invitationPublique.token}`);
-    await page.getByRole("button", { name: /Accepter l'invitation/i }).click();
-
-    await expect(page.getByText(REFUS_CONFLIT)).toBeVisible();
-    await expect(page).toHaveURL(
-      new RegExp(`/jury-invite/${invitationPublique.token}`)
-    );
-    expect(await estJure(prod, publiqueAvecConcurrent.cupId)).toBe(false);
-  });
-
-  test("édition professionnelle : l'invitation nominative est acceptée du producteur qui y concourt", async ({
-    page,
-  }) => {
     expect(invitationPro.sentAt).not.toBeNull();
 
     await connexion(page, PRODUCTEUR);
@@ -563,24 +529,10 @@ test.describe("Conflit d'intérêts producteur / juré @P0", () => {
     await page.getByRole("button", { name: /Accepter l'invitation/i }).click();
 
     await expect(page).toHaveURL(/\/jury\/dashboard/);
-    expect(await estJure(prod, proAvecConcurrent.cupId)).toBe(true);
+    expect(await estJure(prod, avecConcurrent.cupId)).toBe(true);
   });
 
-  test("édition professionnelle : le jeton public (QR) est accepté du producteur qui y concourt", async ({
-    page,
-  }) => {
-    await connexion(page, PRODUCTEUR);
-
-    await page.goto(`/jury/public/${jetonPro}`);
-    await page
-      .getByRole("button", { name: /Utiliser ce token et devenir jury/i })
-      .click();
-
-    await expect(page).toHaveURL(new RegExp(`/jury/cups/${proAvecConcurrent.cupId}$`));
-    expect(await estJure(prod, proAvecConcurrent.cupId)).toBe(true);
-  });
-
-  test("édition publique : un compte producteur qui n'y concourt pas devient juré par code", async ({
+  test("jury public : un compte producteur qui ne concourt pas devient juré par code", async ({
     page,
   }) => {
     await connexion(page, PRODUCTEUR);
@@ -591,9 +543,9 @@ test.describe("Conflit d'intérêts producteur / juré @P0", () => {
       .click();
 
     await expect(page).toHaveURL(
-      new RegExp(`/jury/cups/${publiqueSansInscription.cupId}$`)
+      new RegExp(`/jury/cups/${sansInscription.cupId}$`)
     );
-    expect(await estJure(prod, publiqueSansInscription.cupId)).toBe(true);
+    expect(await estJure(prod, sansInscription.cupId)).toBe(true);
   });
 });
 
@@ -623,7 +575,7 @@ test.describe("Notation d'une édition @P0", () => {
     commentaireJure = `E2E-NOTE-JURE-${sfx}`;
     commentaireOrganisateur = `E2E-NOTE-ORGA-${sfx}`;
 
-    edition = await creerEdition(org, "public", `NOTE-${sfx}`);
+    edition = await creerEdition(org, `NOTE-${sfx}`);
     produits = await inscrireProducteur(prod, edition, [
       `E2E-PRODUIT-A-${sfx}`,
       `E2E-PRODUIT-B-${sfx}`,
@@ -1081,7 +1033,7 @@ test.describe("Écriture concurrente d'une notation @P0", () => {
     jure = await ouvrirContexte(playwright, JURE);
 
     const sfx = suffixe();
-    edition = await creerEdition(org, "public", `CONC-${sfx}`);
+    edition = await creerEdition(org, `CONC-${sfx}`);
     produits = await inscrireProducteur(prod, edition, [
       `E2E-PRODUIT-CONC-1-${sfx}`,
       `E2E-PRODUIT-CONC-2-${sfx}`,
