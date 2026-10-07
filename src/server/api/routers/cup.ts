@@ -25,6 +25,7 @@ import { canPublishCup } from "~/lib/validations/publish";
 import { isVivaConfigured } from "~/lib/viva";
 import { eq, and, count, inArray, asc, isNotNull } from "drizzle-orm";
 import { computeResults } from "~/server/api/routers/results";
+import { getCategoryOccupancy } from "~/server/services/category-quota.service";
 
 const requireCup = (
   ctx: { db: typeof import("~/server/db").db },
@@ -557,13 +558,26 @@ export const cupRouter = createTRPCRouter({
         },
       });
 
-      const categoriesWithCriteria = categories.map((category) => ({
-        id: category.id,
-        name: category.name,
-        description: category.description,
-        pricePerProduct: category.priceOverride,
-        criteria: category.criteria,
-      }));
+      // Places restantes : produits payés et paiements en cours déduits, pour
+      // que la page d'inscription affiche une catégorie pleine comme complète.
+      const occupancy = await getCategoryOccupancy(ctx.db, input.cupId);
+
+      const categoriesWithCriteria = categories.map((category) => {
+        const remainingPlaces =
+          category.maxProducts === null
+            ? null
+            : Math.max(0, category.maxProducts - (occupancy.get(category.id) ?? 0));
+        return {
+          id: category.id,
+          name: category.name,
+          description: category.description,
+          pricePerProduct: category.priceOverride,
+          maxProductsPerProducer: category.maxProductsPerProducer,
+          remainingPlaces,
+          isFull: remainingPlaces === 0,
+          criteria: category.criteria,
+        };
+      });
 
       const ratingScale = getRatingScaleValues(cup.ratingScale);
       const canRegister = isRegistrationOpen(cup);

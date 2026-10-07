@@ -45,6 +45,14 @@ export const registrations = pgTable(
     // webhook once the payment settles.
     paymentOrderCode: text("payment_order_code"),
     paymentTransactionId: text("payment_transaction_id"),
+    // Échéance de la réservation des places prise à l'ouverture du paiement.
+    // Tant qu'elle n'est pas dépassée, les produits de l'inscription comptent
+    // dans les quotas de leurs catégories comme s'ils étaient payés : le
+    // producteur suivant voit la catégorie complète. Toujours postérieure à
+    // l'expiration de la commande Viva, pour qu'aucun paiement ne puisse
+    // aboutir sur une place déjà libérée. Effacée à la confirmation, à
+    // l'annulation de la commande et à toute modification du panier.
+    paymentReservedUntil: timestamp("payment_reserved_until", { withTimezone: true }),
     // Legacy: payments taken through Stripe before the switch to Viva.com.
     // Kept read-only so old registrations keep their audit trail; nothing
     // writes to it any more.

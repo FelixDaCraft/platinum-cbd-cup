@@ -305,3 +305,51 @@ export async function getWebhookVerificationKey(): Promise<string> {
 
   return data.Key;
 }
+
+/**
+ * Annule une commande de paiement encore ouverte, pour qu'elle ne puisse plus
+ * être réglée. Sert à libérer tout de suite la place réservée par un paiement
+ * abandonné, au lieu d'attendre l'expiration de la commande.
+ *
+ * API « legacy » de Viva, en Basic auth (merchant id + clé API), sur l'hôte du
+ * checkout et non sur celui de l'API OAuth.
+ *
+ * Renvoie `false` sans lever quand l'annulation n'est pas possible
+ * (identifiants absents, commande déjà payée ou expirée, Viva injoignable) :
+ * l'appelant garde alors la réservation jusqu'à son échéance, ce qui reste sûr.
+ */
+export async function cancelPaymentOrder(orderCode: string): Promise<boolean> {
+  if (!env.VIVA_MERCHANT_ID || !env.VIVA_API_KEY) {
+    console.warn(
+      "[Viva] VIVA_MERCHANT_ID / VIVA_API_KEY absents : commande non annulée, la réservation tombera à son expiration."
+    );
+    return false;
+  }
+
+  try {
+    const response = await fetch(
+      `${vivaEndpoints().checkout}/api/orders/${encodeURIComponent(orderCode)}`,
+      {
+        method: "DELETE",
+        headers: {
+          Authorization: basicAuth(env.VIVA_MERCHANT_ID, env.VIVA_API_KEY),
+        },
+        cache: "no-store",
+      }
+    );
+
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      console.warn(
+        `[Viva] annulation de la commande ${orderCode} refusée (${response.status}) ${detail.slice(0, 200)}`
+      );
+      return false;
+    }
+
+    const data = (await response.json().catch(() => ({}))) as { Success?: boolean };
+    return data.Success !== false;
+  } catch (error) {
+    console.warn(`[Viva] annulation de la commande ${orderCode} impossible:`, error);
+    return false;
+  }
+}

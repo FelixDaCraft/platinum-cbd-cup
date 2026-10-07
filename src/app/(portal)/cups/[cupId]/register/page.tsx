@@ -419,14 +419,18 @@ export default function RegisterPage() {
                 <div className="grid g-2" style={{ marginTop: 20 }}>
                   {categories.map((category) => {
                     const sel = data.categoryId === category.id;
+                    const full = category.isFull;
                     return (
                       <button
                         key={category.id}
-                        onClick={() => set("categoryId", category.id)}
+                        onClick={() => !full && set("categoryId", category.id)}
+                        disabled={full}
+                        aria-disabled={full}
                         style={{
                           textAlign: "left",
                           padding: 20,
-                          cursor: "pointer",
+                          cursor: full ? "not-allowed" : "pointer",
+                          opacity: full ? 0.5 : 1,
                           background: sel ? "var(--accent-dim)" : "var(--bg)",
                           border: `1px solid ${sel ? "var(--accent)" : "var(--line)"}`,
                           borderRadius: 12,
@@ -468,6 +472,31 @@ export default function RegisterPage() {
                             }}
                           >
                             {category.description}
+                          </div>
+                        )}
+                        {(full ||
+                          category.remainingPlaces !== null ||
+                          category.maxProductsPerProducer !== null) && (
+                          <div
+                            className="mono"
+                            style={{
+                              fontSize: 11.5,
+                              marginTop: 12,
+                              color: full ? "var(--danger)" : "var(--fg-2)",
+                            }}
+                          >
+                            {full
+                              ? "Complet"
+                              : [
+                                  category.remainingPlaces !== null
+                                    ? `${category.remainingPlaces} place${category.remainingPlaces > 1 ? "s" : ""} restante${category.remainingPlaces > 1 ? "s" : ""}`
+                                    : null,
+                                  category.maxProductsPerProducer !== null
+                                    ? `${category.maxProductsPerProducer} produit${category.maxProductsPerProducer > 1 ? "s" : ""} max. par producteur`
+                                    : null,
+                                ]
+                                  .filter(Boolean)
+                                  .join(" · ")}
                           </div>
                         )}
                       </button>

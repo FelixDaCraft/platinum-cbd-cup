@@ -6,6 +6,7 @@ import { eq, and, max, asc, count, inArray } from "drizzle-orm";
 import { createTRPCRouter, organizerProcedure } from "~/server/api/trpc";
 import { Errors } from "~/lib/errors";
 import * as schema from "~/server/db/schema";
+import { getCategoryOccupancy } from "~/server/services/category-quota.service";
 import {
   createCategorySchema,
   updateCategorySchema,
@@ -39,6 +40,8 @@ export const categoryRouter = createTRPCRouter({
           cupId: input.cupId,
           name: input.name,
           description: input.description ?? null,
+          maxProducts: input.maxProducts ?? null,
+          maxProductsPerProducer: input.maxProductsPerProducer ?? null,
           sortOrder: nextOrder,
         })
         .returning();
@@ -62,7 +65,14 @@ export const categoryRouter = createTRPCRouter({
         orderBy: (categories) => [asc(categories.sortOrder)],
       });
 
-      return categories;
+      // Places prises (payées ou réservées par un paiement en cours), pour
+      // afficher le remplissage à côté du quota.
+      const occupancy = await getCategoryOccupancy(ctx.db, input.cupId);
+
+      return categories.map((category) => ({
+        ...category,
+        takenProducts: occupancy.get(category.id) ?? 0,
+      }));
     }),
 
   /**
@@ -86,6 +96,16 @@ export const categoryRouter = createTRPCRouter({
 
       if (input.description !== undefined) {
         updateData.description = input.description;
+      }
+
+      // Abaisser un quota sous le nombre de places déjà prises est permis :
+      // les inscriptions en place restent, seules les nouvelles sont bloquées.
+      if (input.maxProducts !== undefined) {
+        updateData.maxProducts = input.maxProducts;
+      }
+
+      if (input.maxProductsPerProducer !== undefined) {
+        updateData.maxProductsPerProducer = input.maxProductsPerProducer;
       }
 
       const [updated] = await ctx.db

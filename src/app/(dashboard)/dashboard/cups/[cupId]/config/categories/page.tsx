@@ -26,6 +26,7 @@ import {
 import { CategoryList, CategoryForm } from "~/components/features/categories";
 import { api } from "~/trpc/react";
 import type { Category } from "~/server/db/schema/categories";
+import type { CategoryFormData } from "~/lib/validations/category";
 
 export default function CategoriesPage() {
   const params = useParams();
@@ -105,16 +106,18 @@ export default function CategoriesPage() {
     },
   });
 
-  const handleCreate = (data: { name: string; description?: string }) => {
+  const handleCreate = (data: CategoryFormData) => {
     createCategory.mutate({ cupId, ...data });
   };
 
-  const handleUpdate = (data: { name: string; description?: string }) => {
+  const handleUpdate = (data: CategoryFormData) => {
     if (!editingCategory) return;
     updateCategory.mutate({
       id: editingCategory.id,
       name: data.name,
       description: data.description ?? null,
+      maxProducts: data.maxProducts,
+      maxProductsPerProducer: data.maxProductsPerProducer,
     });
   };
 

@@ -58,6 +58,8 @@ vi.mock("~/server/db", () => {
         cups: { findFirst: vi.fn() },
         categories: { findFirst: vi.fn(), findMany: vi.fn() },
       },
+      // Remplissage des quotas (getCategoryOccupancy) : SQL brut.
+      execute: vi.fn().mockResolvedValue({ rows: [] }),
       select: selectChain,
       insert: () => ({
         values: (values: Record<string, unknown>) => {
@@ -68,7 +70,12 @@ vi.mock("~/server/db", () => {
       update: () => ({
         set: (values: Record<string, unknown>) => {
           dbState.updates.push(values);
-          return { where: () => Promise.resolve(undefined) };
+          // `where` est awaité directement (reorder) ou suivi de `returning` (update).
+          const done = Promise.resolve(undefined);
+          return {
+            where: () =>
+              Object.assign(done, { returning: () => Promise.resolve([values]) }),
+          };
         },
       }),
       delete: () => ({
@@ -379,11 +386,32 @@ describe("Category Router", () => {
         { id: "cat-2", cupId: "cup-1", name: "Outdoor", sortOrder: 1 },
       ] as never);
 
+      vi.mocked(db.execute).mockResolvedValueOnce({
+        rows: [{ category_id: "cat-1", taken: 7 }],
+      } as never);
+
       const caller = await createCaller();
       const result = await caller.list({ cupId: "cup-1" });
 
       expect(result).toHaveLength(2);
       expect(result[0]!.name).toBe("Indoor");
+      // Places prises (payées ou réservées) jointes à chaque catégorie.
+      expect(result[0]!.takenProducts).toBe(7);
+      expect(result[1]!.takenProducts).toBe(0);
+    });
+
+    it("enregistre les quotas d'une catégorie", async () => {
+      await asOrganizer();
+      const { db } = await import("~/server/db");
+      vi.mocked(db.query.categories.findFirst).mockResolvedValue({
+        id: "cat-1",
+        cupId: "cup-1",
+      } as never);
+
+      const caller = await createCaller();
+      await caller.update({ id: "cat-1", maxProducts: 20, maxProductsPerProducer: null });
+
+      expect(updates.at(-1)).toMatchObject({ maxProducts: 20, maxProductsPerProducer: null });
     });
 
     it("refuse de supprimer une catégorie qui contient des produits", async () => {

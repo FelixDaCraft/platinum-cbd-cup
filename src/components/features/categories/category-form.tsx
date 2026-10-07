@@ -8,7 +8,11 @@ import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Textarea } from "~/components/ui/textarea";
 import { Label } from "~/components/ui/label";
-import { categoryFormSchema, type CategoryFormData } from "~/lib/validations/category";
+import {
+  categoryFormSchema,
+  type CategoryFormData,
+  type CategoryFormInput,
+} from "~/lib/validations/category";
 import type { Category } from "~/server/db/schema/categories";
 
 interface CategoryFormProps {
@@ -26,11 +30,13 @@ export function CategoryForm({
     register,
     handleSubmit,
     formState: { errors },
-  } = useForm<CategoryFormData>({
+  } = useForm<CategoryFormInput, unknown, CategoryFormData>({
     resolver: zodResolver(categoryFormSchema),
     defaultValues: {
       name: category?.name ?? "",
       description: category?.description ?? "",
+      maxProducts: category?.maxProducts ?? "",
+      maxProductsPerProducer: category?.maxProductsPerProducer ?? "",
     },
   });
 
@@ -61,6 +67,50 @@ export function CategoryForm({
         {errors.description && (
           <p className="text-sm text-destructive">{errors.description.message}</p>
         )}
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="maxProducts">Places dans la catégorie</Label>
+          <Input
+            id="maxProducts"
+            type="number"
+            min={1}
+            step={1}
+            inputMode="numeric"
+            {...register("maxProducts")}
+            placeholder="Illimité"
+            disabled={isSubmitting}
+          />
+          <p className="text-xs text-muted-foreground">
+            Produits au total, tous producteurs confondus.
+          </p>
+          {errors.maxProducts && (
+            <p className="text-sm text-destructive">{errors.maxProducts.message}</p>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="maxProductsPerProducer">Maximum par producteur</Label>
+          <Input
+            id="maxProductsPerProducer"
+            type="number"
+            min={1}
+            step={1}
+            inputMode="numeric"
+            {...register("maxProductsPerProducer")}
+            placeholder="Illimité"
+            disabled={isSubmitting}
+          />
+          <p className="text-xs text-muted-foreground">
+            Produits qu&apos;un même producteur peut inscrire ici.
+          </p>
+          {errors.maxProductsPerProducer && (
+            <p className="text-sm text-destructive">
+              {errors.maxProductsPerProducer.message}
+            </p>
+          )}
+        </div>
       </div>
 
       <Button type="submit" disabled={isSubmitting} className="w-full">

@@ -21,7 +21,7 @@ import { CategoryCard } from "./category-card";
 import type { Category } from "~/server/db/schema/categories";
 
 interface CategoryListProps {
-  categories: Category[];
+  categories: Array<Category & { takenProducts?: number }>;
   cupId: string;
   onReorder: (categoryIds: string[]) => void;
   onEdit: (category: Category) => void;

@@ -2,7 +2,7 @@
 
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Pencil, Trash2, ChevronRight, ListChecks } from "lucide-react";
+import { GripVertical, Pencil, Trash2, ChevronRight, ListChecks, Users } from "lucide-react";
 import Link from "next/link";
 
 import { Button } from "~/components/ui/button";
@@ -10,7 +10,7 @@ import { api } from "~/trpc/react";
 import type { Category } from "~/server/db/schema/categories";
 
 interface CategoryCardProps {
-  category: Category;
+  category: Category & { takenProducts?: number };
   cupId: string;
   onEdit: (category: Category) => void;
   onDelete: (category: Category) => void;
@@ -77,6 +77,40 @@ export function CategoryCard({ category, cupId, onEdit, onDelete }: CategoryCard
                 </p>
               )}
             </div>
+            {/* Remplissage : places prises (payées ou en cours de paiement) / quota */}
+            {(category.maxProducts !== null || category.maxProductsPerProducer !== null) && (
+              <span
+                className="shrink-0"
+                title={
+                  category.maxProductsPerProducer !== null
+                    ? `${category.maxProductsPerProducer} produit(s) max. par producteur`
+                    : undefined
+                }
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "4px",
+                  padding: "2px 8px",
+                  borderRadius: "6px",
+                  fontSize: "12px",
+                  fontFamily: "'Space Mono', monospace",
+                  background: "var(--n-surface-raised)",
+                  color:
+                    category.maxProducts !== null &&
+                    (category.takenProducts ?? 0) >= category.maxProducts
+                      ? "var(--n-warning)"
+                      : "var(--n-text-secondary)",
+                  border: "1px solid var(--n-border-visible)",
+                }}
+              >
+                <Users className="h-3 w-3" />
+                {category.maxProducts !== null
+                  ? `${category.takenProducts ?? 0}/${category.maxProducts}`
+                  : `${category.takenProducts ?? 0}`}
+                {category.maxProductsPerProducer !== null &&
+                  ` · ${category.maxProductsPerProducer}/prod.`}
+              </span>
+            )}
             {/* Criteria count badge */}
             <span
               className="shrink-0"

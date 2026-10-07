@@ -11,7 +11,7 @@ import {
 } from "~/server/api/trpc";
 import { db } from "~/server/db";
 import * as schema from "~/server/db/schema";
-import { createPaymentOrder, getTransaction } from "~/lib/viva";
+import { cancelPaymentOrder, createPaymentOrder, getTransaction } from "~/lib/viva";
 import { formatPhaseDate } from "~/lib/validations/phases";
 import {
   confirmPaidRegistration,
@@ -27,6 +27,14 @@ import {
   listByCupSchema,
 } from "~/lib/validations/registration";
 import { anonymizeRegistrationProducts } from "~/server/services/anonymization.service";
+import {
+  assertCartWithinQuotas,
+  countByCategory,
+  getCategoryOccupancy,
+  lockCategoryQuotas,
+  PAYMENT_ORDER_TIMEOUT_SECONDS,
+  PAYMENT_RESERVATION_MS,
+} from "~/server/services/category-quota.service";
 
 type ProtectedContext = {
   db: typeof db;
@@ -221,12 +229,20 @@ async function lockRegistrationForBilling(
  * `previous` est l'etat lu par `lockRegistrationForBilling` dans la meme
  * transaction : le total et l'effacement de la commande sont donc commites avec
  * l'ecriture du produit qui les a provoques.
+ *
+ * La reservation des places tombe avec la commande : elle couvrait l'ancien
+ * panier. `staleOrderCode` est rendu a l'appelant pour qu'il annule la commande
+ * chez Viva une fois la transaction commitee (aucun appel reseau sous verrou).
  */
 async function applyRecalculatedTotal(
   tx: RegistrationTx,
   registrationId: string,
   previous: { totalAmount: number; paymentOrderCode: string | null } | undefined
-): Promise<{ total: number; paymentOrderInvalidated: boolean }> {
+): Promise<{
+  total: number;
+  paymentOrderInvalidated: boolean;
+  staleOrderCode: string | null;
+}> {
   const products = await tx.query.products.findMany({
     where: (prod, { eq: eqFn }) => eqFn(prod.registrationId, registrationId),
     columns: { priceAtRegistration: true },
@@ -243,7 +259,9 @@ async function applyRecalculatedTotal(
     .update(schema.registrations)
     .set({
       totalAmount: total,
-      ...(paymentOrderInvalidated ? { paymentOrderCode: null } : {}),
+      ...(paymentOrderInvalidated
+        ? { paymentOrderCode: null, paymentReservedUntil: null }
+        : {}),
       updatedAt: new Date(),
     })
     .where(eq(schema.registrations.id, registrationId));
@@ -254,7 +272,11 @@ async function applyRecalculatedTotal(
     );
   }
 
-  return { total, paymentOrderInvalidated };
+  return {
+    total,
+    paymentOrderInvalidated,
+    staleOrderCode: paymentOrderInvalidated ? previous.paymentOrderCode : null,
+  };
 }
 
 export const registrationRouter = createTRPCRouter({
@@ -319,6 +341,7 @@ export const registrationRouter = createTRPCRouter({
                 status: "pending_payment",
                 totalAmount: 0,
                 paymentOrderCode: null,
+                paymentReservedUntil: null,
                 updatedAt: new Date(),
               })
               .where(eq(schema.registrations.id, existingRegistration.id));
@@ -471,9 +494,24 @@ export const registrationRouter = createTRPCRouter({
 
       // L'insertion et le recalcul du total sont commites ensemble : un produit
       // enregistre sans que le total suive laisserait payer moins que du.
-      const { product, total, paymentOrderInvalidated } = await ctx.db.transaction(
-        async (tx) => {
+      const { product, total, paymentOrderInvalidated, staleOrderCode } =
+        await ctx.db.transaction(async (tx) => {
           const previous = await lockRegistrationForBilling(tx, input.registrationId);
+
+          // Quotas : le panier, produit ajoute compris, doit tenir dans les
+          // places que les autres inscriptions n'occupent ni ne reservent.
+          // Ajouter au panier ne reserve rien ; c'est l'ouverture du paiement
+          // qui prend la place (createCheckoutSession).
+          await lockCategoryQuotas(tx, [input.categoryId]);
+          const cartProducts = await tx.query.products.findMany({
+            where: (prod, { eq: eqFn }) => eqFn(prod.registrationId, input.registrationId),
+            columns: { categoryId: true },
+          });
+          assertCartWithinQuotas(
+            [category],
+            countByCategory([...cartProducts, { categoryId: input.categoryId }]),
+            await getCategoryOccupancy(tx, registration.cupId, input.registrationId)
+          );
 
           const [created] = await tx
             .insert(schema.products)
@@ -495,8 +533,11 @@ export const registrationRouter = createTRPCRouter({
           );
 
           return { product: created, ...recalculated };
-        }
-      );
+        });
+
+      if (staleOrderCode) {
+        await cancelPaymentOrder(staleOrderCode);
+      }
 
       return {
         product,
@@ -546,8 +587,8 @@ export const registrationRouter = createTRPCRouter({
         });
       }
 
-      const { total, paymentOrderInvalidated } = await ctx.db.transaction(
-        async (tx) => {
+      const { total, paymentOrderInvalidated, staleOrderCode } =
+        await ctx.db.transaction(async (tx) => {
           const previous = await lockRegistrationForBilling(tx, product.registrationId);
 
           await tx
@@ -555,8 +596,11 @@ export const registrationRouter = createTRPCRouter({
             .where(eq(schema.products.id, input.productId));
 
           return applyRecalculatedTotal(tx, product.registrationId, previous);
-        }
-      );
+        });
+
+      if (staleOrderCode) {
+        await cancelPaymentOrder(staleOrderCode);
+      }
 
       return {
         success: true,
@@ -781,10 +825,67 @@ export const registrationRouter = createTRPCRouter({
         });
       }
 
+      // Reservation des places AVANT la creation de la commande, sous verrou de
+      // quota : de deux producteurs qui visent la derniere place, le premier a
+      // passer ici la garde, le second recoit « categorie complete ». La
+      // reservation est commitee avant l'appel a Viva (aucun appel reseau sous
+      // verrou) et retiree si la commande ne peut pas etre creee.
+      const previousOrderCode = await ctx.db.transaction(async (tx) => {
+        const [locked] = await tx
+          .select({
+            status: schema.registrations.status,
+            paymentOrderCode: schema.registrations.paymentOrderCode,
+          })
+          .from(schema.registrations)
+          .where(eq(schema.registrations.id, registration.id))
+          .for("update");
+
+        if (locked?.status !== "pending_payment") {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Cette inscription a deja ete payee ou annulee",
+          });
+        }
+
+        const cartProducts = await tx.query.products.findMany({
+          where: (prod, { eq: eqFn }) => eqFn(prod.registrationId, registration.id),
+          columns: { categoryId: true },
+        });
+        const cart = countByCategory(cartProducts);
+
+        await lockCategoryQuotas(tx, [...cart.keys()]);
+        const categories = await tx.query.categories.findMany({
+          where: (cat, { inArray: inArrayFn }) => inArrayFn(cat.id, [...cart.keys()]),
+          columns: { id: true, name: true, maxProducts: true, maxProductsPerProducer: true },
+        });
+        assertCartWithinQuotas(
+          categories,
+          cart,
+          await getCategoryOccupancy(tx, registration.cupId, registration.id)
+        );
+
+        await tx
+          .update(schema.registrations)
+          .set({
+            paymentReservedUntil: new Date(Date.now() + PAYMENT_RESERVATION_MS),
+            updatedAt: new Date(),
+          })
+          .where(eq(schema.registrations.id, registration.id));
+
+        return locked.paymentOrderCode;
+      });
+
+      // Une relance (page d'echec) remplace la commande precedente : on l'annule
+      // pour qu'elle ne puisse plus etre reglee en parallele de la nouvelle.
+      if (previousOrderCode) {
+        await cancelPaymentOrder(previousOrderCode);
+      }
+
       // The success / cancel URLs are configured on the Viva payment source
       // (VIVA_SOURCE_CODE) in the Viva back-office, not per order.
       try {
         const { orderCode, checkoutUrl } = await createPaymentOrder({
+          paymentTimeout: PAYMENT_ORDER_TIMEOUT_SECONDS,
           amount: registration.totalAmount,
           customerTrns: `Inscription ${registration.cup.name} — ${registration.products.length} produit(s)`,
           // Echoed back on the webhook; this is how a payment is matched to
@@ -802,12 +903,79 @@ export const registrationRouter = createTRPCRouter({
         return { checkoutUrl, orderCode };
       } catch (error) {
         console.error("[Registration] Viva payment order creation failed:", error);
+        // Pas de commande, donc rien a payer : la place est rendue.
+        await ctx.db
+          .update(schema.registrations)
+          .set({ paymentReservedUntil: null, updatedAt: new Date() })
+          .where(eq(schema.registrations.id, registration.id));
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
           message:
             "Erreur lors de la creation de la session de paiement. Veuillez reessayer.",
         });
       }
+    }),
+
+  /**
+   * Rend les places reservees par un paiement abandonne (page d'echec Viva).
+   *
+   * La commande est d'abord annulee chez Viva : tant qu'elle reste payable, la
+   * place doit rester tenue, sinon un paiement tardif aboutirait sur une place
+   * deja reprise. Si l'annulation echoue (commande deja reglee, identifiants
+   * Basic absents, Viva injoignable), la reservation est conservee et tombera
+   * d'elle-meme a son echeance.
+   */
+  releasePaymentReservation: producerProcedure
+    .input(getRegistrationSchema)
+    .mutation(async ({ ctx, input }) => {
+      const registration = await ctx.db.query.registrations.findFirst({
+        where: (reg, { eq: eqFn, and: andFn }) =>
+          andFn(
+            eqFn(reg.id, input.registrationId),
+            eqFn(reg.producerId, ctx.producer.id)
+          ),
+        columns: {
+          id: true,
+          status: true,
+          paymentOrderCode: true,
+          paymentReservedUntil: true,
+        },
+      });
+
+      if (!registration) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Inscription non trouvee",
+        });
+      }
+
+      if (
+        registration.status !== "pending_payment" ||
+        !registration.paymentReservedUntil ||
+        !registration.paymentOrderCode
+      ) {
+        return { released: false as const };
+      }
+
+      const orderCode = registration.paymentOrderCode;
+      if (!(await cancelPaymentOrder(orderCode))) {
+        return { released: false as const };
+      }
+
+      // Conditionne a la meme commande : une relance concurrente a pu en
+      // ouvrir une nouvelle, dont la reservation ne doit pas sauter.
+      await ctx.db
+        .update(schema.registrations)
+        .set({ paymentOrderCode: null, paymentReservedUntil: null, updatedAt: new Date() })
+        .where(
+          drizzleAnd(
+            eq(schema.registrations.id, registration.id),
+            eq(schema.registrations.status, "pending_payment"),
+            eq(schema.registrations.paymentOrderCode, orderCode)
+          )
+        );
+
+      return { released: true as const };
     }),
 
   /**
@@ -980,12 +1148,27 @@ export const registrationRouter = createTRPCRouter({
           return { alreadyConfirmed: true as const };
         }
 
+        // Pas de paiement, donc pas de reservation prealable : les quotas sont
+        // verifies ici, au moment ou la place est prise.
+        const cart = countByCategory(registration.products);
+        await lockCategoryQuotas(tx, [...cart.keys()]);
+        const categories = await tx.query.categories.findMany({
+          where: (cat, { inArray: inArrayFn }) => inArrayFn(cat.id, [...cart.keys()]),
+          columns: { id: true, name: true, maxProducts: true, maxProductsPerProducer: true },
+        });
+        assertCartWithinQuotas(
+          categories,
+          cart,
+          await getCategoryOccupancy(tx, registration.cupId, registration.id)
+        );
+
         const invoiceNumber = await allocateInvoiceNumber(tx, registration.id, now);
 
         await tx
           .update(schema.registrations)
           .set({
             status: "confirmed",
+            paymentReservedUntil: null,
             updatedAt: now,
           })
           .where(eq(schema.registrations.id, registration.id));

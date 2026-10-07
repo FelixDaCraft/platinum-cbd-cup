@@ -50,6 +50,13 @@
       "when": 1790330815095,
       "tag": "0006_retrait_prefixe_anonymisation",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791389200793,
+      "tag": "0007_quotas_categories",
+      "breakpoints": true
     }
   ]
 }

@@ -194,6 +194,9 @@ export async function confirmPaidRegistration(
       .set({
         status: "confirmed",
         paymentTransactionId: transactionId ?? null,
+        // La place est désormais occupée par un produit payé : la réservation
+        // n'a plus d'objet.
+        paymentReservedUntil: null,
         updatedAt: now,
       })
       .where(eq(schema.registrations.id, registrationId));

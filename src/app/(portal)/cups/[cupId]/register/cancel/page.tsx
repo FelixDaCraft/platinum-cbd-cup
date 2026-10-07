@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, use, useState } from "react";
+import { Suspense, use, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
 import { api } from "~/trpc/react";
@@ -49,6 +49,20 @@ function CancelInner({ cupId }: { cupId: string }) {
   const createCheckoutSession =
     api.registration.createCheckoutSession.useMutation();
 
+  // Le paiement n'a pas abouti : la place réservée à son ouverture est rendue
+  // tout de suite, pour qu'un autre producteur puisse la prendre. « Réessayer »
+  // la reprend si elle est toujours libre.
+  const releaseReservation =
+    api.registration.releasePaymentReservation.useMutation();
+  const releasedFor = useRef<string | null>(null);
+  const pendingRegistrationId = pendingRegistration?.id;
+
+  useEffect(() => {
+    if (!pendingRegistrationId || releasedFor.current === pendingRegistrationId) return;
+    releasedFor.current = pendingRegistrationId;
+    releaseReservation.mutate({ registrationId: pendingRegistrationId });
+  }, [pendingRegistrationId, releaseReservation]);
+
   const handleRetry = async () => {
     if (!pendingRegistration) return;
     setRetryError(null);
@@ -86,7 +100,7 @@ function CancelInner({ cupId }: { cupId: string }) {
             <button
               className="btn accent"
               onClick={() => void handleRetry()}
-              disabled={isLoading || retrying}
+              disabled={isLoading || retrying || releaseReservation.isPending}
             >
               {retrying ? "Redirection…" : "Réessayer le paiement"}
               {!retrying && <span className="btn-arrow"> →</span>}

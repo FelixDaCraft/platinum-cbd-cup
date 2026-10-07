@@ -1,5 +1,5 @@
-import { pgTable, text, timestamp, integer, index } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { pgTable, text, timestamp, integer, index, check } from "drizzle-orm/pg-core";
+import { relations, sql } from "drizzle-orm";
 import { generateId } from "./id";
 import { cups } from "./cups";
 import { ratingCriteria } from "./rating-criteria";
@@ -22,12 +22,24 @@ export const categories = pgTable(
     sortOrder: integer("sort_order").notNull().default(0),
     // Pricing override (null = use cup's default price)
     priceOverride: integer("price_override"), // Price in cents, nullable
+    // Quotas d'inscription (null = pas de limite).
+    // `maxProducts` : places de la catégorie, tous producteurs confondus. Une
+    // place est prise par un produit payé, ou réservée par un paiement en cours
+    // (voir `registrations.payment_reserved_until`).
+    maxProducts: integer("max_products"),
+    // Nombre de produits qu'un même producteur peut inscrire dans la catégorie.
+    maxProductsPerProducer: integer("max_products_per_producer"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     // Toutes les listes de catégories filtrent par cup.
     index("categories_cup_id_idx").on(table.cupId),
+    check("categories_max_products_check", sql`${table.maxProducts} is null or ${table.maxProducts} > 0`),
+    check(
+      "categories_max_products_per_producer_check",
+      sql`${table.maxProductsPerProducer} is null or ${table.maxProductsPerProducer} > 0`
+    ),
   ]
 );
 
