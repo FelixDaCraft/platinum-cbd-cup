@@ -67,8 +67,8 @@ function SuccessInner({ cupId: cupIdFromUrl }: { cupId?: string }) {
         title="Paiement introuvable"
         message="Aucune référence de transaction n'a été transmise. Si vous avez été débité, votre inscription sera confirmée automatiquement d'ici quelques minutes."
         actions={
-          <Link href="/producer/registrations">
-            <button className="btn">Voir mes inscriptions</button>
+          <Link href="/producer/registrations" className="btn accent">
+            Voir mes inscriptions
           </Link>
         }
       />
@@ -83,15 +83,15 @@ function SuccessInner({ cupId: cupIdFromUrl }: { cupId?: string }) {
     return (
       <StatusBlock
         title="Inscription confirmée"
-        message="Votre paiement a bien été reçu. Une facture vient de vous être envoyée par email, et vous recevrez prochainement les instructions pour l'envoi de vos échantillons."
+        message="Votre paiement a bien été reçu. Votre facture vient de vous être envoyée par email ; vous recevrez prochainement les instructions pour l'envoi de vos échantillons."
         actions={
           <>
-            <Link href="/producer/registrations">
-              <button className="btn accent">Voir mes inscriptions →</button>
+            <Link href="/producer/registrations" className="btn accent">
+              Voir mes inscriptions <span className="btn-arrow">→</span>
             </Link>
             {cupId && (
-              <Link href={`/cups/${cupId}`}>
-                <button className="btn">Retour à la cup</button>
+              <Link href={`/cups/${cupId}`} className="btn ghost">
+                Retour à la cup
               </Link>
             )}
           </>
@@ -104,10 +104,10 @@ function SuccessInner({ cupId: cupIdFromUrl }: { cupId?: string }) {
     return (
       <StatusBlock
         title="Paiement en cours de traitement"
-        message="Votre paiement n'est pas encore finalisé côté banque. L'inscription sera confirmée automatiquement dès que Viva nous le notifie — vous recevrez un email à ce moment-là."
+        message="Votre paiement n'est pas encore finalisé par la banque. L'inscription sera confirmée automatiquement dès que Viva.com nous en informe ; vous recevrez alors un email."
         actions={
-          <Link href="/producer/registrations">
-            <button className="btn">Voir mes inscriptions</button>
+          <Link href="/producer/registrations" className="btn accent">
+            Voir mes inscriptions
           </Link>
         }
       />
@@ -120,11 +120,11 @@ function SuccessInner({ cupId: cupIdFromUrl }: { cupId?: string }) {
       message="Nous n'avons pas pu vérifier votre paiement à l'instant. Si vous avez été débité, l'inscription sera confirmée automatiquement. Contactez-nous si ce n'est pas le cas d'ici une heure."
       actions={
         <>
-          <Link href="/producer/registrations">
-            <button className="btn accent">Voir mes inscriptions</button>
+          <Link href="/producer/registrations" className="btn accent">
+            Voir mes inscriptions
           </Link>
-          <Link href="/contact">
-            <button className="btn">Nous contacter</button>
+          <Link href="/contact" className="btn ghost">
+            Nous contacter
           </Link>
         </>
       }
@@ -142,21 +142,15 @@ function StatusBlock({
   actions?: React.ReactNode;
 }) {
   return (
-    <div className="page-enter" style={{ paddingTop: 80, paddingBottom: 96, textAlign: "center" }}>
-      <h1 className="display" style={{ marginBottom: 20 }}>
-        {title}
-        <em>.</em>
-      </h1>
-      {message && (
-        <p className="lede" style={{ maxWidth: 520, margin: "0 auto 32px" }}>
-          {message}
-        </p>
-      )}
-      {actions && (
-        <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
-          {actions}
-        </div>
-      )}
+    <div className="pg pg--narrow page-enter">
+      <header className="pg-head">
+        <p className="eyebrow">Paiement</p>
+        <h1 className="display" aria-live="polite">
+          {title}
+        </h1>
+        {message && <p className="pg-lede">{message}</p>}
+      </header>
+      {actions && <div className="form-actions">{actions}</div>}
     </div>
   );
 }

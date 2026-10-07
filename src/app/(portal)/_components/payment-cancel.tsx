@@ -95,7 +95,7 @@ function CancelInner({ cupId }: { cupId?: string }) {
   return (
     <StatusBlock
       title="Paiement non abouti"
-      message="Votre paiement a été annulé ou refusé : votre inscription est enregistrée mais n'est pas encore validée. Aucun montant n'a été débité. Vos produits sont conservés, vous pouvez relancer le paiement."
+      message="Votre paiement a été annulé ou refusé : votre inscription est enregistrée mais pas encore validée. Aucun montant n'a été débité. Vos produits sont conservés et vous pouvez relancer le paiement."
       error={retryError}
       actions={
         <>
@@ -106,15 +106,15 @@ function CancelInner({ cupId }: { cupId?: string }) {
               disabled={isLoading || retrying || releaseReservation.isPending}
             >
               {retrying ? "Redirection…" : "Réessayer le paiement"}
-              {!retrying && <span className="btn-arrow"> →</span>}
+              {!retrying && <span className="btn-arrow">→</span>}
             </button>
           )}
-          <Link href="/producer/registrations">
-            <button className="btn">Voir mes inscriptions</button>
+          <Link href="/producer/registrations" className="btn ghost">
+            Voir mes inscriptions
           </Link>
           {returnCupId && (
-            <Link href={`/cups/${returnCupId}`}>
-              <button className="btn ghost">Retour à la cup</button>
+            <Link href={`/cups/${returnCupId}`} className="btn ghost">
+              Retour à la cup
             </Link>
           )}
         </>
@@ -135,33 +135,18 @@ function StatusBlock({
   actions?: React.ReactNode;
 }) {
   return (
-    <div className="page-enter" style={{ paddingTop: 80, paddingBottom: 96, textAlign: "center" }}>
-      <h1 className="display" style={{ marginBottom: 20 }}>
-        {title}
-        <em>.</em>
-      </h1>
-      {message && (
-        <p className="lede" style={{ maxWidth: 520, margin: "0 auto 32px" }}>
-          {message}
-        </p>
-      )}
+    <div className="pg pg--narrow page-enter">
+      <header className="pg-head">
+        <p className="eyebrow">Paiement</p>
+        <h1 className="display">{title}</h1>
+        {message && <p className="pg-lede">{message}</p>}
+      </header>
       {error && (
-        <p
-          style={{
-            maxWidth: 520,
-            margin: "0 auto 24px",
-            fontSize: 13,
-            color: "var(--danger)",
-          }}
-        >
+        <div className="notice is-error" role="alert" style={{ marginBottom: 24 }}>
           {error}
-        </p>
-      )}
-      {actions && (
-        <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
-          {actions}
         </div>
       )}
+      {actions && <div className="form-actions">{actions}</div>}
     </div>
   );
 }

@@ -27,7 +27,7 @@ interface FormData {
   accept: boolean;
 }
 
-/** Champs du spécimen, remis à zéro après chaque ajout au panier. */
+/** Champs du produit, remis à zéro après chaque ajout au panier. */
 const EMPTY_SPECIMEN = {
   categoryId: "",
   name: "",
@@ -55,85 +55,120 @@ function formatEuros(cents: number): string {
 // ---------------------------------------------------------------------------
 
 const STEPS = [
-  { n: 1, l: "Catégorie" },
-  { n: 2, l: "Spécimen" },
-  { n: 3, l: "Panier" },
-  { n: 4, l: "Contact" },
-  { n: 5, l: "Paiement" },
+  { n: 1, l: "Catégorie", title: "Choisissez une catégorie" },
+  { n: 2, l: "Produit", title: "Décrivez votre produit" },
+  { n: 3, l: "Panier", title: "Votre panier" },
+  { n: 4, l: "Coordonnées", title: "Vos coordonnées" },
+  { n: 5, l: "Paiement", title: "Paiement" },
 ];
 
 const STEP_CART = 3;
 const STEP_PAY = 5;
 
+/** Taux affiché à la française : 0.3 → « 0,3 % ». */
+const MAX_THC_LABEL = `${String(MAX_THC_PERCENT).replace(".", ",")} %`;
+
 function Stepper({ step }: { step: number }) {
   return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 0,
-        marginTop: 20,
-        marginBottom: 32,
-        flexWrap: "wrap",
-      }}
-    >
-      {STEPS.map((s, i) => {
-        const done = step > s.n;
-        const cur = step === s.n;
-        return (
-          <div
-            key={s.n}
-            style={{ display: "flex", alignItems: "center", gap: 0 }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+    <nav aria-label="Étapes de l'inscription">
+      <ol
+        style={{
+          listStyle: "none",
+          margin: 0,
+          padding: 0,
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 8,
+        }}
+      >
+        {STEPS.map((s) => {
+          const done = step > s.n;
+          const cur = step === s.n;
+          return (
+            <li
+              key={s.n}
+              aria-current={cur ? "step" : undefined}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "7px 12px",
+                borderRadius: "var(--radius-control)",
+                border: `1px solid ${cur ? "var(--accent)" : "var(--line-strong)"}`,
+                background: cur ? "var(--accent-dim)" : "transparent",
+                fontSize: 15,
+                fontWeight: cur ? 700 : 500,
+                color: cur ? "var(--fg)" : done ? "var(--fg-2)" : "var(--fg-3)",
+              }}
+            >
               <span
-                style={{
-                  width: 26,
-                  height: 26,
-                  borderRadius: "50%",
-                  border: `1px solid ${cur ? "var(--accent)" : done ? "var(--fg-2)" : "var(--line-strong)"}`,
-                  background: cur ? "var(--accent-dim)" : "transparent",
-                  display: "grid",
-                  placeItems: "center",
-                  fontFamily: "var(--mono)",
-                  fontSize: 11,
-                  color: cur
-                    ? "var(--accent)"
-                    : done
-                      ? "var(--fg-2)"
-                      : "var(--fg-3)",
-                }}
+                aria-hidden="true"
+                className="tabular"
+                style={{ fontWeight: 700, color: cur ? "var(--accent-hi)" : "inherit" }}
               >
                 {done ? "✓" : s.n}
               </span>
-              <span
-                className="mono"
-                style={{
-                  fontSize: 11,
-                  letterSpacing: ".1em",
-                  textTransform: "uppercase",
-                  color: cur ? "var(--fg)" : done ? "var(--fg-2)" : "var(--fg-3)",
-                }}
-              >
-                {s.l}
-              </span>
-            </div>
-            {i < STEPS.length - 1 && (
-              <span
-                style={{
-                  flex: "0 1 40px",
-                  height: 1,
-                  background: "var(--line)",
-                  margin: "0 14px",
-                }}
-              />
-            )}
-          </div>
-        );
-      })}
-    </div>
+              {s.l}
+            </li>
+          );
+        })}
+      </ol>
+    </nav>
   );
 }
+
+/** Places restantes, sur le modèle de la page de l'édition. */
+function placesText(remaining: number): string {
+  if (remaining === 1) return "Plus qu'une place";
+  if (remaining <= 3) return `Plus que ${remaining} places`;
+  return `${remaining} places restantes`;
+}
+
+/** Ligne de panier : produit, catégorie, prix, action éventuelle. */
+function CartLine({
+  name,
+  category,
+  price,
+  muted = false,
+  action,
+}: {
+  name: string;
+  category: string;
+  price: string;
+  muted?: boolean;
+  action?: React.ReactNode;
+}) {
+  return (
+    <li
+      style={{
+        display: "flex",
+        flexWrap: "wrap",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: "8px 16px",
+        padding: "16px 0",
+        borderBottom: "1px solid var(--line)",
+        opacity: muted ? 0.65 : 1,
+      }}
+    >
+      <span style={{ flex: "1 1 160px", minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+        <span style={{ fontSize: 17, fontWeight: 600, overflowWrap: "anywhere" }}>{name}</span>
+        <span style={{ fontSize: 15, color: "var(--fg-2)" }}>{category}</span>
+      </span>
+      <span style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        <span
+          className="tabular"
+          style={{ fontSize: 17, fontWeight: 700, whiteSpace: "nowrap" }}
+        >
+          {price}
+        </span>
+        {action}
+      </span>
+    </li>
+  );
+}
+
+const listReset = { listStyle: "none", margin: 0, padding: 0 } as const;
 
 // ---------------------------------------------------------------------------
 // Main page
@@ -270,7 +305,7 @@ export default function RegisterPage() {
       return;
     }
     if (!data.name.trim() || !data.producer.trim()) {
-      setSubmitError("Le nom du spécimen et le producteur sont obligatoires.");
+      setSubmitError("Le nom du produit et le producteur sont obligatoires.");
       return;
     }
 
@@ -281,7 +316,7 @@ export default function RegisterPage() {
     }
     if (thc > MAX_THC_PERCENT) {
       setSubmitError(
-        `Le taux de Δ9-THC déclaré (${data.thc}%) dépasse la limite de ${MAX_THC_PERCENT}% : le spécimen ne peut pas être inscrit.`
+        `Le taux de Δ9-THC déclaré (${data.thc} %) dépasse la limite de ${MAX_THC_LABEL} : ce produit ne peut pas être inscrit.`
       );
       return;
     }
@@ -384,10 +419,10 @@ export default function RegisterPage() {
 
   if (sessionLoading) {
     return (
-      <div className="page-enter" style={{ paddingTop: 80, textAlign: "center" }}>
-        <span className="mono fg3" style={{ fontSize: 12, letterSpacing: ".1em" }}>
-          CHARGEMENT…
-        </span>
+      <div className="pg pg--narrow page-enter">
+        <p role="status" className="pg-lede" style={{ paddingTop: 80 }}>
+          Chargement…
+        </p>
       </div>
     );
   }
@@ -399,23 +434,28 @@ export default function RegisterPage() {
 
   if (cupLoading) {
     return (
-      <div className="page-enter" style={{ paddingTop: 80, textAlign: "center" }}>
-        <span className="mono fg3" style={{ fontSize: 12, letterSpacing: ".1em" }}>
-          CHARGEMENT DE LA CUP…
-        </span>
+      <div className="pg pg--narrow page-enter">
+        <p role="status" className="pg-lede" style={{ paddingTop: 80 }}>
+          Chargement de la cup…
+        </p>
       </div>
     );
   }
 
   if (!cupData?.canRegister) {
     return (
-      <div className="page-enter" style={{ paddingTop: 80, textAlign: "center" }}>
-        <div className="mono fg3" style={{ fontSize: 12, letterSpacing: ".1em", marginBottom: 16 }}>
-          INSCRIPTIONS FERMÉES
+      <div className="pg pg--narrow page-enter">
+        <header className="pg-head">
+          <h1 className="display">Inscriptions fermées</h1>
+          <p className="pg-lede">
+            Les inscriptions à cette cup ne sont pas ouvertes actuellement.
+          </p>
+        </header>
+        <div className="form-actions">
+          <Link href={`/cups/${cupId}`} className="btn ghost">
+            ← Retour à la cup
+          </Link>
         </div>
-        <Link href={`/cups/${cupId}`}>
-          <button className="btn ghost">← Retour à la cup</button>
-        </Link>
       </div>
     );
   }
@@ -423,13 +463,18 @@ export default function RegisterPage() {
   // Producer profile missing
   if (getOrCreate.error?.data?.code === "FORBIDDEN") {
     return (
-      <div className="page-enter" style={{ paddingTop: 80, textAlign: "center" }}>
-        <div className="mono" style={{ fontSize: 13, marginBottom: 16, color: "var(--fg-2)" }}>
-          Profil producteur requis pour s&apos;inscrire.
+      <div className="pg pg--narrow page-enter">
+        <header className="pg-head">
+          <h1 className="display">Profil producteur requis</h1>
+          <p className="pg-lede">
+            Complétez votre profil producteur pour pouvoir inscrire des produits.
+          </p>
+        </header>
+        <div className="form-actions">
+          <Link href="/producer/complete-profile" className="btn accent">
+            Compléter mon profil <span className="btn-arrow">→</span>
+          </Link>
         </div>
-        <Link href="/producer/complete-profile">
-          <button className="btn accent">Compléter mon profil →</button>
-        </Link>
       </div>
     );
   }
@@ -438,233 +483,253 @@ export default function RegisterPage() {
   // Main render
   // ---------------------------------------------------------------------------
 
+  const currentStep = STEPS[step - 1] ?? STEPS[0]!;
+
+  const errorNotice = submitError && (
+    <div className="notice is-error" role="alert">
+      {submitError}
+    </div>
+  );
+
   return (
-    <div className="page-enter">
-      {/* ── HEADER ────────────────────────────────────────────────────────── */}
-      <section style={{ paddingTop: 40, paddingBottom: 24 }}>
-        <Eyebrow idx={3}>Inscription · Édition 03</Eyebrow>
-        <h1
-          className="display"
-          style={{ marginTop: 18, marginBottom: 8 }}
-        >
-          Enter<em>.</em>
-        </h1>
-        <p className="lede" style={{ marginTop: 0 }}>
-          Cinq étapes. Douze minutes. Spécimen anonymisé automatiquement dès réception.
+    <div className="pg page-enter">
+      {/* ── EN-TÊTE ───────────────────────────────────────────────────────── */}
+      <header className="pg-head">
+        <Eyebrow>Inscription · {cupData.cup.name}</Eyebrow>
+        <h1 className="display">Inscrire vos produits</h1>
+        <p className="pg-lede">
+          Choisissez une catégorie, décrivez votre produit et ajoutez-le au
+          panier. Vous pouvez inscrire plusieurs produits, dans une ou plusieurs
+          catégories, et tout régler en un seul paiement.
         </p>
         {getOrCreate.data?.isSupplement && (
-          <p
-            className="mono"
-            style={{ marginTop: 16, fontSize: 12.5, color: "var(--accent)", lineHeight: 1.6 }}
-          >
-            Commande complémentaire : vous avez déjà {getOrCreate.data.paidProductsCount}{" "}
-            produit{getOrCreate.data.paidProductsCount > 1 ? "s" : ""} réglé
-            {getOrCreate.data.paidProductsCount > 1 ? "s" : ""} pour cette cup. Ce nouveau
-            produit fait l&apos;objet d&apos;un paiement et d&apos;une facture séparés.
-          </p>
+          <div className="notice is-info">
+            <b>Commande complémentaire.</b> Vous avez déjà{" "}
+            {getOrCreate.data.paidProductsCount} produit
+            {getOrCreate.data.paidProductsCount > 1 ? "s" : ""} réglé
+            {getOrCreate.data.paidProductsCount > 1 ? "s" : ""} pour cette cup.
+            Cette nouvelle commande fait l&apos;objet d&apos;un paiement et
+            d&apos;une facture séparés.
+          </div>
         )}
-      </section>
+      </header>
 
-      {/* ── STEPPER ───────────────────────────────────────────────────────── */}
-      <Stepper step={step} />
+      {/* ── ÉTAPES ────────────────────────────────────────────────────────── */}
+      <div style={{ marginBottom: 28 }}>
+        <Stepper step={step} />
+      </div>
 
-      {/* ── TWO-COLUMN GRID ───────────────────────────────────────────────── */}
+      {/* ── DEUX COLONNES (une seule sur mobile) ──────────────────────────── */}
       <div
-        className="grid"
-        style={{ gridTemplateColumns: "1.6fr 1fr", gap: 24 }}
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          alignItems: "flex-start",
+          gap: 24,
+        }}
       >
-        {/* ── LEFT: STEP CONTENT ──────────────────────────────────────────── */}
-        <div className="card">
+        {/* ── GAUCHE : CONTENU DE L'ÉTAPE ─────────────────────────────────── */}
+        <section
+          className="form-card"
+          aria-labelledby="register-step-title"
+          style={{ flex: "999 1 560px", minWidth: 0 }}
+        >
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <p className="eyebrow" style={{ margin: 0 }}>
+              Étape {step} sur {STEPS.length}
+            </p>
+            <h2 id="register-step-title">{currentStep.title}</h2>
+          </div>
+
           {/* ── ÉTAPE 1 — CATÉGORIE ───────────────────────────────────────── */}
-          {step === 1 && (
-            <>
-              <h2 className="section-title" style={{ fontSize: 22 }}>
-                Choix de la catégorie
-              </h2>
-              {categories.length === 0 ? (
-                <p
-                  style={{
-                    marginTop: 20,
-                    fontSize: 13,
-                    color: "var(--fg-2)",
-                    lineHeight: 1.6,
-                  }}
-                >
-                  Aucune catégorie n&apos;est ouverte sur cette cup pour
-                  l&apos;instant. L&apos;organisateur doit les créer avant que
-                  les inscriptions soient possibles.
-                </p>
-              ) : (
-                <div className="grid g-2" style={{ marginTop: 20 }}>
-                  {categories.map((category) => {
-                    const sel = data.categoryId === category.id;
-                    const held = heldInCategory(category.id);
-                    // Maximum par producteur atteint : panier et commandes
-                    // réglées compris.
-                    const atProducerMax =
-                      category.maxProductsPerProducer !== null &&
-                      held >= category.maxProductsPerProducer;
-                    const full = category.isFull || atProducerMax;
-                    return (
+          {step === 1 &&
+            (categories.length === 0 ? (
+              <div className="notice">
+                Aucune catégorie n&apos;est ouverte sur cette cup pour
+                l&apos;instant. L&apos;organisateur doit les créer avant que les
+                inscriptions soient possibles.
+              </div>
+            ) : (
+              <ul style={{ ...listReset, display: "flex", flexDirection: "column", gap: 12 }}>
+                {categories.map((category) => {
+                  const sel = data.categoryId === category.id;
+                  const held = heldInCategory(category.id);
+                  // Maximum par producteur atteint : panier et commandes
+                  // réglées compris.
+                  const atProducerMax =
+                    category.maxProductsPerProducer !== null &&
+                    held >= category.maxProductsPerProducer;
+                  const full = category.isFull || atProducerMax;
+                  const low =
+                    !full &&
+                    category.remainingPlaces !== null &&
+                    category.remainingPlaces <= 3;
+                  const quota = category.isFull
+                    ? "Catégorie complète"
+                    : atProducerMax
+                      ? `Maximum atteint : ${held} sur ${category.maxProductsPerProducer} par producteur`
+                      : [
+                          category.remainingPlaces !== null
+                            ? placesText(category.remainingPlaces)
+                            : null,
+                          category.maxProductsPerProducer !== null
+                            ? `${category.maxProductsPerProducer} produit${category.maxProductsPerProducer > 1 ? "s" : ""} maximum par producteur`
+                            : null,
+                          held > 0
+                            ? `Déjà ${held} dans votre inscription`
+                            : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ");
+                  return (
+                    <li key={category.id}>
                       <button
-                        key={category.id}
+                        type="button"
                         onClick={() => !full && set("categoryId", category.id)}
                         disabled={full}
                         aria-disabled={full}
+                        aria-pressed={sel}
                         style={{
+                          width: "100%",
                           textAlign: "left",
-                          padding: 20,
+                          padding: "18px 20px",
                           cursor: full ? "not-allowed" : "pointer",
-                          opacity: full ? 0.5 : 1,
+                          opacity: full ? 0.55 : 1,
                           background: sel ? "var(--accent-dim)" : "var(--bg)",
-                          border: `1px solid ${sel ? "var(--accent)" : "var(--line)"}`,
+                          border: `1px solid ${sel ? "var(--accent)" : "var(--line-strong)"}`,
                           borderRadius: 12,
                           color: "var(--fg)",
-                          fontFamily: "inherit",
-                          transition:
-                            "border-color .15s ease, background .15s ease",
+                          font: "inherit",
+                          display: "flex",
+                          flexWrap: "wrap",
+                          alignItems: "baseline",
+                          justifyContent: "space-between",
+                          gap: "6px 16px",
+                          transition: "border-color .15s ease, background .15s ease",
                         }}
                       >
-                        <div
+                        <span
                           style={{
+                            flex: "1 1 220px",
+                            minWidth: 0,
                             display: "flex",
-                            alignItems: "baseline",
-                            justifyContent: "space-between",
-                            gap: 12,
+                            flexDirection: "column",
+                            gap: 6,
                           }}
                         >
-                          <div className="mono" style={{ fontSize: 15 }}>
+                          <span style={{ fontSize: 19, fontWeight: 600 }}>
                             {category.name}
-                          </div>
-                          <div
-                            className="mono tabular"
-                            style={{
-                              fontSize: 13,
-                              whiteSpace: "nowrap",
-                              color: sel ? "var(--accent)" : "var(--fg-2)",
-                            }}
-                          >
-                            {formatEuros(categoryPriceInCents(category))}
-                          </div>
-                        </div>
-                        {category.description && (
-                          <div
-                            style={{
-                              fontSize: 12.5,
-                              color: "var(--fg-2)",
-                              marginTop: 12,
-                              lineHeight: 1.5,
-                            }}
-                          >
-                            {category.description}
-                          </div>
-                        )}
-                        {(full ||
-                          held > 0 ||
-                          category.remainingPlaces !== null ||
-                          category.maxProductsPerProducer !== null) && (
-                          <div
-                            className="mono"
-                            style={{
-                              fontSize: 11.5,
-                              marginTop: 12,
-                              color: full ? "var(--danger)" : "var(--fg-2)",
-                            }}
-                          >
-                            {category.isFull
-                              ? "Complet"
-                              : atProducerMax
-                                ? `Maximum atteint (${held}/${category.maxProductsPerProducer} par producteur)`
-                              : [
-                                  category.remainingPlaces !== null
-                                    ? `${category.remainingPlaces} place${category.remainingPlaces > 1 ? "s" : ""} restante${category.remainingPlaces > 1 ? "s" : ""}`
-                                    : null,
-                                  category.maxProductsPerProducer !== null
-                                    ? `${category.maxProductsPerProducer} produit${category.maxProductsPerProducer > 1 ? "s" : ""} max. par producteur`
-                                    : null,
-                                  held > 0 ? `${held} déjà dans votre inscription` : null,
-                                ]
-                                  .filter(Boolean)
-                                  .join(" · ")}
-                          </div>
-                        )}
+                          </span>
+                          {category.description && (
+                            <span style={{ fontSize: 15, lineHeight: 1.5, color: "var(--fg-2)" }}>
+                              {category.description}
+                            </span>
+                          )}
+                          {quota && (
+                            <span
+                              style={{
+                                fontSize: 15,
+                                fontWeight: full || low ? 600 : 400,
+                                color: full
+                                  ? "var(--danger)"
+                                  : low
+                                    ? "var(--accent-hi)"
+                                    : "var(--fg-2)",
+                              }}
+                            >
+                              {quota}
+                            </span>
+                          )}
+                        </span>
+                        <span
+                          className="tabular"
+                          style={{
+                            fontSize: 19,
+                            fontWeight: 700,
+                            whiteSpace: "nowrap",
+                            color: sel ? "var(--accent-hi)" : "var(--fg)",
+                          }}
+                        >
+                          {formatEuros(categoryPriceInCents(category))}
+                        </span>
                       </button>
-                    );
-                  })}
-                </div>
-              )}
-            </>
-          )}
+                    </li>
+                  );
+                })}
+              </ul>
+            ))}
 
-          {/* ── STEP 2 — SPÉCIMEN ─────────────────────────────────────────── */}
+          {/* ── ÉTAPE 2 — PRODUIT ─────────────────────────────────────────── */}
           {step === 2 && (
             <>
-              <h2 className="section-title" style={{ fontSize: 22 }}>
-                Spécimen
-              </h2>
-              <div className="grid g-2" style={{ marginTop: 20, gap: 18 }}>
+              {selectedCategory && (
+                <p style={{ margin: 0, fontSize: 16, color: "var(--fg-2)" }}>
+                  Catégorie :{" "}
+                  <b style={{ color: "var(--fg)" }}>{selectedCategory.name}</b>{" "}
+                  ·{" "}
+                  <span className="tabular">
+                    {formatEuros(categoryPriceInCents(selectedCategory))}
+                  </span>
+                </p>
+              )}
+              <div className="form-row">
                 <Field
-                  label="Nom du spécimen *"
+                  label="Nom du produit *"
                   placeholder="Platinum Haze v2"
                   value={data.name}
                   onChange={(v) => set("name", v)}
                   required
                 />
                 <Field
-                  label="Producteur / Lab *"
+                  label="Producteur *"
                   placeholder="Studio Garden"
                   value={data.producer}
                   onChange={(v) => set("producer", v)}
                   required
                 />
                 <Field
-                  label="Origine (pays)"
+                  label="Pays d'origine"
                   placeholder="Portugal"
                   value={data.origin}
                   onChange={(v) => set("origin", v)}
                 />
                 <Field
-                  label="Millésime"
+                  label="Année de récolte"
                   placeholder="2026"
                   value={data.vintage}
                   onChange={(v) => set("vintage", v)}
                 />
               </div>
               {/* Déclaratif laboratoire */}
-              <div
+              <fieldset
                 style={{
-                  marginTop: 20,
-                  padding: 18,
+                  margin: 0,
+                  padding: 20,
                   border: "1px solid var(--line)",
-                  borderRadius: 10,
+                  borderRadius: 12,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 18,
+                  minWidth: 0,
                 }}
               >
-                <div
-                  className="mono"
-                  style={{
-                    fontSize: 11,
-                    letterSpacing: ".1em",
-                    color: "var(--fg-3)",
-                    textTransform: "uppercase",
-                    marginBottom: 14,
-                  }}
-                >
-                  Déclaratif laboratoire
-                </div>
-                <div className="grid g-2" style={{ gap: 18 }}>
+                <legend style={{ padding: "0 6px", fontSize: 17, fontWeight: 600 }}>
+                  Analyse déclarée
+                </legend>
+                <div className="form-row">
                   <Field
-                    label="Δ9-THC (%) *"
+                    label="Taux de Δ9-THC (%) *"
                     name="thc"
-                    placeholder="0.28"
+                    placeholder="0,28"
                     value={data.thc}
                     onChange={(v) => set("thc", v)}
-                    hint={`≤ ${MAX_THC_PERCENT}% UE`}
+                    hint={`${MAX_THC_LABEL} maximum (réglementation européenne)`}
                     required
                   />
                   <Field
-                    label="CBD total (%)"
+                    label="Taux de CBD total (%)"
                     name="cbd"
-                    placeholder="12.4"
+                    placeholder="12,4"
                     value={data.cbd}
                     onChange={(v) => set("cbd", v)}
                   />
@@ -672,9 +737,8 @@ export default function RegisterPage() {
                 <label
                   style={{
                     display: "flex",
-                    alignItems: "center",
+                    alignItems: "flex-start",
                     gap: 12,
-                    marginTop: 16,
                     cursor: "pointer",
                   }}
                 >
@@ -682,194 +746,130 @@ export default function RegisterPage() {
                     on={data.hasCoa}
                     onClick={() => set("hasCoa", !data.hasCoa)}
                   />
-                  <span
-                    className="mono"
-                    style={{ fontSize: 12, color: "var(--fg-2)" }}
-                  >
-                    Je fournirai un COA (Certificate of Analysis) à réception.
+                  <span style={{ fontSize: 16, lineHeight: 1.5, color: "var(--fg-2)" }}>
+                    Je fournirai un certificat d&apos;analyse (COA) à réception
+                    de l&apos;échantillon.
                   </span>
                 </label>
-              </div>
-              {submitError && (
-                <div
-                  style={{
-                    marginTop: 16,
-                    padding: "12px 16px",
-                    border: "1px solid var(--line-strong)",
-                    borderRadius: 10,
-                    background: "var(--bg)",
-                    color: "var(--fg-2)",
-                    fontSize: 13,
-                  }}
-                >
-                  {submitError}
-                </div>
-              )}
+              </fieldset>
+              {errorNotice}
             </>
           )}
 
           {/* ── ÉTAPE 3 — PANIER ──────────────────────────────────────────── */}
           {step === STEP_CART && (
             <>
-              <h2 className="section-title" style={{ fontSize: 22 }}>
-                Votre panier
-              </h2>
-              <p style={{ marginTop: 8, fontSize: 13, color: "var(--fg-2)", lineHeight: 1.6 }}>
-                Inscrivez tous vos spécimens, dans une ou plusieurs catégories :
+              <p style={{ margin: 0, fontSize: 16, lineHeight: 1.6, color: "var(--fg-2)" }}>
+                Inscrivez tous vos produits, dans une ou plusieurs catégories :
                 ils seront réglés en un seul paiement, sur une seule facture.
               </p>
               {cartProducts.length === 0 ? (
-                <p style={{ marginTop: 20, fontSize: 13, color: "var(--fg-3)" }}>
-                  Aucun produit pour l&apos;instant.
-                </p>
+                <div className="notice">Votre panier est vide pour l&apos;instant.</div>
               ) : (
-                <div style={{ marginTop: 20 }}>
-                  {cartProducts.map((product) => (
-                    <div
-                      key={product.id}
-                      className="kv"
-                      style={{ alignItems: "center", gap: 12 }}
-                    >
-                      <span className="kv-k" style={{ textTransform: "none" }}>
-                        <span style={{ color: "var(--fg)" }}>{product.name}</span>
-                        <span style={{ display: "block", fontSize: 11, color: "var(--fg-3)" }}>
-                          {product.category.name}
-                        </span>
-                      </span>
-                      <span className="kv-v" style={{ display: "flex", gap: 14, alignItems: "center" }}>
-                        <span className="tabular">{formatEuros(product.priceAtRegistration)}</span>
-                        <button
-                          type="button"
-                          className="btn ghost"
-                          style={{ padding: "4px 10px", fontSize: 11 }}
-                          disabled={removeProduct.isPending}
-                          onClick={() => void handleRemove(product.id)}
-                          aria-label={`Retirer ${product.name}`}
-                        >
-                          Retirer
-                        </button>
-                      </span>
-                    </div>
-                  ))}
+                <div>
+                  <ul style={{ ...listReset, borderTop: "1px solid var(--line)" }}>
+                    {cartProducts.map((product) => (
+                      <CartLine
+                        key={product.id}
+                        name={product.name}
+                        category={product.category.name}
+                        price={formatEuros(product.priceAtRegistration)}
+                        action={
+                          <button
+                            type="button"
+                            className="btn ghost"
+                            style={{ padding: "8px 14px", fontSize: 15 }}
+                            disabled={removeProduct.isPending}
+                            onClick={() => void handleRemove(product.id)}
+                            aria-label={`Retirer ${product.name}`}
+                          >
+                            Retirer
+                          </button>
+                        }
+                      />
+                    ))}
+                  </ul>
+                  <p
+                    style={{
+                      margin: 0,
+                      paddingTop: 16,
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "baseline",
+                      gap: 16,
+                      fontSize: 17,
+                      fontWeight: 600,
+                    }}
+                  >
+                    <span>
+                      Total · {cartProducts.length} produit
+                      {cartProducts.length > 1 ? "s" : ""}
+                    </span>
+                    <span className="tabular" style={{ fontSize: 20, fontWeight: 700 }}>
+                      {formatEuros(totalInCents)}
+                    </span>
+                  </p>
                 </div>
               )}
-              <button
-                type="button"
-                className="btn"
-                style={{ marginTop: 20 }}
-                onClick={() => {
-                  setSubmitError(null);
-                  setStep(1);
-                }}
-              >
-                + Ajouter un autre produit
-              </button>
-              {submitError && (
-                <div
-                  style={{
-                    marginTop: 16,
-                    padding: "12px 16px",
-                    border: "1px solid var(--line-strong)",
-                    borderRadius: 10,
-                    background: "var(--bg)",
-                    color: "var(--fg-2)",
-                    fontSize: 13,
+              <div>
+                <button
+                  type="button"
+                  className="btn ghost"
+                  onClick={() => {
+                    setSubmitError(null);
+                    setStep(1);
                   }}
                 >
-                  {submitError}
-                </div>
-              )}
+                  + Ajouter un autre produit
+                </button>
+              </div>
+              {errorNotice}
             </>
           )}
 
-          {/* ── ÉTAPE 4 — CONTACT ─────────────────────────────────────────── */}
+          {/* ── ÉTAPE 4 — COORDONNÉES ─────────────────────────────────────── */}
           {step === 4 && (
             <>
-              <h2 className="section-title" style={{ fontSize: 22 }}>
-                Contact
-              </h2>
               {/*
                 Les coordonnées de facturation viennent du profil producteur :
                 les saisir ici serait trompeur, `addProduct` ne les accepte pas
                 et la facture les lit sur le profil.
               */}
-              <div style={{ marginTop: 20 }}>
+              <div>
                 <div className="kv">
                   <span className="kv-k">Email du compte</span>
-                  <span className="kv-v">{session.user.email ?? "—"}</span>
+                  <span className="kv-v" style={{ overflowWrap: "anywhere", textAlign: "right" }}>
+                    {session.user.email ?? "—"}
+                  </span>
                 </div>
                 <div className="kv">
                   <span className="kv-k">Raison sociale</span>
-                  <span className="kv-v">
+                  <span className="kv-v" style={{ textAlign: "right" }}>
                     {producerProfile?.companyName ?? "—"}
                   </span>
                 </div>
                 <div className="kv">
                   <span className="kv-k">SIRET</span>
-                  <span className="kv-v">
+                  <span className="kv-v" style={{ textAlign: "right" }}>
                     {producerProfile?.siret ?? "Non renseigné"}
                   </span>
                 </div>
                 <div className="kv">
                   <span className="kv-k">Téléphone</span>
-                  <span className="kv-v">
+                  <span className="kv-v" style={{ textAlign: "right" }}>
                     {producerProfile?.phone ?? "Non renseigné"}
                   </span>
                 </div>
               </div>
-              <p
-                style={{
-                  marginTop: 16,
-                  fontSize: 12.5,
-                  color: "var(--fg-2)",
-                  lineHeight: 1.6,
-                }}
-              >
+              <p className="form-foot" style={{ margin: 0 }}>
                 Ces informations figureront sur votre facture.{" "}
-                <Link
-                  href="/producer/profile"
-                  style={{ color: "var(--accent)", textDecoration: "underline" }}
-                >
-                  Modifier mon profil producteur
-                </Link>
+                <Link href="/producer/profile">Modifier mon profil producteur</Link>
               </p>
-              {/* Envoi du spécimen sub-card */}
-              <div
-                style={{
-                  marginTop: 20,
-                  padding: 18,
-                  border: "1px solid var(--line)",
-                  borderRadius: 10,
-                  background: "var(--bg)",
-                }}
-              >
-                <div
-                  className="mono"
-                  style={{
-                    fontSize: 11,
-                    letterSpacing: ".1em",
-                    color: "var(--fg-3)",
-                    textTransform: "uppercase",
-                    marginBottom: 10,
-                  }}
-                >
-                  Envoi du spécimen
-                </div>
-                <p
-                  style={{
-                    fontSize: 13,
-                    color: "var(--fg-2)",
-                    lineHeight: 1.55,
-                    margin: 0,
-                  }}
-                >
-                  Un{" "}
-                  <b style={{ color: "var(--fg)" }}>QR code</b> et une
-                  étiquette anonyme seront générés après paiement. Vous disposez
-                  de{" "}
-                  <b style={{ color: "var(--fg)" }}>10 jours</b> pour expédier
-                  votre colis au laboratoire partenaire (Amsterdam, NL).
-                </p>
+              <div className="notice is-info">
+                <b>Envoi des échantillons.</b> Après paiement, chaque produit
+                reçoit un code anonyme et un QR code, à retrouver dans « Mes
+                inscriptions ». Les instructions d&apos;envoi vous seront
+                communiquées.
               </div>
             </>
           )}
@@ -877,9 +877,6 @@ export default function RegisterPage() {
           {/* ── ÉTAPE 5 — PAIEMENT ────────────────────────────────────────── */}
           {step === STEP_PAY && (
             <>
-              <h2 className="section-title" style={{ fontSize: 22 }}>
-                Paiement
-              </h2>
               {/*
                 Aucun champ de carte ici : la saisie se fait sur la page de
                 paiement hébergée par Viva.com, seule à voir les données de
@@ -887,25 +884,17 @@ export default function RegisterPage() {
               */}
               <div
                 style={{
-                  marginTop: 20,
-                  padding: 18,
+                  padding: 20,
                   border: "1px solid var(--line)",
-                  borderRadius: 10,
+                  borderRadius: 12,
                   background: "var(--bg)",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 12,
+                  alignItems: "flex-start",
                 }}
               >
-                <div
-                  className="mono"
-                  style={{
-                    fontSize: 11,
-                    letterSpacing: ".1em",
-                    color: "var(--fg-3)",
-                    textTransform: "uppercase",
-                    marginBottom: 10,
-                  }}
-                >
-                  Paiement sécurisé Viva.com
-                </div>
+                <h3 style={{ margin: 0, fontSize: 18 }}>Paiement sécurisé par Viva.com</h3>
                 {/* Logo viva.com : exigé par Viva sur les écrans de paiement
                     (validation de la source de paiement). Logo sombre, posé
                     sur un fond clair pour rester lisible en thème sombre. */}
@@ -914,28 +903,23 @@ export default function RegisterPage() {
                     display: "inline-flex",
                     alignItems: "center",
                     padding: "8px 12px",
-                    marginBottom: 12,
-                    borderRadius: 8,
+                    borderRadius: "var(--radius-control)",
                     background: "#ffffff",
                   }}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src="/viva-logo.svg" alt="viva.com" width={104} height={18} />
                 </span>
-                <p
-                  style={{
-                    fontSize: 13,
-                    color: "var(--fg-2)",
-                    lineHeight: 1.55,
-                    margin: 0,
-                  }}
-                >
+                <p style={{ margin: 0, fontSize: 16, lineHeight: 1.6, color: "var(--fg-2)" }}>
                   En validant, vous serez redirigé vers la page de paiement de{" "}
                   <b style={{ color: "var(--fg)" }}>Viva.com</b> pour régler{" "}
-                  <b style={{ color: "var(--fg)" }}>{formatEuros(totalInCents)}</b>{" "}
-                  pour {cartProducts.length} produit{cartProducts.length > 1 ? "s" : ""}
-                  , en une seule fois. Votre inscription est confirmée dès que le paiement est
-                  encaissé ; vous recevez alors votre facture par email.
+                  <b className="tabular" style={{ color: "var(--fg)" }}>
+                    {formatEuros(totalInCents)}
+                  </b>{" "}
+                  pour {cartProducts.length} produit{cartProducts.length > 1 ? "s" : ""}, en
+                  une seule fois. Votre inscription est confirmée dès que le
+                  paiement est encaissé ; vous recevez alors votre facture par
+                  email.
                 </p>
               </div>
 
@@ -945,7 +929,6 @@ export default function RegisterPage() {
                   display: "flex",
                   alignItems: "flex-start",
                   gap: 12,
-                  marginTop: 20,
                   cursor: "pointer",
                 }}
               >
@@ -953,49 +936,30 @@ export default function RegisterPage() {
                   on={data.accept}
                   onClick={() => set("accept", !data.accept)}
                 />
-                <span
-                  style={{
-                    fontSize: 12.5,
-                    color: "var(--fg-2)",
-                    lineHeight: 1.5,
-                  }}
-                >
-                  J&apos;accepte le règlement de la Platinum CBD Cup. Je
-                  certifie que le spécimen respecte la réglementation européenne
-                  en vigueur (Δ9-THC ≤ 0,3%) pour chacun des spécimens inscrits.
+                <span style={{ fontSize: 16, lineHeight: 1.5, color: "var(--fg-2)" }}>
+                  J&apos;accepte le règlement de la Platinum CBD Cup et je
+                  certifie que chacun des produits inscrits respecte la
+                  réglementation européenne en vigueur (Δ9-THC ≤ {MAX_THC_LABEL}).
                 </span>
               </label>
 
-              {/* Submit error */}
-              {submitError && (
-                <div
-                  style={{
-                    marginTop: 16,
-                    padding: "12px 16px",
-                    border: "1px solid var(--line-strong)",
-                    borderRadius: 10,
-                    background: "var(--bg)",
-                    color: "var(--fg-2)",
-                    fontSize: 13,
-                  }}
-                >
-                  {submitError}
-                </div>
-              )}
+              {errorNotice}
             </>
           )}
 
-          {/* ── NAV ───────────────────────────────────────────────────────── */}
+          {/* ── NAVIGATION ────────────────────────────────────────────────── */}
           <div
             style={{
               display: "flex",
+              flexWrap: "wrap-reverse",
               justifyContent: "space-between",
-              marginTop: 32,
-              paddingTop: 24,
+              gap: 12,
+              paddingTop: 22,
               borderTop: "1px solid var(--line)",
             }}
           >
             <button
+              type="button"
               className="btn ghost"
               disabled={step === 1 && cartProducts.length === 0}
               onClick={() => {
@@ -1004,12 +968,18 @@ export default function RegisterPage() {
                 // quand il contient déjà des produits.
                 setStep((s) => (s === 1 ? STEP_CART : Math.max(1, s - 1)));
               }}
-              style={{ opacity: step === 1 && cartProducts.length === 0 ? 0.3 : 1 }}
+              style={{
+                flex: "1 1 auto",
+                maxWidth: "100%",
+                opacity: step === 1 && cartProducts.length === 0 ? 0.3 : 1,
+              }}
             >
-              {step === 1 && cartProducts.length > 0 ? "← Panier" : "← Précédent"}
+              {step === 1 && cartProducts.length > 0 ? "← Retour au panier" : "← Précédent"}
             </button>
             <button
+              type="button"
               className="btn accent"
+              style={{ flex: "1 1 auto", maxWidth: "100%" }}
               disabled={
                 submitting ||
                 (step === 1 && !selectedCategory) ||
@@ -1038,75 +1008,64 @@ export default function RegisterPage() {
               {!submitting && <span className="btn-arrow">→</span>}
             </button>
           </div>
-        </div>
+        </section>
 
         {/* ── DROITE : RÉCAPITULATIF ──────────────────────────────────────── */}
-        <div
-          className="card"
-          style={{ height: "fit-content", position: "sticky", top: 100 }}
+        <aside
+          className="form-card"
+          aria-labelledby="register-summary-title"
+          style={{
+            flex: "1 1 300px",
+            minWidth: 0,
+            position: "sticky",
+            top: 100,
+            gap: 0,
+          }}
         >
-          <Eyebrow>Récapitulatif</Eyebrow>
-          <div style={{ marginTop: 16 }}>
+          <h2 id="register-summary-title" style={{ fontSize: 20, marginBottom: 8 }}>
+            Récapitulatif
+          </h2>
+          <ul style={listReset}>
             {cartProducts.map((product) => (
-              <div key={product.id} className="kv">
-                <span className="kv-k" style={{ textTransform: "none" }}>
-                  {product.name}
-                  <span style={{ display: "block", fontSize: 11, color: "var(--fg-3)" }}>
-                    {product.category.name}
-                  </span>
-                </span>
-                <span className="kv-v tabular">{formatEuros(product.priceAtRegistration)}</span>
-              </div>
+              <CartLine
+                key={product.id}
+                name={product.name}
+                category={product.category.name}
+                price={formatEuros(product.priceAtRegistration)}
+              />
             ))}
-            {/* Spécimen en cours de saisie, pas encore ajouté au panier */}
+            {/* Produit en cours de saisie, pas encore ajouté au panier */}
             {step <= 2 && selectedCategory && (
-              <div className="kv" style={{ opacity: 0.6 }}>
-                <span className="kv-k" style={{ textTransform: "none" }}>
-                  {data.name || "Nouveau spécimen"}
-                  <span style={{ display: "block", fontSize: 11, color: "var(--fg-3)" }}>
-                    {selectedCategory.name} · à ajouter
-                  </span>
-                </span>
-                <span className="kv-v tabular">
-                  {formatEuros(categoryPriceInCents(selectedCategory))}
-                </span>
-              </div>
+              <CartLine
+                muted
+                name={data.name || "Nouveau produit"}
+                category={`${selectedCategory.name} · pas encore ajouté`}
+                price={formatEuros(categoryPriceInCents(selectedCategory))}
+              />
             )}
-            {cartProducts.length === 0 && !(step <= 2 && selectedCategory) && (
-              <p style={{ fontSize: 12.5, color: "var(--fg-3)", margin: 0 }}>
-                Panier vide.
-              </p>
-            )}
-          </div>
-          <div
+          </ul>
+          {cartProducts.length === 0 && !(step <= 2 && selectedCategory) && (
+            <p style={{ margin: "8px 0 0", fontSize: 16, color: "var(--fg-3)" }}>
+              Votre panier est vide.
+            </p>
+          )}
+          <p
             style={{
+              margin: "16px 0 0",
+              paddingTop: 16,
+              borderTop: "1px solid var(--line-strong)",
               display: "flex",
               justifyContent: "space-between",
               alignItems: "baseline",
-              marginTop: 16,
-              paddingTop: 16,
-              borderTop: "1px solid var(--line-strong)",
+              gap: 16,
             }}
           >
-            <span
-              className="mono"
-              style={{
-                fontSize: 11,
-                letterSpacing: ".1em",
-                color: "var(--fg-3)",
-                textTransform: "uppercase",
-              }}
-            >
-              Total
-            </span>
-            <span
-              className="mono tabular"
-              style={{ fontSize: 28, fontWeight: 300 }}
-            >
+            <span style={{ fontSize: 17, fontWeight: 600 }}>Total</span>
+            <span className="tabular" style={{ fontSize: 28, fontWeight: 700 }}>
               {formatEuros(totalInCents)}
             </span>
-          </div>
-        </div>
+          </p>
+        </aside>
       </div>
     </div>
   );
