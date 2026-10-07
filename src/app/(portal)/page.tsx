@@ -268,7 +268,7 @@ export default async function PortalHomePage() {
         <div className="home-hero-emblem" aria-hidden="true">
           {/* Monté uniquement au-dessus de 881px : sur mobile, l'emblème
               statique placé à côté du titre le remplace. */}
-          <DesktopEmblem size={460} tiltZ={-0.18} />
+          <DesktopEmblem size={690} tiltZ={-0.18} />
         </div>
       </section>
 

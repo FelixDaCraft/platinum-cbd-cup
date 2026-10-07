@@ -44,10 +44,20 @@ export const responsiveCSS = `
 
   /* Emblème du hero : jamais plus haut que l'écran (portables de 720 px),
      place réservée avant le montage du canvas (pas de saut de mise en page). */
+  /* Taille portée à 690 px (+50 %, demande du 08/10/2026), toujours bornée
+     par la hauteur de l'écran. L'emblème déborde derrière le texte : le
+     canvas est transparent autour du modèle, et le texte reste au-dessus
+     (z-index) et cliquable. */
   .home-hero:not(.is-compact){
-    --emblem: max(280px, min(460px, calc(100svh - var(--topbar-h) - 96px)));
+    flex-wrap: nowrap;
+    --emblem: max(320px, min(690px, calc(100svh - var(--topbar-h) - 48px)));
   }
-  .home-hero:not(.is-compact) .home-hero-emblem{ min-height: var(--emblem); }
+  .home-hero:not(.is-compact) .home-hero-text{ flex: 1 1 auto; position: relative; z-index: 1; }
+  .home-hero:not(.is-compact) .home-hero-emblem{
+    flex: 0 0 var(--emblem); min-height: var(--emblem);
+    margin-left: calc(var(--emblem) * -0.28);
+    margin-right: calc(var(--pad-x) * -0.5);
+  }
   .home-hero:not(.is-compact) .home-hero-emblem > div{
     width: var(--emblem) !important; height: var(--emblem) !important;
   }
@@ -64,7 +74,7 @@ export const responsiveCSS = `
   /* Sans cela l'emblème (460 px) passait sous le texte jusqu'à ~1170 px. */
   .home-hero:not(.is-compact){
     flex-wrap: nowrap; gap: 32px;
-    --emblem: max(280px, min(34vw, 400px, calc(100svh - var(--topbar-h) - 96px)));
+    --emblem: max(320px, min(51vw, 600px, calc(100svh - var(--topbar-h) - 48px)));
   }
   .home-hero:not(.is-compact) .home-hero-text{ flex: 1 1 auto; }
   .home-hero:not(.is-compact) .home-hero-emblem{ flex: 0 0 var(--emblem); }
