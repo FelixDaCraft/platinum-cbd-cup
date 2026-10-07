@@ -343,6 +343,9 @@ export const producerRouter = createTRPCRouter({
 
       return registrations.map((reg) => ({
         id: reg.id,
+        // Commande Viva en cours : la page d'échec de paiement s'en sert pour
+        // retrouver le panier abandonné.
+        paymentOrderCode: reg.paymentOrderCode,
         cupId: reg.cup.id,
         cupName: reg.cup.name,
         cupStatus: reg.cup.status,

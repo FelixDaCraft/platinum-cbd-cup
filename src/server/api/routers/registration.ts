@@ -1069,7 +1069,7 @@ export const registrationRouter = createTRPCRouter({
 
       // "F" = finished/settled. Anything else is not a completed payment.
       if (transaction.statusId !== "F") {
-        return { status: "pending" as const, registrationId: null };
+        return { status: "pending" as const, registrationId: null, cupId: null };
       }
 
       const registrationId = transaction.merchantTrns;
@@ -1087,7 +1087,7 @@ export const registrationRouter = createTRPCRouter({
             eqFn(reg.id, registrationId),
             eqFn(reg.producerId, producer.id)
           ),
-        columns: { id: true },
+        columns: { id: true, cupId: true },
       });
 
       if (!registration) {
@@ -1130,7 +1130,8 @@ export const registrationRouter = createTRPCRouter({
       }
 
       // `already_confirmed` : le webhook est passe avant le retour navigateur.
-      return { status: "confirmed" as const, registrationId };
+      // La cup sert a la page de retour, servie a une URL fixe sans cup.
+      return { status: "confirmed" as const, registrationId, cupId: registration.cupId };
     }),
 
   /**
