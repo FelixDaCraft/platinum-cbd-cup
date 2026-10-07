@@ -5,7 +5,6 @@ import { notFound } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { db } from "~/server/db";
 import * as schema from "~/server/db/schema";
-import { Eyebrow, Pill } from "~/components/portal/platinum";
 import { baseUrl, imagePartage } from "../../_lib/seo";
 
 interface Props {
@@ -66,126 +65,80 @@ export default async function SponsorDetailPage({ params }: Props) {
     authorRole?: string;
   }[];
 
+  const links = [
+    ...(sponsor.website ? [{ label: "Site web", href: sponsor.website }] : []),
+    ...Object.entries(social)
+      .filter(([, v]) => !!v)
+      .map(([k, v]) => ({ label: k.charAt(0).toUpperCase() + k.slice(1), href: v })),
+  ];
+
   return (
-    <div className="page-enter">
-      <section style={{ paddingTop: 40, paddingBottom: 40 }}>
-        <Link
-          href="/sponsors"
-          className="mono fg3"
-          style={{
-            fontSize: 11,
-            letterSpacing: ".1em",
-            textTransform: "uppercase",
-            textDecoration: "none",
-          }}
-        >
-          ← Sponsors
+    <div className="pg">
+      <header className="pg-head">
+        <Link href="/sponsors" className="pg-link" style={{ fontSize: 15 }}>
+          Tous les partenaires
         </Link>
-        <Eyebrow>Partenaire</Eyebrow>
-        <h1 className="display" style={{ marginTop: 18, marginBottom: 12 }}>
-          {sponsor.name}
-          <em>.</em>
-        </h1>
-        {sponsor.description && (
-          <p className="lede">{sponsor.description}</p>
-        )}
-      </section>
+        <p className="eyebrow">Partenaire</p>
+        <h1 className="display">{sponsor.name}</h1>
+        {sponsor.description && <p className="pg-lede">{sponsor.description}</p>}
+      </header>
 
-      <section
-        className="grid g-2"
-        style={{ alignItems: "start", marginBottom: 32 }}
-      >
-        <div className="card">
-          <Eyebrow>Identité</Eyebrow>
-          <div
-            style={{
-              marginTop: 18,
-              height: 160,
-              display: "grid",
-              placeItems: "center",
-              border: "1px solid var(--line)",
-              borderRadius: 12,
-              background: "var(--bg)",
-              padding: 16,
-            }}
-          >
-            {sponsor.logo ? (
-              <Image
-                src={sponsor.logo}
-                alt={sponsor.name}
-                width={240}
-                height={120}
-                style={{ objectFit: "contain", maxHeight: 120 }}
-              />
-            ) : (
-              <span
-                className="mono fg3"
-                style={{ fontSize: 12, letterSpacing: ".15em" }}
+      {(sponsor.logo || links.length > 0) && (
+        <section className="pg-section" style={{ paddingTop: 0 }}>
+          <div className="pg-grid" style={{ alignItems: "start" }}>
+            {sponsor.logo && (
+              <div
+                className="pg-tile"
+                style={{ height: 200, alignItems: "center", justifyContent: "center" }}
               >
-                [ NO LOGO ]
-              </span>
-            )}
-          </div>
-        </div>
-
-        <div className="card">
-          <Eyebrow>Liens</Eyebrow>
-          <div style={{ marginTop: 16 }}>
-            {sponsor.website && (
-              <div className="kv">
-                <span className="kv-k">Site web</span>
-                <a
-                  href={sponsor.website}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="kv-v"
-                  style={{ color: "var(--accent)", textDecoration: "none" }}
-                >
-                  {sponsor.website.replace(/^https?:\/\//, "")}
-                </a>
+                <Image
+                  src={sponsor.logo}
+                  alt={sponsor.name}
+                  width={240}
+                  height={120}
+                  style={{ objectFit: "contain", maxHeight: 120, width: "auto", maxWidth: "100%" }}
+                />
               </div>
             )}
-            {Object.entries(social).map(([k, v]) =>
-              v ? (
-                <div key={k} className="kv">
-                  <span className="kv-k">{k}</span>
-                  <a
-                    href={v}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="kv-v"
-                    style={{ color: "var(--accent)", textDecoration: "none" }}
-                  >
-                    {v.replace(/^https?:\/\//, "").replace(/\/$/, "")}
-                  </a>
-                </div>
-              ) : null,
-            )}
-            {!sponsor.website && Object.values(social).every((v) => !v) && (
-              <p className="lede" style={{ marginTop: 4 }}>
-                Aucun lien renseigné.
-              </p>
+            {links.length > 0 && (
+              <div className="pg-tile">
+                <h2 style={{ margin: 0, fontSize: 22 }}>Liens</h2>
+                <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 10 }}>
+                  {links.map((l) => (
+                    <li key={l.href} style={{ fontSize: 16, display: "flex", flexWrap: "wrap", gap: "4px 12px" }}>
+                      <span style={{ color: "var(--fg-2)", minWidth: 90 }}>{l.label}</span>
+                      <a
+                        href={l.href}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="pg-link"
+                        style={{ overflowWrap: "anywhere" }}
+                      >
+                        {l.href.replace(/^https?:\/\//, "").replace(/\/$/, "")}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
           </div>
-        </div>
-      </section>
+        </section>
+      )}
 
       {gallery.length > 0 && (
-        <section style={{ marginTop: 32 }}>
-          <h2 className="section-title">Galerie</h2>
-          <div className="grid g-3" style={{ marginTop: 20 }}>
+        <section className="pg-section" aria-labelledby="sponsor-gallery">
+          <h2 id="sponsor-gallery" style={{ margin: 0, fontSize: 28 }}>
+            Galerie
+          </h2>
+          <div
+            className="pg-grid"
+            style={{ gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 260px), 1fr))" }}
+          >
             {gallery.map((url, i) => (
-              <a
-                key={i}
-                href={url}
-                target="_blank"
-                rel="noreferrer"
-                style={{ display: "block" }}
-              >
+              <a key={i} href={url} target="_blank" rel="noreferrer" style={{ display: "block" }}>
                 <div
                   style={{
                     aspectRatio: "1/1",
-                    border: "1px solid var(--line-strong)",
                     borderRadius: 12,
                     overflow: "hidden",
                     position: "relative",
@@ -206,44 +159,31 @@ export default async function SponsorDetailPage({ params }: Props) {
       )}
 
       {testimonials.length > 0 && (
-        <section style={{ marginTop: 32 }}>
-          <h2 className="section-title">Témoignages</h2>
-          <div className="grid g-2" style={{ marginTop: 20 }}>
+        <section className="pg-section" aria-labelledby="sponsor-testimonials">
+          <h2 id="sponsor-testimonials" style={{ margin: 0, fontSize: 28 }}>
+            Témoignages
+          </h2>
+          <div className="pg-grid">
             {testimonials.map((t) => (
-              <div key={t.id} className="card">
-                <p
-                  style={{
-                    fontSize: 16,
-                    lineHeight: 1.55,
-                    fontStyle: "italic",
-                    color: "var(--fg)",
-                  }}
-                >
+              <figure key={t.id} className="pg-tile" style={{ margin: 0 }}>
+                <blockquote style={{ margin: 0, fontSize: 17, lineHeight: 1.6, color: "var(--fg)" }}>
                   «&nbsp;{t.text}&nbsp;»
-                </p>
-                <div
-                  className="mono fg3"
-                  style={{
-                    fontSize: 11,
-                    letterSpacing: ".1em",
-                    textTransform: "uppercase",
-                    marginTop: 16,
-                  }}
-                >
-                  — {t.authorName}
-                  {t.authorRole ? ` · ${t.authorRole}` : ""}
-                </div>
-              </div>
+                </blockquote>
+                <figcaption className="pg-meta">
+                  {t.authorName}
+                  {t.authorRole ? `, ${t.authorRole}` : ""}
+                </figcaption>
+              </figure>
             ))}
           </div>
         </section>
       )}
 
-      <section style={{ marginTop: 48 }}>
-        <Pill>Vous souhaitez devenir partenaire ?</Pill>
-        <div style={{ marginTop: 20 }}>
+      <section className="pg-section">
+        <div className="pg-section-head">
+          <h2 style={{ margin: 0, fontSize: 26 }}>Vous souhaitez devenir partenaire ?</h2>
           <Link href="/contact" className="btn accent">
-            Nous contacter <span className="btn-arrow">→</span>
+            Nous contacter
           </Link>
         </div>
       </section>

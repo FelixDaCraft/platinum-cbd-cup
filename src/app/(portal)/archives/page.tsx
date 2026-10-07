@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { db } from "~/server/db";
-import { Eyebrow, Pill } from "~/components/portal/platinum";
+import { editionOrdinal, editionYear, formatDay } from "../_lib/edition";
 import { canonical } from "../_lib/seo";
 
 export const metadata = {
@@ -8,20 +8,6 @@ export const metadata = {
   title: "Archives",
   description: "Toutes les éditions passées de la Platinum CBD Cup.",
 };
-
-function categoryCode(name: string): string {
-  return name
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toUpperCase()
-    .replace(/[^A-Z]/g, "")
-    .slice(0, 2);
-}
-
-function formatYear(date: Date | null | undefined): string {
-  if (!date) return "—";
-  return String(new Date(date).getFullYear());
-}
 
 async function getArchivedCups() {
   try {
@@ -34,86 +20,72 @@ async function getArchivedCups() {
   }
 }
 
+interface ArchivedEdition {
+  year: number;
+  location: string | null;
+  eventDate: number | null;
+}
+
+/** Les anciennes éditions comptaient une cup par jury : on regroupe par année. */
+function groupByYear(cups: Awaited<ReturnType<typeof getArchivedCups>>): ArchivedEdition[] {
+  const byYear = new Map<number, ArchivedEdition>();
+  for (const cup of cups) {
+    const year = editionYear(cup);
+    const entry = byYear.get(year) ?? { year, location: null, eventDate: null };
+    entry.location ??= cup.eventLocation;
+    entry.eventDate ??= cup.eventDate ? new Date(cup.eventDate).getTime() : null;
+    byYear.set(year, entry);
+  }
+  return [...byYear.values()].sort((a, b) => b.year - a.year);
+}
+
 export default async function ArchivesPage() {
-  const cups = await getArchivedCups();
+  const editions = groupByYear(await getArchivedCups());
 
   return (
-    <div className="page-enter">
-      <section style={{ paddingTop: 40, paddingBottom: 40 }}>
-        <Eyebrow idx={5}>Archives · Past editions</Eyebrow>
-        <h1 className="display" style={{ marginTop: 18, marginBottom: 12 }}>
-          Archives<em>.</em>
-        </h1>
-        <p className="lede">
-          L&apos;historique complet des éditions passées de la Platinum CBD Cup.
-          Palmarès, ledger public et rapports laboratoires en libre accès.
+    <div className="pg">
+      <header className="pg-head">
+        <p className="eyebrow">Éditions</p>
+        <h1 className="display">Les éditions passées</h1>
+        <p className="pg-lede">
+          Chaque édition de la Platinum CBD Cup et son palmarès, depuis la
+          première en 2023.
         </p>
-      </section>
+      </header>
 
-      {cups.length === 0 ? (
-        <div className="card">
-          <Eyebrow>Aucune édition archivée</Eyebrow>
-          <p className="lede" style={{ marginTop: 12 }}>
-            La première édition est en cours. Les archives seront publiées à
-            l&apos;issue de la cérémonie.
-          </p>
-        </div>
-      ) : (
-        <div className="grid g-3">
-          {cups.map((cup) => (
-            <div key={cup.id} className="card card-hover">
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 16,
-                }}
-              >
-                <div
-                  style={{
-                    width: 56,
-                    height: 56,
-                    borderRadius: 12,
-                    border: "1px solid var(--line-strong)",
-                    display: "grid",
-                    placeItems: "center",
-                    fontFamily: "var(--mono)",
-                    fontSize: 16,
-                    flexShrink: 0,
-                    background: "var(--bg)",
-                  }}
-                >
-                  {categoryCode(cup.name) || "ED"}
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div className="mono" style={{ fontSize: 15 }}>{cup.name}</div>
-                  <div
-                    className="mono fg3"
-                    style={{
-                      fontSize: 11,
-                      letterSpacing: ".1em",
-                      marginTop: 4,
-                      textTransform: "uppercase",
-                    }}
-                  >
-                    Ed · {formatYear(cup.eventDate ?? cup.createdAt)}
-                  </div>
-                </div>
-                <Pill>DONE</Pill>
-              </div>
-              <div style={{ marginTop: 20 }}>
+      <section className="pg-section" style={{ paddingTop: 0 }}>
+        {editions.length === 0 ? (
+          <div className="notice">
+            Aucune édition terminée n&apos;est encore archivée.{" "}
+            <Link href="/palmares" className="pg-link">
+              Consulter le palmarès
+            </Link>
+          </div>
+        ) : (
+          <div className="pg-grid">
+            {editions.map((ed) => {
+              const details = [
+                ed.eventDate ? formatDay(ed.eventDate) : null,
+                ed.location,
+              ].filter(Boolean);
+              return (
                 <Link
-                  href={`/palmares?edition=${cup.id}`}
-                  className="btn ghost"
-                  style={{ padding: "10px 16px" }}
+                  key={ed.year}
+                  href={`/palmares?edition=${ed.year}`}
+                  className="pg-tile"
                 >
-                  Palmarès <span className="btn-arrow">→</span>
+                  <span className="pg-meta">{editionOrdinal(ed.year)}</span>
+                  <h3 style={{ fontSize: 32 }}>{ed.year}</h3>
+                  {details.length > 0 && <p>{details.join(" · ")}</p>}
+                  <span className="pg-link" style={{ marginTop: "auto" }}>
+                    Voir le palmarès
+                  </span>
                 </Link>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+              );
+            })}
+          </div>
+        )}
+      </section>
     </div>
   );
 }

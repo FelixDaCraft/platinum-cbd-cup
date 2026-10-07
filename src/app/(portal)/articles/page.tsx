@@ -1,11 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
 import { db } from "~/server/db";
-import {
-  ARTICLE_CATEGORY_COLORS,
-  getCategoryColor,
-} from "~/server/db/schema/articles";
-import { Eyebrow } from "~/components/portal/platinum";
 import { canonical } from "../_lib/seo";
 
 export const metadata = {
@@ -18,10 +13,17 @@ export const metadata = {
 function formatDate(date: Date | null | undefined): string {
   if (!date) return "—";
   return new Date(date).toLocaleDateString("fr-FR", {
-    day: "2-digit",
-    month: "2-digit",
+    day: "numeric",
+    month: "long",
     year: "numeric",
   });
+}
+
+/** Les catégories sont souvent saisies en capitales : on les affiche en casse normale. */
+function categoryLabel(category: string): string {
+  if (category !== category.toUpperCase()) return category;
+  const lower = category.toLocaleLowerCase("fr-FR");
+  return lower.charAt(0).toLocaleUpperCase("fr-FR") + lower.slice(1);
 }
 
 async function getPublishedArticles() {
@@ -37,57 +39,31 @@ async function getPublishedArticles() {
 
 export default async function ArticlesPage() {
   const articles = await getPublishedArticles();
-  // Touch the import so an unused-variable check stays happy if no article ever
-  // matches a known category (we still want the symbol available downstream).
-  void ARTICLE_CATEGORY_COLORS;
 
   return (
-    <div className="page-enter">
-      <section style={{ paddingTop: 40, paddingBottom: 40 }}>
-        <Eyebrow idx={8}>Journal · Articles</Eyebrow>
-        <h1 className="display" style={{ marginTop: 18, marginBottom: 12 }}>
-          Articles<em>.</em>
-        </h1>
-        <p className="lede">
-          Interviews de jurés et de producteurs, analyses méthodologiques,
-          coulisses des panels aveugles. Sans paywall.
+    <div className="pg">
+      <header className="pg-head">
+        <p className="eyebrow">Journal</p>
+        <h1 className="display">Articles</h1>
+        <p className="pg-lede">
+          Actualités, entretiens et coulisses de la Platinum CBD Cup.
         </p>
-      </section>
+      </header>
 
-      {articles.length === 0 ? (
-        <div className="card">
-          <Eyebrow>Pas encore d&apos;articles publiés</Eyebrow>
-          <p className="lede" style={{ marginTop: 12 }}>
-            Le journal de la Cup ouvrira avec les premiers contenus en parallèle
-            de l&apos;ouverture des inscriptions.
-          </p>
-        </div>
-      ) : (
-        <div className="grid g-3">
-          {articles.map((a) => {
-            const categoryColor =
-              a.categoryColor ?? getCategoryColor(a.category) ?? "var(--accent)";
-            return (
-              <Link
-                key={a.id}
-                href={`/articles/${a.slug}`}
-                className="card card-hover"
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 16,
-                  textDecoration: "none",
-                  color: "inherit",
-                }}
-              >
-                {a.coverImage ? (
+      <section className="pg-section" style={{ paddingTop: 0 }}>
+        {articles.length === 0 ? (
+          <div className="notice">Aucun article publié pour le moment.</div>
+        ) : (
+          <div className="pg-grid">
+            {articles.map((a) => (
+              <Link key={a.id} href={`/articles/${a.slug}`} className="pg-tile">
+                {a.coverImage && (
                   <div
                     style={{
                       position: "relative",
                       aspectRatio: "16/10",
                       borderRadius: 10,
                       overflow: "hidden",
-                      border: "1px solid var(--line)",
                     }}
                   >
                     <Image
@@ -98,64 +74,25 @@ export default async function ArticlesPage() {
                       style={{ objectFit: "cover" }}
                     />
                   </div>
-                ) : (
-                  <div
-                    style={{
-                      aspectRatio: "16/10",
-                      borderRadius: 10,
-                      border: "1px solid var(--line-strong)",
-                      background:
-                        "repeating-linear-gradient(135deg, transparent 0 10px, color-mix(in srgb, var(--fg) 4%, transparent) 10px 11px)",
-                    }}
-                  />
                 )}
-                {a.category && (
-                  <span
-                    className="mono"
-                    style={{
-                      alignSelf: "flex-start",
-                      fontSize: 10,
-                      letterSpacing: ".12em",
-                      textTransform: "uppercase",
-                      padding: "4px 10px",
-                      borderRadius: 999,
-                      border: `1px solid ${categoryColor}`,
-                      color: categoryColor,
-                    }}
-                  >
-                    {a.category}
-                  </span>
-                )}
-                <div className="mono" style={{ fontSize: 17, lineHeight: 1.3 }}>
-                  {a.title}
-                </div>
-                {a.excerpt && (
-                  <p
-                    style={{
-                      color: "var(--fg-2)",
-                      fontSize: 13.5,
-                      lineHeight: 1.55,
-                    }}
-                  >
-                    {a.excerpt}
-                  </p>
-                )}
-                <div
-                  className="mono fg3"
-                  style={{
-                    marginTop: "auto",
-                    fontSize: 11,
-                    letterSpacing: ".1em",
-                    textTransform: "uppercase",
-                  }}
-                >
+                <span className="pg-meta">
+                  {a.category ? (
+                    <>
+                      <span style={{ color: "var(--accent-hi)", fontWeight: 600 }}>
+                        {categoryLabel(a.category)}
+                      </span>
+                      {" · "}
+                    </>
+                  ) : null}
                   {formatDate(a.publishedAt)}
-                </div>
+                </span>
+                <h3>{a.title}</h3>
+                {a.excerpt && <p>{a.excerpt}</p>}
               </Link>
-            );
-          })}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }

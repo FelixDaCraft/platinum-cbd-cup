@@ -1,20 +1,14 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { db } from "~/server/db";
-import { Eyebrow } from "~/components/portal/platinum";
 import type { TeamMember } from "~/server/db/schema/organization-about";
 import { canonical } from "../_lib/seo";
 
-function getInitials(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  const a = parts[0]?.[0] ?? "";
-  const b = parts[1]?.[0] ?? parts[0]?.[1] ?? "";
-  return (a + b).toUpperCase() || "??";
-}
-
 export const metadata: Metadata = {
   alternates: { canonical: canonical("/about") },
-  title: "Manifesto",
-  description: "Notre mission, notre histoire et notre équipe derrière la seule compétition CBD évaluée à l'aveugle en Europe.",
+  title: "Le concours",
+  description:
+    "Le fonctionnement de la Platinum CBD Cup : deux jurys qui notent chaque produit à l'aveugle, les labels du jury public et l'équipe organisatrice.",
 };
 
 async function getTeamMembers(): Promise<TeamMember[]> {
@@ -22,37 +16,14 @@ async function getTeamMembers(): Promise<TeamMember[]> {
   return (aboutContent?.teamMembers ?? []) as TeamMember[];
 }
 
-interface ManifestoArticle {
-  numeral: string;
-  lead: string;
-  body: string;
-}
-
-const MANIFESTO: ManifestoArticle[] = [
+const JURIES = [
   {
-    numeral: "I",
-    lead: "Le code précède le nom.",
-    body: "Cinq caractères, anonymes. Le panel ne voit ni la marque, ni le terroir, ni le prix. La cécité est notre point de départ — pas notre limite.",
+    title: "Le jury professionnel",
+    body: "Producteurs, sommeliers et analystes notent chaque produit sans connaître sa marque. Leurs notes établissent un classement par catégorie. Ce jury ne décerne pas de label.",
   },
   {
-    numeral: "II",
-    lead: "Une seule mesure, pour toutes les mains.",
-    body: "Du géant industriel au paysan des Cévennes, le même protocole, le même verre, le même silence. L'égalité n'est pas une promesse : c'est une procédure.",
-  },
-  {
-    numeral: "III",
-    lead: "Aucun jugement n'est dû.",
-    body: "Aucun favori. Aucune redevance. Aucun raccourci. Si le score déçoit, le score reste. Le marché s'adaptera, pas nous.",
-  },
-  {
-    numeral: "IV",
-    lead: "L'excellence se prouve, ne se déclame pas.",
-    body: "Un laboratoire indépendant. Un panel professionnel, un panel public. Un protocole publié dans son intégralité. Tout ce que nous écrivons peut être vérifié. Tout ce qui ne peut l'être n'est pas écrit.",
-  },
-  {
-    numeral: "V",
-    lead: "L'archive est plus longue que l'édition.",
-    body: "Une cup dure quelques semaines. Un palmarès dure des décennies. Nous écrivons pour ceux qui n'étaient pas là — et pour ceux qui n'existent pas encore.",
+    title: "Le jury public",
+    body: "Des consommateurs reçoivent une box d'échantillons et notent les produits chez eux. Selon la note obtenue, un produit reçoit le label Or, Argent ou Bronze, et le premier de chaque catégorie remporte le Prix du public.",
   },
 ];
 
@@ -60,156 +31,102 @@ export default async function AboutPage() {
   const teamMembers = await getTeamMembers();
 
   return (
-    <div className="page-enter">
-      {/* Hero */}
-      <section style={{ paddingTop: 40, paddingBottom: 56 }}>
-        <Eyebrow idx={5}>Manifesto</Eyebrow>
-        <h1 className="display" style={{ marginTop: 20, marginBottom: 20 }}>
-          Manifesto<em>.</em>
+    <div className="pg">
+      <header className="pg-head">
+        <p className="eyebrow">Le concours</p>
+        <h1 className="display">
+          Chaque produit noté à l&apos;aveugle par <em>deux</em> jurys
         </h1>
-        <p className="lede" style={{ maxWidth: 560 }}>
-          La Platinum CBD Cup est la seule compétition européenne de CBD
-          évaluée à l'aveugle par un panel indépendant d'analystes, sommeliers
-          et laboratoires partenaires.
+        <p className="pg-lede">
+          La Platinum CBD Cup est un concours européen de CBD, organisé chaque
+          année depuis 2023. Les produits sont jugés sur ce qu&apos;ils sont, pas
+          sur leur nom.
         </p>
-      </section>
+      </header>
 
-      {/* ── MANIFESTO · Aphorism Posters ─────────────────────────────────
-          Five numbered articles. Roman numeral eyebrow in accent gold,
-          lead sentence in Louize Display (clamp 40 → 88px), body in
-          Geist Mono. Hairline separator between articles. */}
-      <section style={{ marginTop: 24, marginBottom: 96 }}>
-        {MANIFESTO.map((article, i) => (
-          <article
-            key={article.numeral}
-            style={{
-              paddingTop: i === 0 ? 0 : 64,
-              paddingBottom: 64,
-              borderTop: i === 0 ? 0 : "1px solid var(--line)",
-            }}
-          >
-            <div
-              style={{
-                fontFamily: "var(--mono)",
-                fontSize: 12,
-                letterSpacing: ".18em",
-                color: "var(--accent)",
-                textTransform: "uppercase",
-                marginBottom: 28,
-                display: "flex",
-                alignItems: "center",
-                gap: 12,
-              }}
-            >
-              <span>{article.numeral}</span>
-              <span
-                aria-hidden="true"
-                style={{
-                  flex: "0 0 48px",
-                  height: 1,
-                  background: "var(--accent)",
-                  display: "inline-block",
-                }}
-              />
-            </div>
-
-            <h2
-              style={{
-                fontSize: "clamp(40px, 6.5vw, 88px)",
-                lineHeight: 1.05,
-                margin: 0,
-                maxWidth: "20ch",
-              }}
-            >
-              {article.lead}
-            </h2>
-
-            <p
-              style={{
-                fontFamily: "var(--mono)",
-                fontSize: 14,
-                lineHeight: 1.7,
-                color: "var(--fg-2)",
-                marginTop: 32,
-                maxWidth: "62ch",
-                letterSpacing: ".01em",
-              }}
-            >
-              {article.body}
-            </p>
-          </article>
-        ))}
-
-        {/* Signature */}
-        <div
-          style={{
-            paddingTop: 48,
-            borderTop: "1px solid var(--line)",
-            fontFamily: "var(--mono)",
-            fontSize: 11,
-            letterSpacing: ".15em",
-            color: "var(--fg-3)",
-            textTransform: "uppercase",
-          }}
-        >
-          — Platinum CBD Cup · depuis 2023
+      <section className="pg-section" aria-labelledby="about-juries">
+        <h2 id="about-juries" style={{ margin: 0, fontSize: 28 }}>
+          Deux jurys, deux regards
+        </h2>
+        <div className="pg-grid">
+          {JURIES.map((j) => (
+            <article key={j.title} className="pg-tile">
+              <h3>{j.title}</h3>
+              <p>{j.body}</p>
+            </article>
+          ))}
         </div>
       </section>
 
-      {/* Team */}
-      <section style={{ marginBottom: 64 }}>
-        <h2 className="section-title" style={{ marginBottom: 28 }}>
-          Équipe
+      <section className="pg-section" aria-labelledby="about-blind">
+        <h2 id="about-blind" style={{ margin: 0, fontSize: 28 }}>
+          L&apos;anonymat des échantillons
         </h2>
-
-        {teamMembers.length === 0 ? (
-          <div className="card">
-            <Eyebrow>Team · Platinum CBD Cup</Eyebrow>
-            <p className="lede" style={{ marginTop: 12 }}>
-              L'équipe organisatrice sera présentée ici lors de l'édition 2026.
-            </p>
-          </div>
-        ) : (
-          <div className="team-roster">
-            {teamMembers.map((member, i) => {
-              const m = member as TeamMember;
-              return (
-                <figure key={m.id ?? i} className="team-member">
-                  <div className="team-photo-frame">
-                    {m.photo ? (
-                      // Le cadre réserve déjà la place (aspect-ratio 4/5 dans
-                      // platinumCSS) : les dimensions ne servent ici qu'à
-                      // annoncer ce même rapport au navigateur. Le décodage
-                      // asynchrone évite qu'une galerie de portraits bloque
-                      // le thread principal pendant le défilement.
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={m.photo}
-                        alt={m.name}
-                        width={400}
-                        height={500}
-                        loading="lazy"
-                        decoding="async"
-                      />
-                    ) : (
-                      <span className="team-photo-placeholder">
-                        {getInitials(m.name)}
-                      </span>
-                    )}
-                  </div>
-                  <figcaption>
-                    <span className="team-idx">
-                      · {String(i + 1).padStart(2, "0")}
-                    </span>
-                    <span className="team-nm">{m.name}</span>
-                    {m.role && <span className="team-rl">{m.role}</span>}
-                  </figcaption>
-                </figure>
-              );
-            })}
-          </div>
-        )}
+        <div className="prose" style={{ maxWidth: 720 }}>
+          <p>
+            Avant d&apos;être goûté, chaque échantillon est anonymisé : les jurés ne
+            voient qu&apos;un code, jamais la marque. Ce code est différent pour
+            chaque jury, si bien qu&apos;un produit ne peut pas être reconnu
+            d&apos;un jury à l&apos;autre.
+          </p>
+          <p>
+            Les seuils de note des labels Or, Argent et Bronze sont fixés pour
+            chaque édition. Le détail des règles figure dans le{" "}
+            <Link href="/reglement">règlement</Link>.
+          </p>
+        </div>
+        <div className="form-actions">
+          <Link href="/palmares" className="btn accent">
+            Voir le palmarès
+          </Link>
+          <Link href="/cups" className="btn ghost">
+            Participer
+          </Link>
+        </div>
       </section>
+
+      {teamMembers.length > 0 && (
+        <section className="pg-section" aria-labelledby="about-team">
+          <h2 id="about-team" style={{ margin: 0, fontSize: 28 }}>
+            L&apos;équipe
+          </h2>
+          <div
+            className="pg-grid"
+            style={{ gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 240px), 1fr))" }}
+          >
+            {teamMembers.map((m, i) => (
+              <figure key={m.id ?? i} className="pg-tile" style={{ margin: 0 }}>
+                {m.photo && (
+                  // Le rapport 4/5 est réservé par aspect-ratio ; le décodage
+                  // asynchrone évite qu'une galerie de portraits bloque le
+                  // thread principal pendant le défilement.
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={m.photo}
+                    alt={m.name}
+                    width={400}
+                    height={500}
+                    loading="lazy"
+                    decoding="async"
+                    style={{
+                      width: "100%",
+                      height: "auto",
+                      aspectRatio: "4 / 5",
+                      objectFit: "cover",
+                      borderRadius: 10,
+                    }}
+                  />
+                )}
+                <figcaption style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <h3>{m.name}</h3>
+                  {m.role && <span className="pg-meta">{m.role}</span>}
+                  {m.bio && <p>{m.bio}</p>}
+                </figcaption>
+              </figure>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

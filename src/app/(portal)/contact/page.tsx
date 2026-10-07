@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Eyebrow } from "~/components/portal/platinum";
+import Link from "next/link";
 import { ContactForm } from "./_components/contact-form";
 import { canonical } from "../_lib/seo";
 
@@ -9,84 +9,50 @@ export const metadata: Metadata = {
   description: "Contactez l'équipe Platinum CBD Cup pour toute question ou demande d'information.",
 };
 
-const CONTACT_INFO = {
-  email: "contact@platinumcbdcup.eu",
-  hours: "Lun–Ven · 09h–18h",
-  address: "Europe · Indépendant",
-};
+const CONTACT_EMAIL = "contact@platinumcbdcup.eu";
 
 export default function ContactPage() {
   return (
-    <div className="page-enter">
-      {/* Hero */}
-      <section style={{ paddingTop: 40, paddingBottom: 56 }}>
-        <Eyebrow idx={6}>Contact</Eyebrow>
-        <h1 className="display" style={{ marginTop: 20, marginBottom: 20 }}>
-          Contact<em>.</em>
-        </h1>
-        <p className="lede" style={{ maxWidth: 520 }}>
-          Une question sur la compétition, les inscriptions ou les partenariats ?
-          Nous lisons chaque message et répondons sous 48 h ouvrées.
+    <div className="pg">
+      <header className="pg-head">
+        <p className="eyebrow">Contact</p>
+        <h1 className="display">Écrivez-nous</h1>
+        <p className="pg-lede">
+          Une question sur le concours, les inscriptions, les résultats ou un
+          partenariat ? Nous lisons chaque message et vous répondons par email.
         </p>
-      </section>
+      </header>
 
-      {/* Two-column */}
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "1fr .9fr",
+          gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 340px), 1fr))",
           gap: 32,
           alignItems: "start",
-          marginBottom: 80,
         }}
-        className="contact-grid"
       >
-        {/* Left: form */}
         <ContactForm />
 
-        {/* Right: info card */}
-        <div className="card">
-          <Eyebrow>Coordonnées</Eyebrow>
-          <div style={{ marginTop: 20 }}>
-            {[
-              { k: "Email", v: CONTACT_INFO.email },
-              { k: "Horaires", v: CONTACT_INFO.hours },
-              { k: "Juridiction", v: CONTACT_INFO.address },
-            ].map(({ k, v }) => (
-              <div
-                key={k}
-                className="kv"
-                style={{ paddingBlock: 14, borderBottom: "1px solid var(--line)" }}
-              >
-                <span className="kv-k">{k}</span>
-                <span className="kv-v">{v}</span>
-              </div>
-            ))}
-          </div>
-
-          <div style={{ marginTop: 28 }}>
-            <Eyebrow>Presse &amp; partenariats</Eyebrow>
-            <p
-              style={{
-                color: "var(--fg-2)",
-                fontSize: 13,
-                lineHeight: 1.6,
-                marginTop: 10,
-              }}
-            >
-              Pour les demandes presse, accès média kit ou opportunités de
-              partenariat, utilisez le formulaire ci-contre en précisant votre
-              sujet.
-            </p>
-          </div>
-        </div>
+        <aside className="pg-tile" aria-labelledby="contact-direct">
+          <h2 id="contact-direct" style={{ margin: 0, fontSize: 22 }}>
+            Par email
+          </h2>
+          <p>
+            <a href={`mailto:${CONTACT_EMAIL}`} className="pg-link">
+              {CONTACT_EMAIL}
+            </a>
+          </p>
+          <h2 style={{ margin: "12px 0 0", fontSize: 22 }}>Presse et partenariats</h2>
+          <p>
+            Choisissez le sujet « Presse » ou « Partenariat » dans le formulaire.
+            Les journalistes trouveront aussi communiqués et kit média dans l&apos;
+            <Link href="/press" className="pg-link">
+              espace presse
+            </Link>
+            .
+          </p>
+        </aside>
       </div>
-
-      <style>{`
-        @media (max-width: 780px) {
-          .contact-grid { grid-template-columns: 1fr !important; }
-        }
-      `}</style>
     </div>
   );
 }

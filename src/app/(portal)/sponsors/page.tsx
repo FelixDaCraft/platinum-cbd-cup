@@ -1,7 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
 import { db } from "~/server/db";
-import { Eyebrow, Pill } from "~/components/portal/platinum";
 import { canonical } from "../_lib/seo";
 
 export const metadata = {
@@ -24,97 +23,72 @@ export default async function SponsorsPage() {
   const sponsors = await getSponsors();
 
   return (
-    <div className="page-enter">
-      <section style={{ paddingTop: 40, paddingBottom: 40 }}>
-        <Eyebrow idx={7}>Partenaires · Sponsors</Eyebrow>
-        <h1 className="display" style={{ marginTop: 18, marginBottom: 12 }}>
-          Sponsors<em>.</em>
-        </h1>
-        <p className="lede">
-          Les marques et institutions qui rendent possible un concours
-          indépendant et transparent.
+    <div className="pg">
+      <header className="pg-head">
+        <p className="eyebrow">Partenaires</p>
+        <h1 className="display">Nos partenaires</h1>
+        <p className="pg-lede">
+          Les marques et structures qui soutiennent la Platinum CBD Cup.
         </p>
-      </section>
+      </header>
 
-      {sponsors.length === 0 ? (
-        <div className="card">
-          <Eyebrow>Pas encore de partenaires annoncés</Eyebrow>
-          <p className="lede" style={{ marginTop: 12 }}>
-            Les partenaires de l&apos;édition en cours seront communiqués à
-            l&apos;ouverture officielle.
-          </p>
-          <div style={{ marginTop: 24 }}>
-            <Link href="/contact" className="btn accent">
-              Devenir partenaire <span className="btn-arrow">→</span>
-            </Link>
-          </div>
-        </div>
-      ) : (
-        <div className="grid g-3">
-          {sponsors.map((s) => (
-            <Link
-              key={s.id}
-              href={`/sponsors/${s.id}`}
-              className="card card-hover"
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: 18,
-                textDecoration: "none",
-                color: "inherit",
-              }}
-            >
-              <div
-                style={{
-                  height: 96,
-                  display: "grid",
-                  placeItems: "center",
-                  border: "1px solid var(--line)",
-                  borderRadius: 12,
-                  background: "var(--bg)",
-                  padding: 16,
-                }}
-              >
-                {s.logo ? (
-                  <Image
-                    src={s.logo}
-                    alt={s.name}
-                    width={140}
-                    height={64}
-                    style={{ objectFit: "contain", maxHeight: 64 }}
-                  />
-                ) : (
-                  <span
-                    className="mono fg3"
-                    style={{ fontSize: 11, letterSpacing: ".15em" }}
-                  >
-                    [ {s.name.slice(0, 3).toUpperCase()} ]
-                  </span>
-                )}
-              </div>
-              <div>
-                <div className="mono" style={{ fontSize: 16 }}>{s.name}</div>
-                {s.description && (
-                  <p
+      <section className="pg-section" style={{ paddingTop: 0 }}>
+        {sponsors.length === 0 ? (
+          <div className="notice">Aucun partenaire n&apos;est annoncé pour le moment.</div>
+        ) : (
+          <div className="pg-grid">
+            {sponsors.map((s) => (
+              <Link key={s.id} href={`/sponsors/${s.id}`} className="pg-tile">
+                {s.logo && (
+                  <div
                     style={{
-                      color: "var(--fg-2)",
-                      fontSize: 13,
-                      lineHeight: 1.5,
-                      marginTop: 8,
+                      height: 96,
+                      display: "grid",
+                      placeItems: "center",
+                      borderRadius: 10,
+                      background: "var(--bg)",
+                      padding: 16,
                     }}
                   >
+                    <Image
+                      src={s.logo}
+                      alt={s.name}
+                      width={140}
+                      height={64}
+                      style={{ objectFit: "contain", maxHeight: 64, width: "auto" }}
+                    />
+                  </div>
+                )}
+                <h3>{s.name}</h3>
+                {s.description && (
+                  <p>
                     {s.description.slice(0, 120)}
                     {s.description.length > 120 ? "…" : ""}
                   </p>
                 )}
-              </div>
-              <div style={{ marginTop: "auto" }}>
-                <Pill>Voir le partenaire</Pill>
-              </div>
-            </Link>
-          ))}
+                <span className="pg-link" style={{ marginTop: "auto" }}>
+                  Voir le partenaire
+                </span>
+              </Link>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="pg-section">
+        <div className="pg-section-head">
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, maxWidth: 560 }}>
+            <h2 style={{ margin: 0, fontSize: 26 }}>Devenir partenaire</h2>
+            <p style={{ margin: 0, fontSize: 16, lineHeight: 1.55, color: "var(--fg-2)" }}>
+              Écrivez-nous en choisissant le sujet « Partenariat » dans le
+              formulaire de contact.
+            </p>
+          </div>
+          <Link href="/contact" className="btn accent">
+            Nous contacter
+          </Link>
         </div>
-      )}
+      </section>
     </div>
   );
 }

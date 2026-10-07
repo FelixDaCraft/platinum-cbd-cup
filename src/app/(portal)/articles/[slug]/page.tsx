@@ -5,8 +5,6 @@ import { notFound } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { db } from "~/server/db";
 import * as schema from "~/server/db/schema";
-import { Eyebrow } from "~/components/portal/platinum";
-import { getCategoryColor } from "~/server/db/schema/articles";
 import { baseUrl, imagePartage } from "../../_lib/seo";
 
 interface Props {
@@ -74,6 +72,13 @@ function formatDate(date: Date | null | undefined): string {
   });
 }
 
+/** Les catégories sont souvent saisies en capitales : on les affiche en casse normale. */
+function categoryLabel(category: string): string {
+  if (category !== category.toUpperCase()) return category;
+  const lower = category.toLocaleLowerCase("fr-FR");
+  return lower.charAt(0).toLocaleUpperCase("fr-FR") + lower.slice(1);
+}
+
 /**
  * Renders TipTap JSON content as plain HTML-ish nodes.
  * Best-effort: covers paragraphs, headings, lists, marks (bold/italic/link),
@@ -107,12 +112,7 @@ function RenderTipTap({ content }: { content: unknown }): React.ReactNode {
       else if (m.type === "underline") el = <u>{el}</u>;
       else if (m.type === "link" && m.attrs?.href) {
         el = (
-          <a
-            href={m.attrs.href}
-            style={{ color: "var(--accent)" }}
-            target="_blank"
-            rel="noreferrer"
-          >
+          <a href={m.attrs.href} target="_blank" rel="noreferrer">
             {el}
           </a>
         );
@@ -127,65 +127,20 @@ function RenderTipTap({ content }: { content: unknown }): React.ReactNode {
 
   switch (node.type) {
     case "paragraph":
-      return (
-        <p
-          style={{
-            fontSize: 16,
-            lineHeight: 1.7,
-            color: "var(--fg-2)",
-            margin: "1em 0",
-          }}
-        >
-          {children}
-        </p>
-      );
+      return <p>{children}</p>;
     case "heading": {
+      // Le titre de l'article occupe le h1 : les intertitres commencent à h2.
       const level = Number(node.attrs?.level ?? 2);
-      const sizes = [0, 36, 28, 22, 18, 16, 14];
-      const fontSize = sizes[Math.min(Math.max(level, 1), 6)] ?? 22;
-      return (
-        <div
-          className="mono"
-          style={{
-            fontSize,
-            fontWeight: 400,
-            margin: "1.5em 0 .6em",
-            color: "var(--fg)",
-            letterSpacing: "-.01em",
-          }}
-        >
-          {children}
-        </div>
-      );
+      return level <= 2 ? <h2>{children}</h2> : <h3>{children}</h3>;
     }
     case "bulletList":
-      return (
-        <ul style={{ paddingLeft: 24, margin: "1em 0", color: "var(--fg-2)" }}>
-          {children}
-        </ul>
-      );
+      return <ul>{children}</ul>;
     case "orderedList":
-      return (
-        <ol style={{ paddingLeft: 24, margin: "1em 0", color: "var(--fg-2)" }}>
-          {children}
-        </ol>
-      );
+      return <ol>{children}</ol>;
     case "listItem":
-      return <li style={{ margin: ".4em 0" }}>{children}</li>;
+      return <li>{children}</li>;
     case "blockquote":
-      return (
-        <blockquote
-          style={{
-            borderLeft: "2px solid var(--accent)",
-            paddingLeft: 16,
-            margin: "1.2em 0",
-            color: "var(--fg)",
-            fontStyle: "italic",
-          }}
-        >
-          {children}
-        </blockquote>
-      );
+      return <blockquote>{children}</blockquote>;
     case "horizontalRule":
       return <hr className="hr" />;
     case "image":
@@ -210,13 +165,7 @@ function RenderTipTap({ content }: { content: unknown }): React.ReactNode {
             {...dimensions}
             loading="lazy"
             decoding="async"
-            style={{
-              width: "100%",
-              height: "auto",
-              borderRadius: 10,
-              border: "1px solid var(--line)",
-              margin: "1.5em 0",
-            }}
+            style={{ width: "100%", height: "auto" }}
           />
         );
       }
@@ -235,50 +184,30 @@ export default async function ArticleDetailPage({ params }: Props) {
 
   if (!article || article.status !== "published") notFound();
 
-  const categoryColor =
-    article.categoryColor ??
-    getCategoryColor(article.category) ??
-    "var(--accent)";
-
   return (
-    <article className="page-enter" style={{ maxWidth: 820, margin: "0 auto" }}>
-      <section style={{ paddingTop: 40, paddingBottom: 24 }}>
-        <Link
-          href="/articles"
-          className="mono fg3"
-          style={{
-            fontSize: 11,
-            letterSpacing: ".1em",
-            textTransform: "uppercase",
-            textDecoration: "none",
-          }}
-        >
-          ← Articles
+    <article className="pg pg--narrow">
+      <header className="pg-head">
+        <Link href="/articles" className="pg-link" style={{ fontSize: 15 }}>
+          Tous les articles
         </Link>
-        {article.category && (
-          <div style={{ marginTop: 16 }}>
-            <span
-              className="mono"
-              style={{
-                fontSize: 10,
-                letterSpacing: ".15em",
-                textTransform: "uppercase",
-                padding: "5px 10px",
-                borderRadius: 999,
-                border: `1px solid ${categoryColor}`,
-                color: categoryColor,
-              }}
-            >
-              {article.category}
-            </span>
-          </div>
-        )}
-        <Eyebrow>{formatDate(article.publishedAt)}</Eyebrow>
-        <h1 className="display" style={{ marginTop: 14, marginBottom: 14 }}>
+        <span className="pg-meta">
+          {article.category ? (
+            <>
+              <span style={{ color: "var(--accent-hi)", fontWeight: 600 }}>
+                {categoryLabel(article.category)}
+              </span>
+              {" · "}
+            </>
+          ) : null}
+          <time dateTime={article.publishedAt?.toISOString()}>
+            {formatDate(article.publishedAt)}
+          </time>
+        </span>
+        <h1 className="display" style={{ fontSize: "clamp(34px, 5vw, 56px)", lineHeight: 1.08 }}>
           {article.title}
         </h1>
-        {article.excerpt && <p className="lede">{article.excerpt}</p>}
-      </section>
+        {article.excerpt && <p className="pg-lede">{article.excerpt}</p>}
+      </header>
 
       {article.coverImage && (
         <div
@@ -287,22 +216,21 @@ export default async function ArticleDetailPage({ params }: Props) {
             aspectRatio: "16/9",
             borderRadius: 14,
             overflow: "hidden",
-            border: "1px solid var(--line)",
-            marginBottom: 32,
+            marginBottom: 40,
           }}
         >
           <Image
             src={article.coverImage}
             alt={article.title}
             fill
-            sizes="(max-width: 880px) 100vw, 820px"
+            sizes="(max-width: 880px) 100vw, 760px"
             style={{ objectFit: "cover" }}
             priority
           />
         </div>
       )}
 
-      <div style={{ paddingBottom: 60 }}>
+      <div className="prose">
         <RenderTipTap content={article.content} />
       </div>
     </article>
