@@ -9,7 +9,13 @@
  * Injected via <style dangerouslySetInnerHTML={{__html: platinumCSS}} /> in layout.
  * Selectors live on :root / html / body — NOT scoped — matching the design package exactly.
  */
-export const platinumCSS = `
+import { responsiveCSS as authCSS } from "./responsive/auth";
+import { responsiveCSS as editorialLegalCSS } from "./responsive/editorial-legal";
+import { responsiveCSS as inscriptionCSS } from "./responsive/inscription";
+import { responsiveCSS as palmaresEditionsCSS } from "./responsive/palmares-editions";
+import { responsiveCSS as shellHomeCSS } from "./responsive/shell-home";
+
+const baseCSS = `
 @font-face{
   font-family: "Louize Display";
   src: url("/fonts/LouizeDisplay-BoldItalic.ttf") format("truetype");
@@ -841,3 +847,16 @@ textarea.field-input{ height: auto; min-height: 140px; padding: 12px 14px; line-
   .live-dot{ animation: none !important; }
 }
 `;
+
+/**
+ * Feuille complète du portail : la base, puis les ajustements responsive de
+ * chaque groupe de pages (responsive/*.ts), placés en dernier pour primer.
+ */
+export const platinumCSS = [
+  baseCSS,
+  shellHomeCSS,
+  palmaresEditionsCSS,
+  authCSS,
+  inscriptionCSS,
+  editorialLegalCSS,
+].join("\n");
