@@ -280,8 +280,10 @@ export async function getWebhookVerificationKey(): Promise<string> {
     );
   }
 
+  // API « legacy » en Basic auth : servie par l'hôte du checkout
+  // (www.vivapayments.com), pas par celui de l'API OAuth, qui répond 404.
   const response = await fetch(
-    `${vivaEndpoints().api}/api/messages/config/token`,
+    `${vivaEndpoints().checkout}/api/messages/config/token`,
     {
       method: "GET",
       headers: {
