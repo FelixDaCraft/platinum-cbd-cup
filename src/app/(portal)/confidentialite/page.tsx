@@ -24,7 +24,7 @@ export default function ConfidentialitePage() {
     <LegalPage
       title="Confidentialité"
       lede="Ce que nous collectons, pourquoi, combien de temps nous le gardons, et comment reprendre la main dessus."
-      updatedAt="24 septembre 2026"
+      updatedAt="7 octobre 2026"
     >
       <LegalSection numeral="1" title="Responsable du traitement">
         <P>
@@ -61,7 +61,7 @@ export default function ConfidentialitePage() {
         <P>
           <strong>Jurés.</strong> Nom d&apos;affichage, domaine
           d&apos;expertise, biographie, notes et commentaires rédigés. Finalité :
-          constituer les panels et produire les résultats. Base légale :
+          constituer les jurys et produire les résultats. Base légale :
           exécution du contrat qui nous lie au juré.
         </P>
 
@@ -206,9 +206,10 @@ export default function ConfidentialitePage() {
           l&apos;objet d&apos;une sauvegarde quotidienne.
         </P>
         <P>
-          Les produits sont anonymisés avant notation : le panel ne connaît ni
-          la marque, ni le producteur. Cette séparation est technique, pas
-          seulement organisationnelle.
+          Les produits sont anonymisés avant notation, avec un code différent
+          pour chacun des deux jurys : aucun juré ne connaît ni la marque, ni
+          le producteur. Cette séparation est technique, pas seulement
+          organisationnelle.
         </P>
       </LegalSection>
 

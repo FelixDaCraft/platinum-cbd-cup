@@ -23,7 +23,7 @@ export default function ReglementPage() {
     <LegalPage
       title="Règlement"
       lede="Les conditions de participation à la Platinum CBD Cup. Elles valent conditions générales pour l'inscription des produits."
-      updatedAt="24 septembre 2026"
+      updatedAt="7 octobre 2026"
     >
       <LegalSection numeral="1" title="Objet et organisateur">
         <P>
@@ -130,33 +130,58 @@ export default function ReglementPage() {
 
       <LegalSection numeral="7" title="Anonymisation et évaluation">
         <P>
-          Chaque produit reçoit un code anonyme dès la confirmation de son
-          inscription. Le jury évalue les produits sous ce seul code : il ne
-          connaît ni la marque, ni le producteur, ni le prix. La correspondance
-          entre code et producteur n&apos;est accessible qu&apos;à
-          l&apos;organisation.
+          Chaque produit est évalué par deux jurys distincts : un jury
+          professionnel (producteurs, sommeliers, analystes) et un jury public,
+          composé de consommateurs qui notent les produits à domicile.
         </P>
         <P>
-          L&apos;évaluation est conduite par un panel indépendant, selon les
-          critères et les coefficients propres à chaque catégorie, publiés sur
-          la page de l&apos;édition. La note finale d&apos;un produit est la
-          moyenne pondérée des notes du panel.
+          Dès la confirmation de son inscription, chaque produit reçoit un code
+          anonyme différent pour chacun des deux jurys. Chaque jury évalue les
+          produits sous son seul code : il ne connaît ni la marque, ni le
+          producteur, ni le prix, et ne peut rapprocher un produit de
+          l&apos;évaluation de l&apos;autre jury. La correspondance entre codes
+          et producteur n&apos;est accessible qu&apos;à l&apos;organisation.
         </P>
         <P>
-          En cas d&apos;égalité, le classement retient le produit ayant reçu le
-          plus grand nombre d&apos;évaluations ; à défaut, le produit inscrit le
-          premier. Les décisions du jury sont souveraines et ne sont pas
-          motivées individuellement.
+          Les jurés notent selon les critères et les coefficients propres à
+          chaque catégorie, publiés sur la page de l&apos;édition. Pour chaque
+          juré, la note d&apos;un produit est la moyenne de ses notes par
+          critère, pondérée par les coefficients ; la note finale du produit
+          auprès d&apos;un jury est la moyenne des notes de ses jurés. Chaque
+          jury produit ainsi sa propre note et son propre classement par
+          catégorie.
+        </P>
+        <P>
+          En cas d&apos;égalité au sein d&apos;un même jury, le classement
+          retient le produit ayant reçu le plus grand nombre d&apos;évaluations
+          de ce jury ; à défaut, le produit inscrit le premier. Les décisions
+          des jurys sont souveraines et ne sont pas motivées individuellement.
         </P>
       </LegalSection>
 
       <LegalSection numeral="8" title="Résultats et publication">
         <P>
           Les résultats sont publiés sur ce site à la date annoncée pour
-          l&apos;édition. Sont rendus publics : le nom du producteur, la marque,
-          le nom du produit, sa catégorie, son classement et la distinction
-          obtenue. Le détail des notes par critère et les commentaires du jury
-          sont communiqués au seul participant concerné.
+          l&apos;édition, sous la forme de deux palmarès :
+        </P>
+        <List>
+          <li>
+            le palmarès du jury professionnel, qui établit un classement par
+            catégorie et ne décerne pas de label ;
+          </li>
+          <li>
+            le palmarès du jury public, qui décerne le Prix du public au
+            premier de chaque catégorie, et les labels Or, Argent ou Bronze
+            selon la note obtenue, d&apos;après des seuils fixés pour chaque
+            édition et publiés avec ses résultats.
+          </li>
+        </List>
+        <P>
+          Sont rendus publics : le nom du producteur, la marque, le nom du
+          produit, sa catégorie, son classement et, pour le jury public, la
+          distinction obtenue. Le détail des notes par critère et les
+          commentaires des jurys sont communiqués au seul participant
+          concerné.
         </P>
         <P>
           Le palmarès a vocation à rester consultable durablement, y compris
@@ -173,12 +198,15 @@ export default function ReglementPage() {
         <List>
           <li>
             la mention doit indiquer l&apos;année de l&apos;édition, la
-            catégorie et le produit exact récompensé ;
+            catégorie, le produit exact récompensé et le jury qui l&apos;a
+            décernée ou établi le classement (« Jury public » ou « Jury
+            professionnel ») ;
           </li>
           <li>
             elle ne peut être étendue à un autre produit, ni à une autre
             gamme, ni laisser croire à une récompense plus élevée que celle
-            obtenue ;
+            obtenue, ni attribuer à un jury une distinction décernée par
+            l&apos;autre ;
           </li>
           <li>
             le visuel de la distinction ne peut être ni modifié, ni recoloré, ni
