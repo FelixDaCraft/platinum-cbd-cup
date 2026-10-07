@@ -10,6 +10,7 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import Link from "next/link";
+import { formatPanelCodes } from "~/lib/panel-codes";
 
 import { Button } from "~/components/ui/button";
 import { Badge } from "~/components/ui/badge";
@@ -41,6 +42,13 @@ export default function ProductReceiptPage() {
   const { data: productDetails } = api.product.getProductForReceipt.useQuery(
     { productId, cupId },
     { enabled: !!productData }
+  );
+
+  // À la réception, l'organisation étiquette les échantillons des deux jurys :
+  // code pro / code public.
+  const receiptCodes = formatPanelCodes(
+    productDetails?.anonymousCodePro,
+    productDetails?.anonymousCodePublic
   );
 
   const updateStatusMutation = api.product.updateStatus.useMutation({
@@ -97,7 +105,7 @@ export default function ProductReceiptPage() {
           <div className="p-6 text-center space-y-4">
             <div className="p-4 bg-muted rounded-sm">
               <p className="n-font-data text-2xl font-bold">
-                {productData?.anonymousCode ?? "N/A"}
+                {receiptCodes ?? "N/A"}
               </p>
               <p className="n-label text-sm text-muted-foreground mt-1">
                 {productData?.productName}
@@ -134,7 +142,7 @@ export default function ProductReceiptPage() {
           <div className="p-6 text-center space-y-4">
             <div className="p-4 bg-muted rounded-sm">
               <p className="n-font-data text-2xl font-bold">
-                {productData?.anonymousCode ?? "N/A"}
+                {receiptCodes ?? "N/A"}
               </p>
               <p className="n-label text-sm text-muted-foreground mt-1">
                 {productData?.productName}
@@ -194,7 +202,7 @@ export default function ProductReceiptPage() {
             {/* Product Info */}
             <div className="p-4 bg-muted rounded-sm text-center">
               <p className="n-font-data text-3xl font-bold">
-                {productData?.anonymousCode ?? "N/A"}
+                {receiptCodes ?? "N/A"}
               </p>
               <p className="n-label text-sm text-muted-foreground mt-2">
                 {productData?.productName}

@@ -10,13 +10,15 @@ import { EditAnonymousCodeDialog } from "./edit-anonymous-code-dialog";
 import { EditProductNameDialog } from "./edit-product-name-dialog";
 import { LabAnalysisDialog } from "./lab-analysis-dialog";
 import { api } from "~/trpc/react";
+import { formatPanelCodes } from "~/lib/panel-codes";
 
 export interface ProductCardProps {
   id: string;
   name: string;
   description: string | null;
   status: string;
-  anonymousCode: string | null;
+  anonymousCodePro: string | null;
+  anonymousCodePublic: string | null;
   excludedFromResults?: boolean;
   producer: {
     id: string;
@@ -56,10 +58,12 @@ export function ProductCard({
   name,
   description,
   status,
-  anonymousCode,
+  anonymousCodePro,
+  anonymousCodePublic,
   excludedFromResults = false,
   producer,
 }: ProductCardProps) {
+  const anonymousCode = formatPanelCodes(anonymousCodePro, anonymousCodePublic);
   const statusInfo = statusConfig[status] ?? {
     label: status,
     color: "var(--n-text-secondary)",
@@ -94,26 +98,45 @@ export function ProductCard({
           <div className="min-w-0 flex-1">
             {/* Anonymous code + product name */}
             <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1">
-                {anonymousCode && (
+              {/* Un code par jury : pro, puis public */}
+              {(
+                [
+                  ["pro", "PRO", anonymousCodePro],
+                  ["public", "PUB", anonymousCodePublic],
+                ] as const
+              ).map(([panel, tag, code]) => (
+                <div key={panel} className="flex items-center gap-1">
                   <span
                     style={{
                       fontFamily: "'Space Mono', monospace",
-                      fontSize: "13px",
-                      fontWeight: 700,
-                      color: "var(--n-accent)",
-                      letterSpacing: "0.04em",
+                      fontSize: "10px",
+                      letterSpacing: "0.06em",
+                      color: "var(--n-text-disabled)",
                     }}
                   >
-                    {anonymousCode}
+                    {tag}
                   </span>
-                )}
-                <EditAnonymousCodeDialog
-                  productId={id}
-                  productName={name}
-                  anonymousCode={anonymousCode}
-                />
-              </div>
+                  {code && (
+                    <span
+                      style={{
+                        fontFamily: "'Space Mono', monospace",
+                        fontSize: "13px",
+                        fontWeight: 700,
+                        color: "var(--n-accent)",
+                        letterSpacing: "0.04em",
+                      }}
+                    >
+                      {code}
+                    </span>
+                  )}
+                  <EditAnonymousCodeDialog
+                    productId={id}
+                    productName={name}
+                    panel={panel}
+                    anonymousCode={code}
+                  />
+                </div>
+              ))}
               <div className="group flex items-center gap-1 min-w-0">
                 <h3
                   className="truncate"

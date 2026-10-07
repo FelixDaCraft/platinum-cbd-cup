@@ -11,6 +11,8 @@ import {
   CollapsibleTrigger,
 } from "~/components/ui/collapsible";
 import { getMaxScoreForScale } from "~/lib/validations/labels";
+import { PanelToggle } from "~/components/features/results";
+import type { JuryPanel } from "~/lib/enums";
 
 interface LiveLeaderboardProps {
   cupId: string;
@@ -62,9 +64,11 @@ export function LiveLeaderboard({ cupId }: LiveLeaderboardProps) {
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(
     new Set()
   );
+  // Un classement par jury : pro et public ne se mélangent pas.
+  const [panel, setPanel] = useState<JuryPanel>("public");
 
   const { data, isLoading, error } = api.scoring.getLiveScores.useQuery(
-    { cupId, limit: 5 },
+    { cupId, limit: 5, panel },
     {
       refetchInterval: 30000,
     }
@@ -218,6 +222,7 @@ export function LiveLeaderboard({ cupId }: LiveLeaderboardProps) {
             </p>
           </div>
         </div>
+        <PanelToggle value={panel} onChange={setPanel} />
         {data.cupStatus === "rating" && (
           <span
             className="n-label flex items-center gap-1.5"

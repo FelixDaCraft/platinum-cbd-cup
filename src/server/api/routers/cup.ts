@@ -26,6 +26,8 @@ import { isVivaConfigured } from "~/lib/viva";
 import { eq, and, count, inArray, asc, isNotNull } from "drizzle-orm";
 import { computeResults } from "~/server/api/routers/results";
 import { getCategoryOccupancy } from "~/server/services/category-quota.service";
+import { juryPanelEnum } from "~/lib/enums";
+import { panelColumns, rankFor, scoreFor } from "~/server/db/panel-columns";
 
 const requireCup = (
   ctx: { db: typeof import("~/server/db").db },
@@ -92,7 +94,6 @@ export const cupRouter = createTRPCRouter({
         .values({
           id: cupId,
           name: input.name,
-          type: input.type,
           description: input.description ?? null,
           ratingScale: input.ratingScale ?? "0-20",
           status: "draft",
@@ -593,7 +594,6 @@ export const cupRouter = createTRPCRouter({
           id: cup.id,
           name: cup.name,
           description: cup.description,
-          type: cup.type,
           status: cup.status,
           ratingScale: cup.ratingScale,
           ratingScaleValues: ratingScale,
@@ -635,9 +635,8 @@ export const cupRouter = createTRPCRouter({
         cupId: cup.id,
         cupName: cup.name,
         status: cup.status,
-        // "public" (public-jury) cups use a fixed restricted public display;
-        // "pro" cups keep the organizer-configured visibility below.
-        type: cup.type,
+        // `resultsVisibility` règle l'affichage public du classement PRO ; le
+        // classement public suit une règle fixe (podium + labels).
         resultsPublishedAt: cup.resultsPublishedAt,
         resultsVisibility: cup.resultsVisibility ?? "labels",
         canPublishResults: cup.status === "completed",
@@ -741,9 +740,11 @@ export const cupRouter = createTRPCRouter({
       z.object({
         cupId: z.string().min(1, "Cup ID requis"),
         categoryId: z.string().optional(),
+        panel: z.enum(juryPanelEnum).default("public"),
       })
     )
     .query(async ({ ctx, input }) => {
+      const panel = input.panel;
       const cup = await ctx.db.query.cups.findFirst({
         where: (cups, { eq: eqFn }) => eqFn(cups.id, input.cupId),
         with: {
@@ -818,26 +819,31 @@ export const cupRouter = createTRPCRouter({
             },
           },
         },
-        orderBy: (prod) => [asc(prod.categoryRank)],
+        orderBy: () => [asc(panelColumns(panel).categoryRank)],
       });
 
-      const visibility = cup.resultsVisibility ?? "labels";
+      // Classement public : règle fixe, podium et labels. Classement pro :
+      // visibilité réglée par l'organisateur, sans labels (le jury pro n'en
+      // décerne pas), donc « labels » s'y réduit au podium.
+      const visibility =
+        panel === "public" ? "labels_and_podium" : (cup.resultsVisibility ?? "labels");
+      const labelOf = (product: typeof allProducts[number]) =>
+        panel === "public" ? product.labelId : null;
 
       const filterByVisibility = (product: typeof allProducts[number]): boolean => {
+        const rank = rankFor(product, panel);
+        const isOnPodium = rank !== null && rank <= 3;
         switch (visibility) {
           case "podium":
-            return product.categoryRank !== null && product.categoryRank <= 3;
+            return isOnPodium;
           case "labels":
-            return product.labelId !== null;
-          case "labels_and_podium": {
-            const isOnPodium = product.categoryRank !== null && product.categoryRank <= 3;
-            const hasLabel = product.labelId !== null;
-            return isOnPodium || hasLabel;
-          }
+            return panel === "pro" ? isOnPodium : labelOf(product) !== null;
+          case "labels_and_podium":
+            return isOnPodium || labelOf(product) !== null;
           case "all":
-            return product.finalScore !== null;
+            return scoreFor(product, panel) !== null;
           default:
-            return product.labelId !== null;
+            return labelOf(product) !== null;
         }
       };
 
@@ -850,9 +856,9 @@ export const cupRouter = createTRPCRouter({
             id: p.id,
             name: p.name,
             producerName: p.registration.producer.brandName || p.registration.producer.companyName,
-            finalScore: p.finalScore ? parseFloat(p.finalScore) : null,
-            categoryRank: p.categoryRank,
-            label: p.label
+            finalScore: scoreFor(p, panel),
+            categoryRank: rankFor(p, panel),
+            label: panel === "public" && p.label
               ? { id: p.label.id, name: p.label.name }
               : null,
           }));
@@ -884,7 +890,8 @@ export const cupRouter = createTRPCRouter({
       return {
         published: true,
         publishedAt: cup.resultsPublishedAt,
-        visibility: cup.resultsVisibility,
+        panel,
+        visibility,
         categories: resultsByCategory,
         labels: sortedLabels,
       };
@@ -950,7 +957,7 @@ export const cupRouter = createTRPCRouter({
         .where(
           and(
             inArray(schema.categories.cupId, ratingCupIds),
-            isNotNull(schema.products.anonymousCode)
+            isNotNull(schema.products.anonymousCodePro)
           )
         )
         .groupBy(schema.categories.cupId);
@@ -1014,7 +1021,6 @@ export const cupRouter = createTRPCRouter({
       return {
         id: cup.id,
         name: cup.name,
-        type: cup.type,
         status: cup.status,
         createdAt: cup.createdAt,
         confirmedCount: confirmedRegistrations.length,

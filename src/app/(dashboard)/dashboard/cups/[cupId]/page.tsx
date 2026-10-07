@@ -357,7 +357,7 @@ export default function CupDetailPage() {
                   margin: "0 0 4px 0",
                 }}
               >
-                TYPE DE CUP
+                JURYS
               </p>
               <span
                 className="n-font-body"
@@ -366,7 +366,7 @@ export default function CupDetailPage() {
                   color: "var(--n-text-primary)",
                 }}
               >
-                {cup.type === "public" ? "Cup Publique" : "Cup Pro"}
+                Jury pro + jury public
               </span>
             </div>
             <span
@@ -382,7 +382,7 @@ export default function CupDetailPage() {
                 flexShrink: 0,
               }}
             >
-              {cup.type === "public" ? "PUBLIQUE" : "PRO"}
+              PRO · PUBLIC
             </span>
           </div>
         </div>

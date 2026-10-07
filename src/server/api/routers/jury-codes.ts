@@ -17,7 +17,7 @@ import {
   rateLimitMiddleware,
 } from "~/server/api/trpc";
 import * as schema from "~/server/db/schema";
-import { assertProducerMayJudge } from "~/server/api/helpers/jury";
+import { assertMayJoinPanel } from "~/server/api/helpers/jury";
 
 /**
  * Generate a short readable code like "FLR-7X9-KM2"
@@ -103,13 +103,6 @@ export const juryCodesRouter = createTRPCRouter({
         throw new TRPCError({
           code: "NOT_FOUND",
           message: "Cup non trouvée",
-        });
-      }
-
-      if (cup.type !== "public") {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "Les codes d'invitation ne sont disponibles que pour les cups publiques",
         });
       }
 
@@ -268,7 +261,7 @@ export const juryCodesRouter = createTRPCRouter({
         where: eq(schema.juryInvitationCodes.code, normalizeCode(input.code)),
         with: {
           cup: {
-            columns: { id: true, name: true, type: true, ratingEndAt: true },
+            columns: { id: true, name: true, ratingEndAt: true },
           },
           categories: {
             with: {
@@ -370,7 +363,8 @@ export const juryCodesRouter = createTRPCRouter({
       // Conflit d'intérêts, par le garde-fou partagé : la règle dépend du type
       // d'édition, et cette copie en ligne ne la connaissait pas — elle
       // bloquait les jurys pro autant que les publics.
-      await assertProducerMayJudge(ctx.db, ctx.userId, invitationCode.cupId);
+      // Un code d'invitation fait entrer dans le panel public.
+      await assertMayJoinPanel(ctx.db, ctx.userId, invitationCode.cupId, "public");
 
       const existingCupJury = await ctx.db.query.cupJuries.findFirst({
         where: and(
@@ -454,6 +448,7 @@ export const juryCodesRouter = createTRPCRouter({
             cupId: invitationCode.cupId,
             userId: ctx.userId,
             juryProfileId: juryProfileId,
+            panel: "public",
             isActive: true,
           });
 

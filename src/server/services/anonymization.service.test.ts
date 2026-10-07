@@ -46,7 +46,7 @@ describe("Anonymization Service", () => {
     vi.clearAllMocks();
   });
 
-  describe("generateAnonymousCode", () => {
+  describe("generateAnonymousCodes", () => {
     it("should use first letter of each word as prefix", async () => {
       const { db } = await import("~/server/db");
 
@@ -61,8 +61,12 @@ describe("Anonymization Service", () => {
       });
       vi.mocked(db.select).mockReturnValue({ from: mockFrom } as never);
 
-      const { generateAnonymousCode } = await import("./anonymization.service");
-      const code = await generateAnonymousCode(db as never, "cup-1", "cat-1");
+      const { generateAnonymousCodes } = await import("./anonymization.service");
+      const codes = await generateAnonymousCodes(db as never, "cat-1");
+      const code = codes.pro;
+      // Un code par jury, tirés séparément et jamais identiques.
+      expect(codes.public).not.toBe(codes.pro);
+      expect(codes.public.replace(/\d+$/, "")).toBe(code.replace(/\d+$/, ""));
 
       expect(code).toMatch(/^CF\d+$/);
     });
@@ -79,8 +83,12 @@ describe("Anonymization Service", () => {
       });
       vi.mocked(db.select).mockReturnValue({ from: mockFrom } as never);
 
-      const { generateAnonymousCode } = await import("./anonymization.service");
-      const code = await generateAnonymousCode(db as never, "cup-1", "cat-1");
+      const { generateAnonymousCodes } = await import("./anonymization.service");
+      const codes = await generateAnonymousCodes(db as never, "cat-1");
+      const code = codes.pro;
+      // Un code par jury, tirés séparément et jamais identiques.
+      expect(codes.public).not.toBe(codes.pro);
+      expect(codes.public.replace(/\d+$/, "")).toBe(code.replace(/\d+$/, ""));
 
       const num = parseInt(code.replace(/^[A-Z]+/, ""), 10);
       expect(num).toBeGreaterThanOrEqual(1);
@@ -100,8 +108,12 @@ describe("Anonymization Service", () => {
       });
       vi.mocked(db.select).mockReturnValue({ from: mockFrom } as never);
 
-      const { generateAnonymousCode } = await import("./anonymization.service");
-      const code = await generateAnonymousCode(db as never, "cup-1", "cat-1");
+      const { generateAnonymousCodes } = await import("./anonymization.service");
+      const codes = await generateAnonymousCodes(db as never, "cat-1");
+      const code = codes.pro;
+      // Un code par jury, tirés séparément et jamais identiques.
+      expect(codes.public).not.toBe(codes.pro);
+      expect(codes.public.replace(/\d+$/, "")).toBe(code.replace(/\d+$/, ""));
 
       expect(code).toMatch(/^EPA\d+$/);
     });
@@ -119,8 +131,12 @@ describe("Anonymization Service", () => {
       });
       vi.mocked(db.select).mockReturnValue({ from: mockFrom } as never);
 
-      const { generateAnonymousCode } = await import("./anonymization.service");
-      const code = await generateAnonymousCode(db as never, "cup-1", "cat-1");
+      const { generateAnonymousCodes } = await import("./anonymization.service");
+      const codes = await generateAnonymousCodes(db as never, "cat-1");
+      const code = codes.pro;
+      // Un code par jury, tirés séparément et jamais identiques.
+      expect(codes.public).not.toBe(codes.pro);
+      expect(codes.public.replace(/\d+$/, "")).toBe(code.replace(/\d+$/, ""));
 
       expect(code).toMatch(/^R\d+$/);
     });
@@ -138,8 +154,12 @@ describe("Anonymization Service", () => {
       });
       vi.mocked(db.select).mockReturnValue({ from: mockFrom } as never);
 
-      const { generateAnonymousCode } = await import("./anonymization.service");
-      const code = await generateAnonymousCode(db as never, "cup-1", "cat-1");
+      const { generateAnonymousCodes } = await import("./anonymization.service");
+      const codes = await generateAnonymousCodes(db as never, "cat-1");
+      const code = codes.pro;
+      // Un code par jury, tirés séparément et jamais identiques.
+      expect(codes.public).not.toBe(codes.pro);
+      expect(codes.public.replace(/\d+$/, "")).toBe(code.replace(/\d+$/, ""));
 
       expect(code).toMatch(/^CE\d+$/);
     });
@@ -154,8 +174,12 @@ describe("Anonymization Service", () => {
       });
       vi.mocked(db.select).mockReturnValue({ from: mockFrom } as never);
 
-      const { generateAnonymousCode } = await import("./anonymization.service");
-      const code = await generateAnonymousCode(db as never, "cup-1", "cat-1");
+      const { generateAnonymousCodes } = await import("./anonymization.service");
+      const codes = await generateAnonymousCodes(db as never, "cat-1");
+      const code = codes.pro;
+      // Un code par jury, tirés séparément et jamais identiques.
+      expect(codes.public).not.toBe(codes.pro);
+      expect(codes.public.replace(/\d+$/, "")).toBe(code.replace(/\d+$/, ""));
 
       expect(code).toMatch(/^X\d+$/);
     });
@@ -168,16 +192,22 @@ describe("Anonymization Service", () => {
       } as never);
 
       // Mock all codes F1 through F100 as taken
-      const existingCodes = Array.from({ length: 100 }, (_, i) => ({
-        code: `F${i + 1}`,
+      // Codes pris, tous panels confondus : la moitié côté pro, l'autre côté public.
+      const existingCodes = Array.from({ length: 50 }, (_, i) => ({
+        pro: `F${i + 1}`,
+        public: `F${i + 51}`,
       }));
       const mockFrom = vi.fn().mockReturnValue({
         where: vi.fn().mockResolvedValue(existingCodes),
       });
       vi.mocked(db.select).mockReturnValue({ from: mockFrom } as never);
 
-      const { generateAnonymousCode } = await import("./anonymization.service");
-      const code = await generateAnonymousCode(db as never, "cup-1", "cat-1");
+      const { generateAnonymousCodes } = await import("./anonymization.service");
+      const codes = await generateAnonymousCodes(db as never, "cat-1");
+      const code = codes.pro;
+      // Un code par jury, tirés séparément et jamais identiques.
+      expect(codes.public).not.toBe(codes.pro);
+      expect(codes.public.replace(/\d+$/, "")).toBe(code.replace(/\d+$/, ""));
 
       // La plage s'élargit au-delà de 100, mais le tirage reste aléatoire :
       // un repli séquentiel (101, 102, …) révélerait l'ordre de confirmation.
@@ -185,6 +215,10 @@ describe("Anonymization Service", () => {
       const picked = Number(code.slice(1));
       expect(picked).toBeGreaterThan(100);
       expect(picked).toBeLessThanOrEqual(202);
+      // Le second tirage tient compte du premier : plage élargie d'autant.
+      const pickedPublic = Number(codes.public.slice(1));
+      expect(pickedPublic).toBeGreaterThan(100);
+      expect(pickedPublic).toBeLessThanOrEqual(204);
     });
   });
 
@@ -196,8 +230,8 @@ describe("Anonymization Service", () => {
         id: "reg-1",
         cupId: "cup-1",
         products: [
-          { id: "prod-1", categoryId: "cat-1", anonymousCode: null },
-          { id: "prod-2", categoryId: "cat-1", anonymousCode: null },
+          { id: "prod-1", categoryId: "cat-1", anonymousCodePro: null, anonymousCodePublic: null },
+          { id: "prod-2", categoryId: "cat-1", anonymousCodePro: null, anonymousCodePublic: null },
         ],
       } as never);
 
@@ -218,7 +252,7 @@ describe("Anonymization Service", () => {
             return Promise.resolve([]);
           }
           // After first product is assigned, return that code as existing
-          return Promise.resolve([{ code: "CF42" }]);
+          return Promise.resolve([{ pro: "CF42", public: "CF7" }]);
         }),
       });
       vi.mocked(db.select).mockReturnValue({ from: mockFrom } as never);
@@ -228,9 +262,19 @@ describe("Anonymization Service", () => {
 
       expect(result).toHaveLength(2);
       expect(result[0]!.productId).toBe("prod-1");
-      expect(result[0]!.anonymousCode).toMatch(/^CF\d+$/);
+      expect(result[0]!.codes.pro).toMatch(/^CF\d+$/);
+      expect(result[0]!.codes.public).toMatch(/^CF\d+$/);
+      expect(result[0]!.codes.public).not.toBe(result[0]!.codes.pro);
       expect(result[1]!.productId).toBe("prod-2");
-      expect(result[1]!.anonymousCode).toMatch(/^CF\d+$/);
+      expect(result[1]!.codes.pro).not.toBe("CF42");
+      expect(result[1]!.codes.public).not.toBe("CF7");
+      // Les deux codes sont écrits ensemble.
+      expect(mockSet).toHaveBeenCalledWith(
+        expect.objectContaining({
+          anonymousCodePro: expect.stringMatching(/^CF\d+$/),
+          anonymousCodePublic: expect.stringMatching(/^CF\d+$/),
+        })
+      );
       expect(db.update).toHaveBeenCalledTimes(2);
     });
 
@@ -241,8 +285,8 @@ describe("Anonymization Service", () => {
         id: "reg-1",
         cupId: "cup-1",
         products: [
-          { id: "prod-1", categoryId: "cat-1", anonymousCode: "CF42" },
-          { id: "prod-2", categoryId: "cat-1", anonymousCode: null },
+          { id: "prod-1", categoryId: "cat-1", anonymousCodePro: "CF42", anonymousCodePublic: "CF7" },
+          { id: "prod-2", categoryId: "cat-1", anonymousCodePro: null, anonymousCodePublic: null },
         ],
       } as never);
 
@@ -255,7 +299,7 @@ describe("Anonymization Service", () => {
       vi.mocked(db.update).mockReturnValue({ set: mockSet } as never);
 
       const mockFrom = vi.fn().mockReturnValue({
-        where: vi.fn().mockResolvedValue([{ code: "CF42" }]),
+        where: vi.fn().mockResolvedValue([{ pro: "CF42", public: "CF7" }]),
       });
       vi.mocked(db.select).mockReturnValue({ from: mockFrom } as never);
 

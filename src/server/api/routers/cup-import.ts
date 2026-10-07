@@ -13,7 +13,7 @@ import type { db as Database } from "~/server/db";
 import * as schema from "~/server/db/schema";
 import { generateId } from "~/server/db/schema/id";
 import { sendBulkInvitations } from "~/server/services/jury-invitation.service";
-import { generateAnonymousCode as generateAnonymousCodeFromService } from "~/server/services/anonymization.service";
+import { generateAnonymousCodes } from "~/server/services/anonymization.service";
 
 /** Ligne d'import rejetée, renvoyée au client pour reprise manuelle. */
 interface ImportFailure {
@@ -709,9 +709,8 @@ export const cupImportRouter = createTRPCRouter({
               category = newCat;
             }
 
-            const anonymousCode = await generateAnonymousCodeFromService(
+            const codes = await generateAnonymousCodes(
               tx as unknown as typeof ctx.db,
-              cup.id,
               category.id
             );
 
@@ -727,7 +726,8 @@ export const cupImportRouter = createTRPCRouter({
               // montant que le producteur a déjà payé ailleurs.
               priceAtRegistration: 0,
               status: "pending",
-              anonymousCode,
+              anonymousCodePro: codes.pro,
+              anonymousCodePublic: codes.public,
             });
 
             return knownCategory ? null : category;

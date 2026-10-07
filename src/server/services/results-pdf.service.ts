@@ -21,6 +21,8 @@ import * as schema from "~/server/db/schema";
 import { formatScoreForScale, getMaxScoreForScale } from "~/lib/validations/labels";
 import { formatTerpeneAroma } from "~/lib/lab-analysis/terpene-sensory";
 import { weightedAverageOrNull } from "./weighted-score";
+import { JURY_PANEL_LABELS, juryPanelEnum, type JuryPanel } from "~/lib/enums";
+import { codeFor, panelColumns, rankFor, scoreFor } from "~/server/db/panel-columns";
 import path from "path";
 import { existsSync } from "fs";
 
@@ -281,6 +283,9 @@ export interface ProductResultData {
   productId: string;
   productName: string;
   categoryName: string;
+  /** Panel de jury dont ce bloc présente le classement. */
+  panel: JuryPanel;
+  /** Code anonyme du produit dans ce panel. */
   anonymousCode: string | null;
   finalScore: number | null;
   categoryRank: number | null;
@@ -370,7 +375,7 @@ function createProductPage(
 
   return React.createElement(
     Page,
-    { key: product.productId, size: "A4", style: styles.page },
+    { key: `${product.productId}-${product.panel}`, size: "A4", style: styles.page },
     // Header
     React.createElement(
       View,
@@ -397,7 +402,11 @@ function createProductPage(
         View,
         null,
         React.createElement(Text, { style: styles.cupTitle }, cupName),
-        React.createElement(Text, { style: styles.cupSubtitle }, "Synthèse des résultats")
+        React.createElement(
+          Text,
+          { style: styles.cupSubtitle },
+          `Synthèse des résultats — ${JURY_PANEL_LABELS[product.panel]}`
+        )
       )
     ),
     // Intro text (compact)
@@ -1385,10 +1394,13 @@ function computeWeightedAvg(
 }
 
 /**
- * Get product result data for PDF generation
+ * Résultats d'un produit dans UN panel de jury, pour le PDF et les écrans
+ * producteur. Toutes les moyennes (produit, catégorie, rangs de repli) ne
+ * portent que sur les notes des jurés de ce panel.
  */
 export async function getProductResultsForPdf(
-  productId: string
+  productId: string,
+  panel: JuryPanel
 ): Promise<ProductResultData | null> {
   // Get product with all related data
   const product = await db.query.products.findFirst({
@@ -1414,6 +1426,12 @@ export async function getProductResultsForPdf(
 
   const cup = product.registration.cup;
 
+  // Jointure qui restreint une note aux jurés du panel demandé.
+  const inPanel = and(
+    eq(schema.productRatings.juryId, schema.cupJuries.id),
+    eq(schema.cupJuries.panel, panel)
+  )!;
+
   // Load lab analysis (may be null) for the 2nd PDF page.
   const labAnalysisRow = await db.query.labAnalyses.findFirst({
     where: eq(schema.labAnalyses.productId, productId),
@@ -1437,6 +1455,7 @@ export async function getProductResultsForPdf(
         schema.productRatings,
         eq(schema.criterionScores.productRatingId, schema.productRatings.id)
       )
+      .innerJoin(schema.cupJuries, inPanel)
       .where(
         and(
           eq(schema.productRatings.productId, productId),
@@ -1454,6 +1473,7 @@ export async function getProductResultsForPdf(
         schema.productRatings,
         eq(schema.criterionScores.productRatingId, schema.productRatings.id)
       )
+      .innerJoin(schema.cupJuries, inPanel)
       .innerJoin(schema.products, eq(schema.productRatings.productId, schema.products.id))
       .innerJoin(
         schema.registrations,
@@ -1478,13 +1498,14 @@ export async function getProductResultsForPdf(
         and(
           eq(schema.products.categoryId, product.categoryId),
           eq(schema.registrations.cupId, cup.id),
-          isNotNull(schema.products.anonymousCode)
+          isNotNull(schema.products.anonymousCodePro)
         )
       ),
     // Jury comments
     db
       .select({ comment: schema.productRatings.comment })
       .from(schema.productRatings)
+      .innerJoin(schema.cupJuries, inPanel)
       .where(
         and(
           eq(schema.productRatings.productId, productId),
@@ -1536,14 +1557,12 @@ export async function getProductResultsForPdf(
 
   // --- Calculate finalScore on the fly ---
   const calculatedFinalScore = computeWeightedAvg(criteriaScores);
-  const finalScore = product.finalScore
-    ? parseFloat(product.finalScore)
-    : calculatedFinalScore;
+  const finalScore = scoreFor(product, panel) ?? calculatedFinalScore;
 
   const totalInCategory = siblingProductIds.length > 0 ? siblingProductIds.length : 1;
 
   // Compute rank: batch-fetch ALL criterion scores for ALL siblings in one query
-  let categoryRank: number | null = product.categoryRank ?? null;
+  let categoryRank: number | null = rankFor(product, panel);
   if (categoryRank === null && finalScore !== null && siblingProductIds.length > 1) {
     const siblingIds = siblingProductIds.map((s) => s.id);
 
@@ -1559,6 +1578,7 @@ export async function getProductResultsForPdf(
         schema.productRatings,
         eq(schema.criterionScores.productRatingId, schema.productRatings.id)
       )
+      .innerJoin(schema.cupJuries, inPanel)
       .where(
         and(
           sql`${schema.productRatings.productId} IN ${siblingIds}`,
@@ -1638,7 +1658,7 @@ export async function getProductResultsForPdf(
     const siblingAnalyses = await db
       .select({
         productId: schema.labAnalyses.productId,
-        anonymousCode: schema.products.anonymousCode,
+        anonymousCode: panelColumns(panel).anonymousCode,
         terpenesTotal: schema.labAnalyses.terpenesTotal,
         computedTerpeneSum: schema.labAnalyses.computedTerpeneSum,
       })
@@ -1718,13 +1738,15 @@ export async function getProductResultsForPdf(
     productId: product.id,
     productName: product.name,
     categoryName: product.category.name,
-    anonymousCode: product.anonymousCode,
+    panel,
+    anonymousCode: codeFor(product, panel),
     finalScore,
     categoryRank,
     totalInCategory,
     percentile,
     disqualified: product.disqualified,
-    label: product.disqualified
+    // Le label est décerné par le jury public : il ne figure que sur son bloc.
+    label: product.disqualified || panel !== "public"
       ? null
       : product.label
       ? {
@@ -1739,6 +1761,48 @@ export async function getProductResultsForPdf(
   };
 }
 
+/**
+ * Résultats d'un produit pour chaque panel où il a été noté, panel pro
+ * d'abord. L'analyse labo ne dépend pas du panel : elle n'est gardée que sur
+ * le premier bloc, pour ne pas imprimer deux fois la même page.
+ */
+export async function getProductResultsForAllPanels(
+  productId: string
+): Promise<ProductResultData[]> {
+  const product = await db.query.products.findFirst({
+    where: eq(schema.products.id, productId),
+    columns: { id: true, finalScorePro: true, finalScorePublic: true },
+  });
+  if (!product) return [];
+
+  // Panels où le produit a un résultat publié ; à défaut (résultats pas
+  // encore calculés), ceux où au moins un juré a déposé une note.
+  let panels = juryPanelEnum.filter((panel) => scoreFor(product, panel) !== null);
+  if (panels.length === 0) {
+    const rated = await db
+      .selectDistinct({ panel: schema.cupJuries.panel })
+      .from(schema.productRatings)
+      .innerJoin(schema.cupJuries, eq(schema.productRatings.juryId, schema.cupJuries.id))
+      .where(
+        and(
+          eq(schema.productRatings.productId, productId),
+          isNotNull(schema.productRatings.submittedAt)
+        )
+      );
+    const ratedPanels = new Set(rated.map((r) => r.panel));
+    panels = juryPanelEnum.filter((panel) => ratedPanels.has(panel));
+  }
+
+  const results: ProductResultData[] = [];
+  for (const panel of panels) {
+    const data = await getProductResultsForPdf(productId, panel);
+    if (data) {
+      results.push(results.length === 0 ? data : { ...data, labAnalysis: null });
+    }
+  }
+  return results;
+}
+
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
@@ -1749,7 +1813,8 @@ function round2(n: number): number {
 export async function generateProductSynthesisPdf(
   productId: string
 ): Promise<{ buffer: Buffer; filename: string }> {
-  const productData = await getProductResultsForPdf(productId);
+  const panelsData = await getProductResultsForAllPanels(productId);
+  const productData = panelsData[0];
 
   if (!productData) {
     throw new Error(`Product not found: ${productId}`);
@@ -1784,7 +1849,7 @@ export async function generateProductSynthesisPdf(
     pdfIntroText: cup.pdfIntroText,
     producerName: producer.companyName ?? "Producteur",
     producerBrand: producer.brandName,
-    products: [productData],
+    products: panelsData,
     generatedAt: new Date(),
   };
 
@@ -1829,10 +1894,7 @@ export async function generateProducerSynthesisPdf(
   // Get detailed data for each product
   const productsData: ProductResultData[] = [];
   for (const product of registration.products) {
-    const productData = await getProductResultsForPdf(product.id);
-    if (productData) {
-      productsData.push(productData);
-    }
+    productsData.push(...(await getProductResultsForAllPanels(product.id)));
   }
 
   if (productsData.length === 0) {

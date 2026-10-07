@@ -284,7 +284,7 @@ export default function CupsPage() {
                       margin: 0,
                     }}
                   >
-                    {cup.type === "public" ? "PUBLIQUE" : "PRO"}
+                    PRO · PUBLIC
                   </p>
 
                   {/* Description */}

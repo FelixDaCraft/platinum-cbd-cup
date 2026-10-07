@@ -60,7 +60,7 @@ function registrationRow(id: string, overrides: Record<string, unknown> = {}) {
     products: [
       {
         name: "Fleur test",
-        finalScore: "88.5",
+        finalScorePublic: "88.5",
         category: { name: "Fleurs" },
         label: { name: "Or" },
       },
@@ -183,7 +183,7 @@ describe("Results Email Service", () => {
 
     it("compte à part les inscriptions sans produit noté, sans les envoyer", async () => {
       mockFindMany.mockResolvedValue([
-        registrationRow("reg-1", { products: [{ name: "x", finalScore: null }] }),
+        registrationRow("reg-1", { products: [{ name: "x", finalScorePro: null, finalScorePublic: null }] }),
         registrationRow("reg-2"),
       ]);
       mockFindFirst.mockResolvedValue(registrationRow("reg-2"));

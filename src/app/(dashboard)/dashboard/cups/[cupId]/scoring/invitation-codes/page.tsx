@@ -358,23 +358,6 @@ export default function InvitationCodesPage() {
     return null;
   }
 
-  // Only show for public cups
-  if (cup.type !== "public") {
-    return (
-      <div className="n-card p-8 space-y-4 max-w-md mx-auto text-center">
-        <QrCode className="h-10 w-10 mx-auto text-[var(--n-text-disabled)]" />
-        <div className="space-y-2">
-          <h1 className="n-font-body text-xl font-semibold text-[var(--n-text-primary)]">
-            Fonctionnalite non disponible
-          </h1>
-          <p className="n-label text-[var(--n-text-secondary)]">
-            Les codes d&apos;invitation sont uniquement disponibles pour les cups publiques.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -384,7 +367,7 @@ export default function InvitationCodesPage() {
             Codes d&apos;invitation
           </h1>
           <p className="n-label text-[var(--n-text-secondary)] mt-1">
-            Generez des codes QR pour les jurys de votre cup publique
+            Generez des codes QR pour le jury public de votre cup
           </p>
         </div>
         <div className="flex gap-2">

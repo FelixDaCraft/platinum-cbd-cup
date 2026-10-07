@@ -6,13 +6,14 @@ import { TRPCError } from "@trpc/server";
 import { and, eq } from "drizzle-orm";
 import type { db as dbType } from "~/server/db";
 import * as schema from "~/server/db/schema";
+import type { JuryPanel } from "~/server/db/schema/juries";
 
 type DB = typeof dbType;
 
 /**
- * Refuse à un producteur qui concourt de devenir juré d'une édition PUBLIQUE.
+ * Refuse à un producteur qui concourt de devenir juré du panel PUBLIC.
  *
- * La règle dépend du type d'édition, et c'est tout l'objet de ce garde-fou :
+ * La règle dépend du panel rejoint, et c'est tout l'objet de ce garde-fou :
  *
  *   - `public` : le jury est composé de consommateurs. Un producteur qui a
  *     inscrit des produits n'y a pas sa place, quelle que soit la catégorie.
@@ -34,15 +35,11 @@ type DB = typeof dbType;
 export async function assertProducerMayJudge(
   db: DB,
   userId: string,
-  cupId: string
+  cupId: string,
+  panel: JuryPanel
 ): Promise<void> {
-  const cup = await db.query.cups.findFirst({
-    where: eq(schema.cups.id, cupId),
-    columns: { type: true },
-  });
-
   // Jury professionnel : composition maîtrisée par l'organisation.
-  if (cup?.type !== "public") return;
+  if (panel !== "public") return;
 
   const producer = await db.query.producers.findFirst({
     where: eq(schema.producers.userId, userId),
@@ -66,4 +63,46 @@ export async function assertProducerMayJudge(
         "Vous concourez à cette édition en tant que producteur : le jury public est réservé aux consommateurs.",
     });
   }
+}
+
+/**
+ * Refuse qu'un juré déjà membre d'un panel de la cup en rejoigne l'autre.
+ *
+ * Un utilisateur n'a qu'une ligne `cup_juries` par cup, donc un seul panel :
+ * ses notes comptent dans le classement de ce panel. Le laisser entrer par la
+ * porte de l'autre (un juré pro qui active un code public, par exemple) lui
+ * ouvrirait des catégories sous le mauvais panel et mélangerait les deux
+ * classements.
+ */
+export async function assertSamePanel(
+  db: DB,
+  userId: string,
+  cupId: string,
+  panel: JuryPanel
+): Promise<void> {
+  const membership = await db.query.cupJuries.findFirst({
+    where: and(eq(schema.cupJuries.cupId, cupId), eq(schema.cupJuries.userId, userId)),
+    columns: { panel: true },
+  });
+
+  if (membership && membership.panel !== panel) {
+    throw new TRPCError({
+      code: "CONFLICT",
+      message:
+        membership.panel === "pro"
+          ? "Vous êtes déjà juré professionnel de cette édition : vous ne pouvez pas rejoindre aussi le jury public."
+          : "Vous êtes déjà juré public de cette édition : vous ne pouvez pas rejoindre aussi le jury professionnel.",
+    });
+  }
+}
+
+/** Contrôles d'entrée dans un panel : conflit d'intérêts et panel unique. */
+export async function assertMayJoinPanel(
+  db: DB,
+  userId: string,
+  cupId: string,
+  panel: JuryPanel
+): Promise<void> {
+  await assertSamePanel(db, userId, cupId, panel);
+  await assertProducerMayJudge(db, userId, cupId, panel);
 }

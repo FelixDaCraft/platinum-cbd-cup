@@ -20,6 +20,9 @@ import { productRatings, criterionScores } from "~/server/db/schema/ratings";
 import { ratingCriteria } from "~/server/db/schema/rating-criteria";
 import { registrations } from "~/server/db/schema/registrations";
 import { producers } from "~/server/db/schema/producers";
+import { cupJuries } from "~/server/db/schema/juries";
+import { juryPanelEnum } from "~/lib/enums";
+import { hasAnyResult, panelColumns } from "~/server/db/panel-columns";
 import { generateProducerSynthesisPdf } from "~/server/services/results-pdf.service";
 import {
   sendResultsEmail,
@@ -293,7 +296,7 @@ export const resultsRouter = createTRPCRouter({
       // Map and filter by status
       const emailStatusList = cupRegistrations
         .map((reg) => {
-          const hasResults = reg.products.some((p) => p.finalScore !== null);
+          const hasResults = reg.products.some(hasAnyResult);
           let emailStatus: "sent" | "not_sent" | "error" | "no_results" = "not_sent";
 
           if (!hasResults) {
@@ -314,7 +317,7 @@ export const resultsRouter = createTRPCRouter({
             attempts: reg.synthesisEmailAttempts ?? 0,
             hasResults,
             productCount: reg.products.length,
-            productsWithResults: reg.products.filter((p) => p.finalScore !== null).length,
+            productsWithResults: reg.products.filter(hasAnyResult).length,
           };
         })
         .filter((item) => {
@@ -445,7 +448,7 @@ export const resultsRouter = createTRPCRouter({
       }
 
       // Verify there are products with results
-      const hasResults = registration.products.some((p) => p.finalScore !== null);
+      const hasResults = registration.products.some(hasAnyResult);
       if (!hasResults) {
         throw new TRPCError({
           code: "PRECONDITION_FAILED",
@@ -480,10 +483,13 @@ export const resultsRouter = createTRPCRouter({
       z.object({
         cupId: z.string(),
         categoryId: z.string().optional(),
+        // Classement d'un panel : les moyennes ne mêlent jamais pro et public.
+        panel: z.enum(juryPanelEnum).default("public"),
       })
     )
     .query(async ({ ctx, input }) => {
-      const { cupId, categoryId } = input;
+      const { cupId, categoryId, panel } = input;
+      const panelCols = panelColumns(panel);
 
       // Verify cup access
       const { cup } = await requireOrganizerAndCup(ctx, cupId);
@@ -516,10 +522,15 @@ export const resultsRouter = createTRPCRouter({
         })
         .from(criterionScores)
         .innerJoin(productRatings, eq(criterionScores.productRatingId, productRatings.id))
+        .innerJoin(cupJuries, eq(productRatings.juryId, cupJuries.id))
         .innerJoin(products, eq(productRatings.productId, products.id))
         .innerJoin(registrations, eq(products.registrationId, registrations.id))
         .where(
-          and(eq(registrations.cupId, cupId), isNotNull(productRatings.submittedAt))
+          and(
+            eq(registrations.cupId, cupId),
+            isNotNull(productRatings.submittedAt),
+            eq(cupJuries.panel, panel)
+          )
         )
         .groupBy(
           productRatings.productId,
@@ -566,9 +577,9 @@ export const resultsRouter = createTRPCRouter({
           .select({
             id: products.id,
             name: products.name,
-            anonymousCode: products.anonymousCode,
-            finalScore: products.finalScore,
-            categoryRank: products.categoryRank,
+            anonymousCode: panelCols.anonymousCode,
+            finalScore: panelCols.finalScore,
+            categoryRank: panelCols.categoryRank,
             labelId: products.labelId,
             labelName: cupLabels.name,
             labelColor: cupLabels.color,
@@ -586,7 +597,7 @@ export const resultsRouter = createTRPCRouter({
               eq(registrations.status, "confirmed")
             )
           )
-          .orderBy(asc(products.categoryRank));
+          .orderBy(asc(panelCols.categoryRank));
 
         // Calculate category averages per criterion
         const criteriaAverages: Record<string, number> = {};
@@ -657,9 +668,11 @@ export const resultsRouter = createTRPCRouter({
               name: product.producerName,
               brand: product.producerBrand,
             },
-            label: product.labelName
-              ? { name: product.labelName, color: product.labelColor }
-              : null,
+            // Labels décernés par le jury public seul.
+            label:
+              panel === "public" && product.labelName
+                ? { name: product.labelName, color: product.labelColor }
+                : null,
             criteriaScores: criteriaScoresData,
           });
         }
@@ -678,6 +691,7 @@ export const resultsRouter = createTRPCRouter({
       return {
         cupId,
         cupName: cup.name,
+        panel,
         ratingScale: cup.ratingScale,
         resultsPublishedAt: cup.resultsPublishedAt,
         categories: resultsByCategory,
@@ -692,10 +706,11 @@ export const resultsRouter = createTRPCRouter({
     .input(
       z.object({
         productId: z.string(),
+        panel: z.enum(juryPanelEnum).default("public"),
       })
     )
     .query(async ({ ctx, input }) => {
-      const { productId } = input;
+      const { productId, panel } = input;
 
       // Get product with cup info
       const product = await ctx.db.query.products.findFirst({
@@ -729,17 +744,19 @@ export const resultsRouter = createTRPCRouter({
       const cup = product.registration.cup;
       const maxScale = getMaxScoreForScale(cup.ratingScale);
 
-      // Get all submitted ratings for this product
-      const ratings = await ctx.db.query.productRatings.findMany({
+      // Notes déposées par les jurés du panel demandé.
+      const allRatings = await ctx.db.query.productRatings.findMany({
         where: and(
           eq(productRatings.productId, productId),
           isNotNull(productRatings.submittedAt)
         ),
         with: {
           scores: true,
+          jury: { columns: { panel: true } },
         },
         orderBy: [asc(productRatings.submittedAt)],
       });
+      const ratings = allRatings.filter((rating) => rating.jury.panel === panel);
 
       // Create anonymized jury identifiers (Jury #1, Jury #2, etc.)
       const juryScores = ratings.map((rating, index) => {
@@ -811,6 +828,7 @@ export const resultsRouter = createTRPCRouter({
         productId,
         productName: product.name,
         categoryName: product.category.name,
+        panel,
         ratingScale: cup.ratingScale,
         criteria: product.category.criteria.map((c) => ({
           id: c.id,

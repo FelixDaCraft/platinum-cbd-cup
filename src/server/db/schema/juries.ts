@@ -14,6 +14,15 @@ export const juryTypeEnum = ["pro", "public"] as const;
 export type JuryType = (typeof juryTypeEnum)[number];
 
 /**
+ * Panel de jury au sein d'une cup. Chaque cup réunit les deux :
+ * - pro : jurés professionnels, invités par l'organisation (jury_invitations) ;
+ * - public : consommateurs, entrés par code d'invitation ou QR public.
+ * Chaque panel a son classement, et ses propres codes anonymes produits.
+ */
+export const juryPanelEnum = ["pro", "public"] as const;
+export type JuryPanel = (typeof juryPanelEnum)[number];
+
+/**
  * Jury Profiles table - Jury accounts linked to users
  *
  * Juries are created via:
@@ -158,6 +167,10 @@ export const cupJuries = pgTable(
     invitationId: text("invitation_id").references(() => juryInvitations.id, {
       onDelete: "set null",
     }),
+    // Panel du juré DANS CETTE CUP, fixé à l'entrée : invitation -> pro, code ou
+    // QR public -> public. Distinct de `jury_profiles.jury_type`, qui est posé
+    // une fois pour toutes sur l'utilisateur et ne dit rien d'une cup donnée.
+    panel: text("panel").notNull().$type<JuryPanel>(),
     // Jury can be active or inactive (removed by organizer)
     isActive: boolean("is_active").notNull().default(true),
     // Notification preferences (copied from profile, can be overridden per cup)
@@ -184,6 +197,7 @@ export const cupJuries = pgTable(
     // suppression d'un utilisateur filtrent par user_id.
     index("cup_juries_user_id_idx").on(table.userId),
     index("cup_juries_jury_profile_id_idx").on(table.juryProfileId),
+    check("cup_juries_panel_check", sql`${table.panel} in ('pro', 'public')`),
   ]
 );
 

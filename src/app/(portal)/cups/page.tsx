@@ -279,7 +279,7 @@ function InstrumentCard({
         <GridCell label="Clôture" value={formatDateShort(cup.registrationCloseAt)} />
         <GridCell label="Notation" value={formatDateShort(cup.ratingEndAt)} />
         <GridCell label="Résultats" value={resultsCellValue(cup)} />
-        <GridCell label="Type" value={cup.type.toUpperCase()} />
+        <GridCell label="Jurys" value="PRO · PUBLIC" />
         <GridCell label="Catégories" value={pad2(categoryCount)} />
       </div>
 

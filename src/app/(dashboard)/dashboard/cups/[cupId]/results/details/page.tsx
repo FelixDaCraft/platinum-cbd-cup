@@ -29,13 +29,16 @@ import {
   DialogTrigger,
 } from "~/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
-import { ProductRadarChart, JuryScoresTable } from "~/components/features/results";
+import { ProductRadarChart, JuryScoresTable, PanelToggle } from "~/components/features/results";
+import type { JuryPanel } from "~/lib/enums";
 
 export default function ResultsDetailsPage() {
   const params = useParams();
   const cupId = params.cupId as string;
 
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  // Classement affiché : chaque jury a le sien.
+  const [panel, setPanel] = useState<JuryPanel>("public");
   const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
 
@@ -43,13 +46,14 @@ export default function ResultsDetailsPage() {
     {
       cupId,
       categoryId: selectedCategory !== "all" ? selectedCategory : undefined,
+      panel,
     },
     { enabled: !!cupId }
   );
 
   const { data: juryScores, isLoading: loadingJuryScores } =
     api.results.getAnonymizedJuryScores.useQuery(
-      { productId: selectedProductId! },
+      { productId: selectedProductId!, panel },
       { enabled: !!selectedProductId }
     );
 
@@ -129,8 +133,9 @@ export default function ResultsDetailsPage() {
           <p className="n-label">Analyse complète des notes et performances</p>
         </div>
 
-        {/* Category Filter */}
-        <div className="flex items-center gap-3">
+        {/* Jury + Category Filter */}
+        <div className="flex flex-wrap items-center gap-3">
+          <PanelToggle value={panel} onChange={setPanel} />
           <span className="n-label">Filtrer :</span>
           <Select value={selectedCategory} onValueChange={setSelectedCategory}>
             <SelectTrigger className="w-[200px]">

@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { Download, QrCode, Loader2, FileArchive, Printer } from "lucide-react";
+import { PanelToggle } from "~/components/features/results";
+import type { JuryPanel } from "~/lib/enums";
 
 import { Button } from "~/components/ui/button";
 import {
@@ -52,10 +54,12 @@ export function BatchQRCodesDialog({
   buttonVariant = "outline",
 }: BatchQRCodesDialogProps) {
   const [open, setOpen] = useState(false);
+  // Étiquettes de notation : une série par jury, chacune au code de son panel.
+  const [panel, setPanel] = useState<JuryPanel>("public");
   const labels = TYPE_LABELS[type];
 
   const { data, isLoading, error } = api.product.generateBatchQRCodes.useQuery(
-    { cupId, type },
+    { cupId, type, panel },
     { enabled: open }
   );
 
@@ -189,6 +193,13 @@ export function BatchQRCodesDialog({
             {labels.description}
           </DialogDescription>
         </DialogHeader>
+
+        {type === "notation" && (
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-muted-foreground">Étiquettes pour le</span>
+            <PanelToggle value={panel} onChange={setPanel} />
+          </div>
+        )}
 
         {isLoading && (
           <div className="flex flex-col items-center justify-center py-12">

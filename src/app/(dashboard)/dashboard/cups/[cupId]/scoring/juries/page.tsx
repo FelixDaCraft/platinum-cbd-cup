@@ -21,6 +21,7 @@ import {
   Users,
 } from "lucide-react";
 import { toast } from "sonner";
+import { JURY_PANEL_LABELS } from "~/lib/enums";
 
 import { Button } from "~/components/ui/button";
 import {
@@ -779,6 +780,10 @@ export default function JuriesPage() {
                         </TableCell>
                         <TableCell className="n-font-body font-medium text-[var(--n-text-primary)]">
                           {jury.user.name ?? "Sans nom"}
+                          {/* Panel du juré dans cette cup : ses notes comptent dans ce classement. */}
+                          <span className="n-tag ml-2" title={JURY_PANEL_LABELS[jury.panel]}>
+                            {jury.panel === "pro" ? "PRO" : "PUBLIC"}
+                          </span>
                         </TableCell>
                         <TableCell className="n-font-body text-[var(--n-text-secondary)]">
                           {jury.user.email}
@@ -933,6 +938,10 @@ export default function JuriesPage() {
                       >
                         <TableCell className="n-font-body font-medium text-[var(--n-text-primary)]">
                           {jury.user.name ?? "Sans nom"}
+                          {/* Panel du juré dans cette cup : ses notes comptent dans ce classement. */}
+                          <span className="n-tag ml-2" title={JURY_PANEL_LABELS[jury.panel]}>
+                            {jury.panel === "pro" ? "PRO" : "PUBLIC"}
+                          </span>
                         </TableCell>
                         <TableCell className="n-font-body text-[var(--n-text-secondary)]">
                           {jury.user.email}

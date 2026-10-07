@@ -4,15 +4,13 @@ import { z } from "zod";
 // module est importé par des formulaires client, et passer par le schéma
 // embarquait drizzle-orm/pg-core dans le bundle navigateur.
 import {
-  cupTypeEnum,
   cupStatusEnum,
   ratingScaleEnum,
-  type CupType,
   type CupStatus,
   type RatingScale,
 } from "~/lib/enums";
 
-export { cupTypeEnum, cupStatusEnum, ratingScaleEnum, type CupType, type CupStatus, type RatingScale };
+export { cupStatusEnum, ratingScaleEnum, type CupStatus, type RatingScale };
 
 /**
  * Shared Zod schema for cup creation
@@ -23,7 +21,6 @@ export const createCupSchema = z.object({
     .string()
     .min(3, "Le nom doit faire au moins 3 caractères")
     .max(100, "Le nom ne peut pas dépasser 100 caractères"),
-  type: z.enum(cupTypeEnum),
   description: z
     .string()
     .max(500, "La description ne peut pas dépasser 500 caractères")

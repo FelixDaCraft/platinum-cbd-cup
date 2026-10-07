@@ -15,8 +15,8 @@
  *      (user + producer) keyed by normalized companyName, SKIP drops the row.
  *      Stub creation is dedup'd across the whole run.
  *   5. Insert one registration per (cup, producer).
- *   6. Insert each product with synthetic score, label_id, anonymous_code,
- *      category_rank, and excluded_from_results=false.
+ *   6. Insert each product with synthetic score, label_id and anonymous code,
+ *      rank in the columns of the edition's jury panel (`*_pro` or `*_public`).
  */
 
 import { Pool, type PoolClient } from "pg";
@@ -171,14 +171,14 @@ async function importCup(
     return;
   }
 
-  console.log(`  ▸ importing "${cup.name}" (type=${cup.juryKind}, ${cup.products.length} products)`);
+  console.log(`  ▸ importing "${cup.name}" (jury=${cup.juryKind}, ${cup.products.length} products)`);
 
   const cupId = nanoid();
 
   if (apply) {
     await client.query(
       `INSERT INTO cups (
-         id, name, type, description, status, currency, rating_scale,
+         id, name, description, status, currency, rating_scale,
          registration_open_at, registration_close_at,
          rating_start_at, rating_end_at,
          results_published_at, event_date, event_location,
@@ -186,16 +186,15 @@ async function importCup(
          default_price_per_product,
          created_at, updated_at
        ) VALUES (
-         $1, $2, $3, $4, 'completed', 'EUR', '0-20',
-         $5, $6, $7, $8, $9, $10, $11,
-         $12,
+         $1, $2, $3, 'completed', 'EUR', '0-20',
+         $4, $5, $6, $7, $8, $9, $10,
+         $11,
          0,
-         $13, now()
+         $12, now()
        )`,
       [
         cupId,
         cup.name,
-        cup.juryKind,
         cup.description ?? null,
         new Date(cup.registrationOpenAt),
         new Date(cup.registrationCloseAt),
@@ -323,10 +322,13 @@ async function importProduct(
 
   const productId = nanoid();
   if (apply) {
+    // Une édition archivée n'a qu'un jury : ses code, score et rang vont dans
+    // les colonnes de ce panel (`cups.type` n'existe plus, cf. migration 0008).
+    const panel = cup.juryKind;
     await client.query(
       `INSERT INTO products (
          id, registration_id, category_id, name, price_at_registration,
-         status, anonymous_code, final_score, label_id, category_rank,
+         status, anonymous_code_${panel}, final_score_${panel}, label_id, category_rank_${panel},
          excluded_from_results, created_at, updated_at
        ) VALUES (
          $1, $2, $3, $4, 0,

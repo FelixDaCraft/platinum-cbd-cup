@@ -14,12 +14,17 @@
  */
 
 /**
- * Type de cup.
- * - public : jurys amateurs, vote public
- * - pro : jurys professionnels uniquement
+ * Panel de jury d'une cup : chaque cup réunit un jury pro et un jury public,
+ * qui produisent chacun leur classement.
  */
-export const cupTypeEnum = ["public", "pro"] as const;
-export type CupType = (typeof cupTypeEnum)[number];
+export const juryPanelEnum = ["pro", "public"] as const;
+export type JuryPanel = (typeof juryPanelEnum)[number];
+
+/** Libellés d'affichage des panels. */
+export const JURY_PANEL_LABELS: Record<JuryPanel, string> = {
+  pro: "Jury pro",
+  public: "Jury public",
+};
 
 /**
  * Cycle de vie d'une cup.
@@ -45,10 +50,10 @@ export type RatingScale = (typeof ratingScaleEnum)[number];
 // ---------------------------------------------------------------------------
 
 import type {
-  CupType as SchemaCupType,
   CupStatus as SchemaCupStatus,
   RatingScale as SchemaRatingScale,
 } from "~/server/db/schema/cups";
+import type { JuryPanel as SchemaJuryPanel } from "~/server/db/schema/juries";
 
 /** `true` seulement si A et B décrivent exactement le même union. */
 type Equal<A, B> =
@@ -57,6 +62,6 @@ type Equal<A, B> =
 /** Échoue à la compilation dès que l'argument n'est pas `true`. */
 type AssertTrue<T extends true> = T;
 
-type _CupTypeMatchesSchema = AssertTrue<Equal<CupType, SchemaCupType>>;
+type _JuryPanelMatchesSchema = AssertTrue<Equal<JuryPanel, SchemaJuryPanel>>;
 type _CupStatusMatchesSchema = AssertTrue<Equal<CupStatus, SchemaCupStatus>>;
 type _RatingScaleMatchesSchema = AssertTrue<Equal<RatingScale, SchemaRatingScale>>;

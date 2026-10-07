@@ -44,7 +44,6 @@ export function CupCreateForm({ onSuccess }: CupCreateFormProps) {
   } = useForm<CreateCupInput>({
     resolver: zodResolver(createCupSchema),
     defaultValues: {
-      type: "public",
       ratingScale: "0-20",
     },
   });
@@ -70,34 +69,10 @@ export function CupCreateForm({ onSuccess }: CupCreateFormProps) {
         )}
       </div>
 
-      <div className="space-y-2">
-        <Label>Type de cup</Label>
-        <Controller
-          control={control}
-          name="type"
-          render={({ field }) => (
-            <RadioGroup
-              value={field.value}
-              onValueChange={field.onChange}
-              disabled={isSubmitting}
-              className="space-y-2"
-            >
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="public" id="public" />
-                <Label htmlFor="public" className="font-normal cursor-pointer">
-                  Public - Jurys amateurs, vote public
-                </Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="pro" id="pro" />
-                <Label htmlFor="pro" className="font-normal cursor-pointer">
-                  Pro - Jurys professionnels uniquement
-                </Label>
-              </div>
-            </RadioGroup>
-          )}
-        />
-      </div>
+      <p className="text-sm text-muted-foreground">
+        Chaque cup réunit un jury pro et un jury public : le producteur s&apos;inscrit
+        une fois, chaque jury produit son propre classement.
+      </p>
 
       <div className="space-y-2">
         <Label>Échelle de notation</Label>

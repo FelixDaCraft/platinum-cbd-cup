@@ -226,7 +226,8 @@ describe("Product Router", () => {
               name: "Product C",
               description: null,
               status: "pending",
-              anonymousCode: null,
+              anonymousCodePro: null,
+              anonymousCodePublic: null,
               categoryId: "cat_2",
               category: { id: "cat_2", name: "Category 2", description: null },
             },
@@ -279,7 +280,8 @@ describe("Product Router", () => {
               name: "Test Product",
               description: "A description",
               status: "received",
-              anonymousCode: "#B42",
+              anonymousCodePro: "#B42",
+              anonymousCodePublic: "#B7",
               categoryId: "cat_1",
               category: { id: "cat_1", name: "Test Category", description: null },
             },
@@ -295,7 +297,9 @@ describe("Product Router", () => {
       expect(product.name).toBe("Test Product");
       expect(product.description).toBe("A description");
       expect(product.status).toBe("received");
-      expect(product.anonymousCode).toBe("#B42");
+      // L'organisation voit les deux codes : jury pro et jury public.
+      expect(product.anonymousCodePro).toBe("#B42");
+      expect(product.anonymousCodePublic).toBe("#B7");
       expect(product.producer.companyName).toBe("Test Company");
       expect(product.producer.userName).toBe("Test User");
     });
@@ -341,7 +345,8 @@ describe("Product Router", () => {
               name: "Unanonymized Product",
               description: null,
               status: "pending",
-              anonymousCode: null,
+              anonymousCodePro: null,
+              anonymousCodePublic: null,
               categoryId: "cat_1",
               category: { id: "cat_1", name: "Cat", description: null },
             },
@@ -352,7 +357,8 @@ describe("Product Router", () => {
       const caller = await createCaller();
       const result = await caller.listByCupGroupedByCategory({ cupId: "cup_123" });
 
-      expect(result.categories[0]!.products[0]!.anonymousCode).toBeNull();
+      expect(result.categories[0]!.products[0]!.anonymousCodePro).toBeNull();
+      expect(result.categories[0]!.products[0]!.anonymousCodePublic).toBeNull();
       expect(result.categories[0]!.products[0]!.producer.userName).toBeNull();
     });
   });
@@ -375,7 +381,11 @@ describe("Product Router", () => {
 
       expect(
         await codeOf(() =>
-          caller.updateAnonymousCode({ productId: "prod_1", anonymousCode: "#A1" })
+          caller.updateAnonymousCode({
+            productId: "prod_1",
+            panel: "public",
+            anonymousCode: "#A1",
+          })
         )
       ).toBe("FORBIDDEN");
 

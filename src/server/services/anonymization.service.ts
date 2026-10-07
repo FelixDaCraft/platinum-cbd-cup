@@ -1,20 +1,13 @@
 /**
  * Anonymization Service
- * Génère les codes anonymes des produits après confirmation du paiement.
+ * Génère les codes anonymes des produits après confirmation du paiement : un
+ * code par panel de jury (pro, public), tirés séparément.
  * Format : [INITIALES DE CATÉGORIE][NOMBRE], par exemple CF23 pour « Café Filtre ».
  *
- * ATTENTION — la colonne `cups.anonymization_prefix` n'est PAS lue ici, et ne
- * l'a jamais été depuis le fork : le préfixe est dérivé du nom de la catégorie,
- * pas d'un réglage de la cup. La mutation `cup.updateAnonymizationPrefix`
- * l'écrit encore et refuse même de la modifier « une fois des produits
- * anonymisés », ce qui laisse croire à l'organisateur qu'il pilote quelque
- * chose : régler le préfixe sur « B » ne change aucun code.
- *
- * Le comportement conservé est celui-ci, volontairement : un préfixe unique par
- * cup donnerait à deux produits de catégories différentes des codes voisins
- * (A1, A2, …) alors que les initiales de catégorie disent au juré de quel
- * classement relève l'échantillon qu'il a en main. C'est donc la colonne et sa
- * mutation qui doivent disparaître, pas ce calcul.
+ * Le préfixe vient du nom de la catégorie, pas d'un réglage de la cup : un
+ * préfixe unique par cup donnerait à deux produits de catégories différentes
+ * des codes voisins (A1, A2, …), alors que les initiales de catégorie disent
+ * au juré de quel classement relève l'échantillon qu'il a en main.
  */
 
 import { eq, and, sql } from "drizzle-orm";
@@ -52,34 +45,9 @@ async function lockCategoryNumbering(db: DbClient, categoryId: string): Promise<
   );
 }
 
-/**
- * Generate unique anonymous code for a product within a category
- * Format: [INITIALS][NUMBER] where INITIALS = first letter of each word in category name (uppercase)
- * and NUMBER is a random number, unique within the category
- *
- * @param db - Database client
- * @param cupId - Inutilisé : le préfixe vient de la catégorie, pas de la cup.
- *   Conservé pour ne pas casser les appelants tant que la signature n'est pas
- *   reprise (voir l'avertissement en tête de fichier).
- * @param categoryId - The category ID for numbering scope
- * @returns Anonymous code like CF23 (Café Filtre), EPA87 (Espresso Pur Arabica), etc.
- */
-export async function generateAnonymousCode(
-  db: DbClient,
-  cupId: string,
-  categoryId: string
-): Promise<string> {
-  await lockCategoryNumbering(db, categoryId);
-
-  // Get category name for prefix
-  const category = await db.query.categories.findFirst({
-    where: (cat, { eq: eqFn }) => eqFn(cat.id, categoryId),
-    columns: { name: true },
-  });
-
-  const categoryName = category?.name ?? "X";
-  // Take first letter of each word, uppercase, remove accents
-  const prefix =
+/** Initiales du nom de catégorie, sans accents : « Café Filtre » -> « CF ». */
+function categoryPrefix(categoryName: string): string {
+  return (
     categoryName
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "")
@@ -87,55 +55,102 @@ export async function generateAnonymousCode(
       .map((word) => word.replace(/[^a-zA-Z]/g, ""))
       .filter((word) => word.length > 0)
       .map((word) => word[0]!.toUpperCase())
-      .join("") || "X";
+      .join("") || "X"
+  );
+}
 
-  // Get existing codes for this category to avoid collisions
-  const existingCodes = await db
+/**
+ * Codes déjà pris dans une catégorie, TOUS PANELS CONFONDUS : un même code ne
+ * désigne jamais deux échantillons différents en réception, même si chaque
+ * juré ne voit que les codes de son panel.
+ */
+async function usedCodesInCategory(db: DbClient, categoryId: string): Promise<Set<string>> {
+  const rows = await db
     .select({
-      code: schema.products.anonymousCode,
+      pro: schema.products.anonymousCodePro,
+      public: schema.products.anonymousCodePublic,
     })
     .from(schema.products)
     .where(
       and(
         eq(schema.products.categoryId, categoryId),
-        sql`${schema.products.anonymousCode} IS NOT NULL`
+        sql`(${schema.products.anonymousCodePro} IS NOT NULL OR ${schema.products.anonymousCodePublic} IS NOT NULL)`
       )
     );
 
-  const usedCodes = new Set(existingCodes.map((r) => r.code));
+  const used = new Set<string>();
+  for (const row of rows) {
+    if (row.pro) used.add(row.pro);
+    if (row.public) used.add(row.public);
+  }
+  return used;
+}
 
+/** Tire un code libre, uniformément, et le marque comme pris dans `used`. */
+function drawCode(prefix: string, used: Set<string>): string {
   // Plage de tirage élargie dès que la catégorie se remplit. L'ancien repli
   // au-delà de 100 produits incrémentait un compteur (101, 102, …), ce qui
   // révélait l'ordre de confirmation des inscriptions ; le tirage reste
   // uniforme quelle que soit la taille de la catégorie.
-  const range = Math.max(100, (usedCodes.size + 1) * 2);
+  const range = Math.max(100, (used.size + 1) * 2);
 
   const freeNumbers: number[] = [];
   for (let num = 1; num <= range; num++) {
-    if (!usedCodes.has(`${prefix}${num}`)) {
+    if (!used.has(`${prefix}${num}`)) {
       freeNumbers.push(num);
     }
   }
 
   // `range` vaut au moins 2 × (codes pris + 1) : la liste n'est jamais vide.
   const picked = freeNumbers[Math.floor(Math.random() * freeNumbers.length)]!;
-  return `${prefix}${picked}`;
+  const code = `${prefix}${picked}`;
+  used.add(code);
+  return code;
+}
+
+export interface PanelCodes {
+  pro: string;
+  public: string;
 }
 
 /**
- * Anonymize all products in a registration
- * Called after payment confirmation (Viva webhook or free registration)
- * Idempotent: skips products that already have an anonymous code
+ * Tire les deux codes anonymes d'un produit, un par panel de jury.
+ * Format : [INITIALES DE CATÉGORIE][NOMBRE], ex. CF23 pour « Café Filtre ».
+ * Les deux nombres sont tirés indépendamment : rien ne permet de déduire le
+ * code public d'un produit de son code pro.
  *
- * @param db - Database client
- * @param registrationId - The registration ID to anonymize products for
- * @returns Array of anonymized product IDs with their codes
+ * À appeler dans une transaction : le verrou de catégorie n'y tient que
+ * jusqu'au commit.
+ */
+export async function generateAnonymousCodes(
+  db: DbClient,
+  categoryId: string
+): Promise<PanelCodes> {
+  await lockCategoryNumbering(db, categoryId);
+
+  const category = await db.query.categories.findFirst({
+    where: (cat, { eq: eqFn }) => eqFn(cat.id, categoryId),
+    columns: { name: true },
+  });
+
+  const prefix = categoryPrefix(category?.name ?? "X");
+  const used = await usedCodesInCategory(db, categoryId);
+
+  return { pro: drawCode(prefix, used), public: drawCode(prefix, used) };
+}
+
+/**
+ * Anonymise tous les produits d'une inscription : deux codes par produit.
+ * Appelé à la confirmation du paiement (webhook Viva ou inscription gratuite).
+ * Idempotent : un code déjà posé n'est jamais remplacé, seul le manquant est
+ * tiré.
+ *
+ * @returns les produits anonymisés et leurs codes
  */
 export async function anonymizeRegistrationProducts(
   db: DbClient,
   registrationId: string
-): Promise<Array<{ productId: string; anonymousCode: string }>> {
-  // Get registration with products
+): Promise<Array<{ productId: string; codes: PanelCodes }>> {
   const registration = await db.query.registrations.findFirst({
     where: (reg, { eq: eqFn }) => eqFn(reg.id, registrationId),
     with: {
@@ -148,33 +163,33 @@ export async function anonymizeRegistrationProducts(
     return [];
   }
 
-  const cupId = registration.cupId;
-  const anonymizedProducts: Array<{ productId: string; anonymousCode: string }> = [];
+  const anonymizedProducts: Array<{ productId: string; codes: PanelCodes }> = [];
 
-  // Anonymize each product that doesn't have a code yet
   for (const product of registration.products) {
-    // Skip if already anonymized (idempotence)
-    if (product.anonymousCode) {
-      console.log(
-        `[Anonymization] Product ${product.id} already has code ${product.anonymousCode}`
-      );
+    if (product.anonymousCodePro && product.anonymousCodePublic) {
       continue;
     }
 
-    const anonymousCode = await generateAnonymousCode(db, cupId, product.categoryId);
+    const drawn = await generateAnonymousCodes(db, product.categoryId);
+    const codes: PanelCodes = {
+      pro: product.anonymousCodePro ?? drawn.pro,
+      public: product.anonymousCodePublic ?? drawn.public,
+    };
 
     await db
       .update(schema.products)
       .set({
-        anonymousCode,
+        anonymousCodePro: codes.pro,
+        anonymousCodePublic: codes.public,
         updatedAt: new Date(),
       })
       .where(eq(schema.products.id, product.id));
 
-    console.log(`[Anonymization] Product ${product.id} assigned code ${anonymousCode}`);
-    anonymizedProducts.push({ productId: product.id, anonymousCode });
+    console.log(
+      `[Anonymization] Product ${product.id} assigned codes pro=${codes.pro} public=${codes.public}`
+    );
+    anonymizedProducts.push({ productId: product.id, codes });
   }
 
   return anonymizedProducts;
 }
-

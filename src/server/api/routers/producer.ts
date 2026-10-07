@@ -1,7 +1,15 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { nanoid } from "nanoid";
-import { eq, and, or, count, isNotNull, ne, desc } from "drizzle-orm";
+import { eq, and, or, count, isNotNull, ne, desc, sql } from "drizzle-orm";
+import {
+  hasAnyResult,
+  panelColumns,
+  panelResults,
+  rankFor,
+  scoreFor,
+} from "~/server/db/panel-columns";
+import { juryPanelEnum } from "~/lib/enums";
 
 import {
   createTRPCRouter,
@@ -321,7 +329,12 @@ export const producerRouter = createTRPCRouter({
             },
           },
           products: {
-            columns: { id: true, finalScore: true, labelId: true },
+            columns: {
+              id: true,
+              finalScorePro: true,
+              finalScorePublic: true,
+              labelId: true,
+            },
           },
         },
         orderBy: [desc(schema.registrations.createdAt)],
@@ -335,7 +348,7 @@ export const producerRouter = createTRPCRouter({
         cupStatus: reg.cup.status,
         status: reg.status,
         productsCount: reg.products.length,
-        hasResults: reg.products.some((p) => p.finalScore !== null),
+        hasResults: reg.products.some(hasAnyResult),
         hasLabels: reg.products.some((p) => p.labelId !== null),
         createdAt: reg.createdAt,
         resultsPublishedAt: reg.cup.resultsPublishedAt,
@@ -367,8 +380,11 @@ export const producerRouter = createTRPCRouter({
         productId: schema.products.id,
         productName: schema.products.name,
         categoryName: schema.categories.name,
-        finalScore: schema.products.finalScore,
-        categoryRank: schema.products.categoryRank,
+        // Le label est décerné sur le classement public : c'est ce score et ce
+        // rang qui l'accompagnent. Les éditions antérieures à jury pro unique
+        // n'ont de résultat que côté pro, d'où le repli.
+        finalScore: sql<string | null>`coalesce(${schema.products.finalScorePublic}, ${schema.products.finalScorePro})`,
+        categoryRank: sql<number | null>`coalesce(${schema.products.categoryRankPublic}, ${schema.products.categoryRankPro})`,
         disqualified: schema.products.disqualified,
         labelId: schema.cupLabels.id,
         labelName: schema.cupLabels.name,
@@ -449,8 +465,10 @@ export const producerRouter = createTRPCRouter({
         productId: schema.products.id,
         productName: schema.products.name,
         categoryName: schema.categories.name,
-        finalScore: schema.products.finalScore,
-        categoryRank: schema.products.categoryRank,
+        finalScorePro: schema.products.finalScorePro,
+        finalScorePublic: schema.products.finalScorePublic,
+        categoryRankPro: schema.products.categoryRankPro,
+        categoryRankPublic: schema.products.categoryRankPublic,
         disqualified: schema.products.disqualified,
         labelId: schema.cupLabels.id,
         labelName: schema.cupLabels.name,
@@ -482,7 +500,10 @@ export const producerRouter = createTRPCRouter({
         and(
           eq(schema.registrations.producerId, producerId),
           isNotNull(schema.cups.resultsPublishedAt),
-          isNotNull(schema.products.finalScore)
+          or(
+            isNotNull(schema.products.finalScorePro),
+            isNotNull(schema.products.finalScorePublic)
+          )
         )
       )
       .orderBy(desc(schema.cups.resultsPublishedAt), schema.products.name);
@@ -497,8 +518,7 @@ export const producerRouter = createTRPCRouter({
         id: string;
         name: string;
         categoryName: string;
-        finalScore: number | null;
-        categoryRank: number | null;
+        results: ReturnType<typeof panelResults>;
         disqualified: boolean;
         label: { id: string; name: string; color: string } | null;
         registrationId: string;
@@ -520,8 +540,7 @@ export const producerRouter = createTRPCRouter({
         id: p.productId,
         name: p.productName,
         categoryName: p.categoryName ?? "Sans catégorie",
-        finalScore: p.finalScore ? parseFloat(p.finalScore) : null,
-        categoryRank: p.categoryRank,
+        results: panelResults(p),
         disqualified: p.disqualified,
         // Disqualified products never carry a label.
         label:
@@ -684,15 +703,14 @@ export const producerRouter = createTRPCRouter({
         id: p.id,
         name: p.name,
         categoryName: p.category?.name ?? "Sans categorie",
-        finalScore: p.finalScore ? parseFloat(p.finalScore) : null,
-        categoryRank: p.categoryRank,
+        results: panelResults(p),
         label: p.label
           ? {
               name: p.label.name,
               color: p.label.color,
             }
           : null,
-        canDownloadPdf: p.finalScore !== null,
+        canDownloadPdf: hasAnyResult(p),
       }));
 
       return {
@@ -706,7 +724,7 @@ export const producerRouter = createTRPCRouter({
           productCount: registration.products.length,
         },
         products,
-        canDownloadSynthesis: products.some((p) => p.finalScore !== null),
+        canDownloadSynthesis: products.some((p) => p.canDownloadPdf),
       };
     }),
 
@@ -761,7 +779,7 @@ export const producerRouter = createTRPCRouter({
       }
 
       // Check if product has results
-      if (!product.finalScore) {
+      if (!hasAnyResult(product)) {
         throw new TRPCError({
           code: "PRECONDITION_FAILED",
           message: "Ce produit n'a pas encore de resultats",
@@ -834,7 +852,7 @@ export const producerRouter = createTRPCRouter({
       }
 
       // Check if there are products with results
-      const hasResults = registration.products.some((p) => p.finalScore !== null);
+      const hasResults = registration.products.some(hasAnyResult);
       if (!hasResults) {
         throw new TRPCError({
           code: "PRECONDITION_FAILED",
@@ -865,7 +883,13 @@ export const producerRouter = createTRPCRouter({
    * Story 8.9: Consultation detaillee des notes par producteur
    */
   getProductDetailedResults: protectedProcedure
-    .input(z.object({ productId: z.string() }))
+    .input(
+      z.object({
+        productId: z.string(),
+        // Panel affiché ; par défaut le premier où le produit a un résultat.
+        panel: z.enum(juryPanelEnum).optional(),
+      })
+    )
     .query(async ({ ctx, input }) => {
       const { productId } = input;
 
@@ -911,15 +935,20 @@ export const producerRouter = createTRPCRouter({
       }
 
       // Check if product has results
-      if (!product.finalScore) {
+      if (!hasAnyResult(product)) {
         throw new TRPCError({
           code: "PRECONDITION_FAILED",
           message: "Ce produit n'a pas encore de resultats",
         });
       }
 
+      const availablePanels = juryPanelEnum.filter(
+        (panel) => scoreFor(product, panel) !== null
+      );
+      const panel = input.panel ?? availablePanels[0] ?? "public";
+
       // Get detailed results using the PDF service function
-      const resultData = await getProductResultsForPdf(productId);
+      const resultData = await getProductResultsForPdf(productId, panel);
 
       if (!resultData) {
         throw new TRPCError({
@@ -930,6 +959,8 @@ export const producerRouter = createTRPCRouter({
 
       return {
         productId: productId,
+        panel,
+        availablePanels,
         productName: resultData.productName,
         anonymousCode: resultData.anonymousCode,
         categoryName: resultData.categoryName,
@@ -949,6 +980,8 @@ export const producerRouter = createTRPCRouter({
   getProductsComparison: protectedProcedure
     .input(z.object({
       productIds: z.array(z.string()).min(2).max(10),
+      // On ne compare que des scores d'un même panel.
+      panel: z.enum(juryPanelEnum).default("public"),
     }))
     .query(async ({ ctx, input }) => {
       const { productIds } = input;
@@ -997,13 +1030,13 @@ export const producerRouter = createTRPCRouter({
           });
         }
 
-        // Skip products without results
-        if (!product.finalScore) {
+        // Skip products without results in this panel
+        if (scoreFor(product, input.panel) === null) {
           continue;
         }
 
         // Get detailed results
-        const resultData = await getProductResultsForPdf(productId);
+        const resultData = await getProductResultsForPdf(productId, input.panel);
 
         if (resultData) {
           productsData.push({
@@ -1066,7 +1099,13 @@ export const producerRouter = createTRPCRouter({
    * Only available after results are published
    */
   getMyProductCriteriaScores: protectedProcedure
-    .input(z.object({ productId: z.string() }))
+    .input(
+      z.object({
+        productId: z.string(),
+        // Panel affiché ; par défaut le premier où le produit a un résultat.
+        panel: z.enum(juryPanelEnum).optional(),
+      })
+    )
     .query(async ({ ctx, input }) => {
       const producerId = await requireProducerIdByUser(
         ctx,
@@ -1117,17 +1156,25 @@ export const producerRouter = createTRPCRouter({
 
       const cup = product.registration.cup;
       const maxScale = getMaxScoreForScale(cup.ratingScale);
+      const availablePanels = juryPanelEnum.filter(
+        (panel) => scoreFor(product, panel) !== null
+      );
+      const panel = input.panel ?? availablePanels[0] ?? "public";
+      const panelCols = panelColumns(panel);
 
-      // Get all submitted ratings for this product to calculate averages
-      const ratings = await ctx.db.query.productRatings.findMany({
-        where: and(
-          eq(schema.productRatings.productId, input.productId),
-          isNotNull(schema.productRatings.submittedAt)
-        ),
-        with: {
-          scores: true,
-        },
-      });
+      // Notes déposées sur ce produit par les jurés du panel affiché.
+      const ratings = (
+        await ctx.db.query.productRatings.findMany({
+          where: and(
+            eq(schema.productRatings.productId, input.productId),
+            isNotNull(schema.productRatings.submittedAt)
+          ),
+          with: {
+            scores: true,
+            jury: { columns: { panel: true } },
+          },
+        })
+      ).filter((rating) => rating.jury.panel === panel);
 
       // Calculate scores per criterion for this product
       const criteriaScoresMap = new Map<string, { total: number; count: number }>();
@@ -1140,45 +1187,31 @@ export const producerRouter = createTRPCRouter({
         }
       }
 
-      // Get category averages for comparison
-      // Get all products in same category with final scores
+      // Moyennes de catégorie : produits classés dans ce panel, notes des
+      // jurés de ce panel.
       const categoryProducts = await ctx.db.query.products.findMany({
         where: and(
           eq(schema.products.categoryId, product.categoryId),
-          isNotNull(schema.products.finalScore)
+          isNotNull(panelCols.finalScore)
         ),
         columns: { id: true },
       });
 
       const categoryProductIds = categoryProducts.map((p) => p.id);
 
-      // Get all criterion scores for category
-      const categoryScores = categoryProductIds.length > 0
-        ? await ctx.db.query.criterionScores.findMany({
-            where: (cs, { inArray }) => inArray(cs.productRatingId,
-              // Get rating IDs for these products
-              ctx.db
-                .select({ id: schema.productRatings.id })
-                .from(schema.productRatings)
-                .where(and(
-                  isNotNull(schema.productRatings.submittedAt),
-                  // This is complex, we'll calculate differently
-                ))
-            ),
-          })
-        : [];
-
-      // Simpler approach: Calculate category averages from all ratings in category
       const categoryRatings = categoryProductIds.length > 0
-        ? await ctx.db.query.productRatings.findMany({
-            where: (pr, { and: andFn, inArray }) => andFn(
-              inArray(pr.productId, categoryProductIds),
-              isNotNull(pr.submittedAt)
-            ),
-            with: {
-              scores: true,
-            },
-          })
+        ? (
+            await ctx.db.query.productRatings.findMany({
+              where: (pr, { and: andFn, inArray }) => andFn(
+                inArray(pr.productId, categoryProductIds),
+                isNotNull(pr.submittedAt)
+              ),
+              with: {
+                scores: true,
+                jury: { columns: { panel: true } },
+              },
+            })
+          ).filter((rating) => rating.jury.panel === panel)
         : [];
 
       const categoryAveragesMap = new Map<string, { total: number; count: number }>();
@@ -1213,8 +1246,10 @@ export const producerRouter = createTRPCRouter({
         productId: product.id,
         productName: product.name,
         categoryName: product.category.name,
-        finalScore: product.finalScore ? parseFloat(product.finalScore) : null,
-        categoryRank: product.categoryRank,
+        panel,
+        availablePanels,
+        finalScore: scoreFor(product, panel),
+        categoryRank: rankFor(product, panel),
         ratingScale: cup.ratingScale,
         criteriaScores,
       };
@@ -1225,7 +1260,13 @@ export const producerRouter = createTRPCRouter({
    * Only available after results are published
    */
   getMyProductJuryScores: protectedProcedure
-    .input(z.object({ productId: z.string() }))
+    .input(
+      z.object({
+        productId: z.string(),
+        // Panel affiché ; par défaut le premier où le produit a un résultat.
+        panel: z.enum(juryPanelEnum).optional(),
+      })
+    )
     .query(async ({ ctx, input }) => {
       const producerId = await requireProducerIdByUser(
         ctx,
@@ -1276,18 +1317,25 @@ export const producerRouter = createTRPCRouter({
 
       const cup = product.registration.cup;
       const maxScale = getMaxScoreForScale(cup.ratingScale);
+      const availablePanels = juryPanelEnum.filter(
+        (panel) => scoreFor(product, panel) !== null
+      );
+      const panel = input.panel ?? availablePanels[0] ?? "public";
 
-      // Get all submitted ratings for this product
-      const ratings = await ctx.db.query.productRatings.findMany({
-        where: and(
-          eq(schema.productRatings.productId, input.productId),
-          isNotNull(schema.productRatings.submittedAt)
-        ),
-        with: {
-          scores: true,
-        },
-        orderBy: (pr, { asc }) => [asc(pr.submittedAt)],
-      });
+      // Notes déposées sur ce produit par les jurés du panel affiché.
+      const ratings = (
+        await ctx.db.query.productRatings.findMany({
+          where: and(
+            eq(schema.productRatings.productId, input.productId),
+            isNotNull(schema.productRatings.submittedAt)
+          ),
+          with: {
+            scores: true,
+            jury: { columns: { panel: true } },
+          },
+          orderBy: (pr, { asc }) => [asc(pr.submittedAt)],
+        })
+      ).filter((rating) => rating.jury.panel === panel);
 
       // Create anonymized jury identifiers (Jury #1, Jury #2, etc.)
       const juryScores = ratings.map((rating, index) => {
@@ -1355,9 +1403,10 @@ export const producerRouter = createTRPCRouter({
             : null,
       };
 
-      // For PUBLIC cups, only return aggregated stats (no individual jury details)
-      // This protects jury anonymity and prevents pattern analysis
-      const isPublicCup = cup.type === "public";
+      // Jury PUBLIC : seulement des statistiques agrégées, aucune note
+      // individuelle — protège l'anonymat des consommateurs et empêche de
+      // remonter à un juré par recoupement.
+      const isPublicPanel = panel === "public";
 
       // Calculate per-criterion averages for aggregated view
       const criteriaAverages = product.category.criteria.map((criterion) => {
@@ -1380,19 +1429,19 @@ export const producerRouter = createTRPCRouter({
         productName: product.name,
         categoryName: product.category.name,
         ratingScale: cup.ratingScale,
-        cupType: cup.type,
+        panel,
+        availablePanels,
         criteria: product.category.criteria.map((c) => ({
           id: c.id,
           name: c.name,
           coefficient: c.coefficient,
         })),
-        // For PUBLIC cups: return only aggregated data (no individual jury scores)
-        // For PRO cups: return full jury details
-        juryScores: isPublicCup ? [] : juryScores,
+        // Panel public : données agrégées seulement ; panel pro : détail par juré.
+        juryScores: isPublicPanel ? [] : juryScores,
         criteriaAverages,
         stats,
         // Flag indicating if detailed jury scores are available
-        detailedScoresAvailable: !isPublicCup,
+        detailedScoresAvailable: !isPublicPanel,
       };
     }),
 });

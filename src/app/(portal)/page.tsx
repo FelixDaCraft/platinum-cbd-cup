@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { unstable_cache } from "next/cache";
 import Link from "next/link";
 import { db } from "~/server/db";
-import { desc, isNotNull, eq, count } from "drizzle-orm";
+import { and, desc, isNotNull, eq, count, sql } from "drizzle-orm";
 import * as schema from "~/server/db/schema";
 import {
   Eyebrow,
@@ -159,10 +159,13 @@ async function getCountdownState(): Promise<CountdownState> {
  */
 async function getTickerItems(): Promise<string[]> {
   {
+    // Classement public d'abord ; les éditions antérieures, à jury pro seul,
+    // n'ont de score que côté pro. Le code affiché est celui du même panel.
+    const finalScore = sql<string>`coalesce(${schema.products.finalScorePublic}, ${schema.products.finalScorePro})`;
     const products = await db
       .select({
-        anonymousCode: schema.products.anonymousCode,
-        finalScore: schema.products.finalScore,
+        anonymousCode: sql<string | null>`case when ${schema.products.finalScorePublic} is not null then ${schema.products.anonymousCodePublic} else ${schema.products.anonymousCodePro} end`,
+        finalScore,
         categoryName: schema.categories.name,
       })
       .from(schema.products)
@@ -170,7 +173,15 @@ async function getTickerItems(): Promise<string[]> {
         schema.categories,
         eq(schema.products.categoryId, schema.categories.id)
       )
-      .where(isNotNull(schema.products.finalScore))
+      .innerJoin(schema.cups, eq(schema.categories.cupId, schema.cups.id))
+      .where(
+        and(
+          sql`${finalScore} is not null`,
+          // Rien avant la publication officielle des résultats de l'édition.
+          isNotNull(schema.cups.resultsPublishedAt),
+          eq(schema.products.excludedFromResults, false)
+        )
+      )
       .orderBy(desc(schema.products.updatedAt))
       .limit(6);
 

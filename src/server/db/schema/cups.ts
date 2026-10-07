@@ -7,14 +7,6 @@ import { registrations } from "./registrations";
 import { users } from "./auth";
 
 /**
- * Cup type enum values
- * - public: Jurys amateurs, vote public
- * - pro: Jurys professionnels uniquement
- */
-export const cupTypeEnum = ["public", "pro"] as const;
-export type CupType = (typeof cupTypeEnum)[number];
-
-/**
  * Cup status enum values
  * - draft: En cours de configuration
  * - published: Inscriptions ouvertes
@@ -50,6 +42,12 @@ export type RatingScale = (typeof ratingScaleEnum)[number];
 
 /**
  * Cups table - Competitions managed by organizers
+ *
+ * Une cup réunit un jury pro et un jury public (voir `cup_juries.panel`) : le
+ * producteur s'inscrit une fois, chaque panel produit son propre classement.
+ * L'ancienne colonne `type` (une cup = un seul panel) a été retirée par la
+ * migration 0008, qui a reporté les résultats de chaque édition antérieure
+ * dans les colonnes du panel correspondant.
  */
 export const cups = pgTable(
   "cups",
@@ -58,7 +56,6 @@ export const cups = pgTable(
       .primaryKey()
       .$defaultFn(() => generateId()),
     name: text("name").notNull(),
-    type: text("type").notNull().$type<CupType>(), // "public" | "pro"
     description: text("description"),
     status: text("status").notNull().$type<CupStatus>().default("draft"),
     // Pricing fields
@@ -108,7 +105,6 @@ export const cups = pgTable(
     // import, SQL manuel) ne doivent pas pouvoir poser une valeur inconnue
     // qui ferait silencieusement échouer les filtres métier.
     check("cups_status_check", sql`${table.status} in ('draft', 'published', 'registration_closed', 'rating', 'completed')`),
-    check("cups_type_check", sql`${table.type} in ('public', 'pro')`),
     check("cups_rating_scale_check", sql`${table.ratingScale} in ('0-5', '0-10', '0-20', '0-100')`),
     check("cups_currency_check", sql`${table.currency} in ('EUR', 'USD', 'GBP', 'CHF')`),
     check("cups_results_visibility_check", sql`${table.resultsVisibility} in ('podium', 'labels', 'labels_and_podium', 'all')`),

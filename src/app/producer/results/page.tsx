@@ -10,7 +10,8 @@ import {
   getMaxScoreForScale,
 } from "~/lib/validations/labels";
 import type { RatingScale } from "~/server/db/schema/cups";
-import { ProductRadarChart, JuryScoresTable } from "~/components/features/results";
+import { ProductRadarChart, JuryScoresTable, PanelToggle } from "~/components/features/results";
+import type { JuryPanel } from "~/lib/enums";
 
 function formatDate(date: Date | string | null | undefined): string {
   if (!date) return "-";
@@ -31,17 +32,20 @@ function ProductDetailsInline({
   productId: string;
   ratingScale: RatingScale;
 }) {
+  // Jury affiché ; non choisi, le serveur prend le premier qui a noté le produit.
+  const [panel, setPanel] = useState<JuryPanel | undefined>(undefined);
+
   const {
     data: criteriaData,
     isLoading: loadingCriteria,
     isError: criteriaError,
-  } = api.producer.getMyProductCriteriaScores.useQuery({ productId }, { enabled: true });
+  } = api.producer.getMyProductCriteriaScores.useQuery({ productId, panel }, { enabled: true });
 
   const {
     data: juryData,
     isLoading: loadingJury,
     isError: juryError,
-  } = api.producer.getMyProductJuryScores.useQuery({ productId }, { enabled: true });
+  } = api.producer.getMyProductJuryScores.useQuery({ productId, panel }, { enabled: true });
 
   const maxScale = getMaxScoreForScale(ratingScale);
 
@@ -57,6 +61,13 @@ function ProductDetailsInline({
 
   return (
     <div className="space-y-6 pt-4">
+      {criteriaData && criteriaData.availablePanels.length > 1 && (
+        <PanelToggle
+          value={criteriaData.panel}
+          onChange={setPanel}
+          panels={criteriaData.availablePanels}
+        />
+      )}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         {/* Criteria */}
         <div className="space-y-4">
@@ -570,20 +581,7 @@ export default function ProducerResultsPage() {
                                 </span>
                               ) : (
                                 <>
-                                  {product.categoryRank && (
-                                    <span
-                                      className="n-font-data text-xs"
-                                      style={{ color: "var(--n-warning)" }}
-                                    >
-                                      {product.categoryRank === 1
-                                        ? "1ER"
-                                        : product.categoryRank === 2
-                                          ? "2EME"
-                                          : `${product.categoryRank}EME`}
-                                    </span>
-                                  )}
-
-                                  {product.label && (
+                                                                    {product.label && (
                                     <span
                                       className="n-tag"
                                       style={{
@@ -595,25 +593,45 @@ export default function ProducerResultsPage() {
                                     </span>
                                   )}
 
-                                  {product.finalScore !== null && (
-                                    <div className="text-right min-w-[60px]">
-                                      <p
-                                        className="n-font-data font-bold text-xl leading-none"
-                                        style={{ color: "var(--n-text-display)" }}
-                                      >
-                                        {convertScoreToScale(
-                                          product.finalScore,
-                                          cup.ratingScale as RatingScale
-                                        )?.toFixed(1)}
-                                      </p>
-                                      <p
-                                        className="n-label mt-0.5"
-                                        style={{ color: "var(--n-text-disabled)" }}
-                                      >
-                                        /{getMaxScoreForScale(cup.ratingScale as RatingScale)}
-                                      </p>
-                                    </div>
-                                  )}
+                                  {/* Un résultat par jury : rang et note du jury
+                                      pro, puis du jury public. */}
+                                  {(["pro", "public"] as const).map((panel) => {
+                                    const result = product.results[panel];
+                                    if (!result) return null;
+                                    return (
+                                      <div key={panel} className="text-right min-w-[72px]">
+                                        <p
+                                          className="n-label"
+                                          style={{ color: "var(--n-text-disabled)" }}
+                                        >
+                                          {panel === "pro" ? "JURY PRO" : "JURY PUBLIC"}
+                                          {result.categoryRank !== null && (
+                                            <span style={{ color: "var(--n-warning)" }}>
+                                              {" · "}
+                                              {result.categoryRank === 1
+                                                ? "1ER"
+                                                : `${result.categoryRank}EME`}
+                                            </span>
+                                          )}
+                                        </p>
+                                        <p
+                                          className="n-font-data font-bold text-xl leading-none mt-0.5"
+                                          style={{ color: "var(--n-text-display)" }}
+                                        >
+                                          {convertScoreToScale(
+                                            result.finalScore,
+                                            cup.ratingScale as RatingScale
+                                          )?.toFixed(1)}
+                                          <span
+                                            className="n-label"
+                                            style={{ color: "var(--n-text-disabled)" }}
+                                          >
+                                            /{getMaxScoreForScale(cup.ratingScale as RatingScale)}
+                                          </span>
+                                        </p>
+                                      </div>
+                                    );
+                                  })}
                                 </>
                               )}
 

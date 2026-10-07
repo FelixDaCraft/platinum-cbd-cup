@@ -5,7 +5,7 @@
 
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { eq, and, or, isNotNull, lte, desc, inArray } from "drizzle-orm";
+import { eq, and, or, isNotNull, lte, desc, inArray, sql } from "drizzle-orm";
 import {
   createTRPCRouter,
   producerProcedure,
@@ -17,6 +17,7 @@ import { products } from "~/server/db/schema/products";
 import { cups } from "~/server/db/schema/cups";
 import { cupLabels } from "~/server/db/schema/cup-labels";
 import { categories } from "~/server/db/schema/categories";
+import type { JuryPanel } from "~/server/db/schema/juries";
 import { getPortalBaseUrl } from "~/server/services/app-url";
 
 export const widgetRouter = createTRPCRouter({
@@ -73,9 +74,13 @@ export const widgetRouter = createTRPCRouter({
           year: number | null; // Extracted from eventDate
         };
         products: Array<{
+          /** Une distinction par produit et par panel : clé stable pour l'affichage. */
+          key: string;
           id: string;
           name: string;
           category: string;
+          /** Panel qui a décerné la distinction. */
+          panel: JuryPanel;
           finalScore: number | null;
           rank: number | null;
           label: {
@@ -97,8 +102,10 @@ export const widgetRouter = createTRPCRouter({
               registrationId: products.registrationId,
               id: products.id,
               name: products.name,
-              finalScore: products.finalScore,
-              categoryRank: products.categoryRank,
+              finalScorePro: products.finalScorePro,
+              finalScorePublic: products.finalScorePublic,
+              categoryRankPro: products.categoryRankPro,
+              categoryRankPublic: products.categoryRankPublic,
               categoryName: categories.name,
               labelId: cupLabels.id,
               labelName: cupLabels.name,
@@ -114,14 +121,17 @@ export const widgetRouter = createTRPCRouter({
                 eq(products.excludedFromResults, false),
                 // Disqualified products never appear in the producer widget.
                 eq(products.disqualified, false),
-                // Product has a label OR is on podium (rank 1, 2, or 3)
+                // Un label, ou un podium (rang 1 à 3) dans l'un des deux panels.
                 or(
                   isNotNull(products.labelId),
-                  and(isNotNull(products.categoryRank), lte(products.categoryRank, 3))
+                  lte(products.categoryRankPro, 3),
+                  lte(products.categoryRankPublic, 3)
                 )
               )
             )
-            .orderBy(desc(products.finalScore))
+            .orderBy(
+              desc(sql`coalesce(${products.finalScorePublic}, ${products.finalScorePro})`)
+            )
         : [];
 
       const distinctionsByRegistration = new Map<string, typeof allDistinctions>();
@@ -142,21 +152,51 @@ export const widgetRouter = createTRPCRouter({
               name: reg.cupName,
               year: reg.cupEventDate ? new Date(reg.cupEventDate).getFullYear() : null,
             },
-            products: productsWithDistinctions.map((p) => ({
-              id: p.id,
-              name: p.name,
-              category: p.categoryName,
-              finalScore: p.finalScore ? parseFloat(p.finalScore) : null,
-              rank: p.categoryRank,
-              label: p.labelId
+            products: productsWithDistinctions.flatMap((p) => {
+              const label = p.labelId
                 ? {
                     id: p.labelId,
                     name: p.labelName ?? "",
                     color: p.labelColor,
                     icon: p.labelIcon,
                   }
-                : null,
-            })),
+                : null;
+              const podium = (rank: number | null) =>
+                rank !== null && rank <= 3 ? rank : null;
+              const entries = [];
+              // Jury public : label et/ou podium. Une édition antérieure à
+              // jury pro unique porte son label sans résultat public : il est
+              // alors rendu au jury pro, qui l'avait décerné.
+              const publicRank = podium(p.categoryRankPublic);
+              const labelPanel: JuryPanel =
+                p.finalScorePublic !== null || p.finalScorePro === null ? "public" : "pro";
+              if (publicRank !== null || (label && labelPanel === "public")) {
+                entries.push({
+                  key: `${p.id}-public`,
+                  id: p.id,
+                  name: p.name,
+                  category: p.categoryName,
+                  panel: "public" as const,
+                  finalScore: p.finalScorePublic ? parseFloat(p.finalScorePublic) : null,
+                  rank: publicRank,
+                  label: labelPanel === "public" ? label : null,
+                });
+              }
+              const proRank = podium(p.categoryRankPro);
+              if (proRank !== null || (label && labelPanel === "pro")) {
+                entries.push({
+                  key: `${p.id}-pro`,
+                  id: p.id,
+                  name: p.name,
+                  category: p.categoryName,
+                  panel: "pro" as const,
+                  finalScore: p.finalScorePro ? parseFloat(p.finalScorePro) : null,
+                  rank: proRank,
+                  label: labelPanel === "pro" ? label : null,
+                });
+              }
+              return entries;
+            }),
           });
         }
       }

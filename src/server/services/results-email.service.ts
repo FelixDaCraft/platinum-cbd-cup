@@ -23,6 +23,7 @@ import {
   renderQuote,
   sendEmail,
 } from "./email";
+import { hasAnyResult, scoreFor } from "~/server/db/panel-columns";
 
 /** Nom de l'organisateur : mono-tenant, c'est toujours le concours lui-même. */
 const ORGANIZER_NAME = "Platinum CBD Cup";
@@ -119,9 +120,7 @@ export async function sendResultsEmail(
     const user = producer.user;
 
     // Check if there are products with results
-    const productsWithResults = registration.products.filter(
-      (p) => p.finalScore !== null
-    );
+    const productsWithResults = registration.products.filter(hasAnyResult);
 
     if (productsWithResults.length === 0) {
       return { success: false, error: "Aucun produit avec resultats" };
@@ -142,12 +141,14 @@ export async function sendResultsEmail(
     }
 
     // Build product summary for email - Story 7.X: Display in organizer's scale
+    // Un score par panel : « - » quand le produit n'a pas été noté par ce jury.
+    const formatPanelScore = (score: number | null) =>
+      score !== null ? formatScoreForScale(score, cup.ratingScale as RatingScale) : "-";
     const productSummary = productsWithResults.map((p) => ({
       name: p.name,
       category: p.category?.name ?? "Sans catégorie",
-      score: p.finalScore
-        ? formatScoreForScale(parseFloat(p.finalScore), cup.ratingScale as RatingScale)
-        : "N/A",
+      scorePro: formatPanelScore(scoreFor(p, "pro")),
+      scorePublic: formatPanelScore(scoreFor(p, "public")),
       label: p.label?.name ?? null,
     }));
 
@@ -271,7 +272,7 @@ export async function sendBulkResultsEmails(
         producerName = registration.producer.companyName ?? "N/A";
 
         // Skip if no products with results
-        const hasResults = registration.products.some((p) => p.finalScore !== null);
+        const hasResults = registration.products.some(hasAnyResult);
         if (!hasResults) {
           return {
             registrationId: registration.id,
@@ -330,7 +331,8 @@ interface ResultsEmailParams {
   productSummary: Array<{
     name: string;
     category: string;
-    score: string;
+    scorePro: string;
+    scorePublic: string;
     label: string | null;
   }>;
   producerPortalUrl: string;
@@ -353,7 +355,8 @@ function buildResultsEmailHtml(params: ResultsEmailParams): string {
     <tr>
       <td style="padding: 12px; border-bottom: 1px solid #e5e7eb;">${escapeHtml(p.name)}</td>
       <td style="padding: 12px; border-bottom: 1px solid #e5e7eb;">${escapeHtml(p.category)}</td>
-      <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: center; font-weight: 600;">${escapeHtml(p.score)}</td>
+      <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: center; font-weight: 600;">${escapeHtml(p.scorePro)}</td>
+      <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: center; font-weight: 600;">${escapeHtml(p.scorePublic)}</td>
       <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: center;">
         ${
           p.label
@@ -390,7 +393,8 @@ function buildResultsEmailHtml(params: ResultsEmailParams): string {
             <tr style="background-color: #f3f4f6;">
               <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151;">Produit</th>
               <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151;">Categorie</th>
-              <th style="padding: 12px; text-align: center; font-weight: 600; color: #374151;">Score</th>
+              <th style="padding: 12px; text-align: center; font-weight: 600; color: #374151;">Jury pro</th>
+              <th style="padding: 12px; text-align: center; font-weight: 600; color: #374151;">Jury public</th>
               <th style="padding: 12px; text-align: center; font-weight: 600; color: #374151;">Label</th>
             </tr>
           </thead>

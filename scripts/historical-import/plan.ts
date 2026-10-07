@@ -43,7 +43,7 @@ export interface CupImport {
   year: number;
   /** Edition number (PRO + Public count as one edition). */
   editionNumber: number;
-  /** Drives `cups.type` and the cup naming suffix. */
+  /** Panel du jury de l'édition archivée (colonnes `*_pro` / `*_public`) et suffixe du nom. */
   juryKind: "pro" | "public";
   name: string;
   description?: string;

@@ -418,7 +418,7 @@ export default function CupLayout({ children }: { children: React.ReactNode }) {
                 textTransform: "uppercase",
               }}
             >
-              {cup.type === "public" ? "PUBLIC" : "PRO"}
+              PRO · PUBLIC
             </span>
           </div>
         </div>
@@ -531,7 +531,7 @@ export default function CupLayout({ children }: { children: React.ReactNode }) {
                   textTransform: "uppercase",
                 }}
               >
-                {cup.type === "public" ? "PUBLIC" : "PRO"}
+                PRO · PUBLIC
               </span>
             </div>
           </SheetHeader>

@@ -10,13 +10,15 @@ import { MarkReceivedDialog } from "./mark-received-dialog";
 import { EditProductNameDialog } from "./edit-product-name-dialog";
 import { LabAnalysisDialog } from "./lab-analysis-dialog";
 import { api } from "~/trpc/react";
+import { formatPanelCodes } from "~/lib/panel-codes";
 
 export interface ProductListItemProps {
   id: string;
   name: string;
   description: string | null;
   status: string;
-  anonymousCode: string | null;
+  anonymousCodePro: string | null;
+  anonymousCodePublic: string | null;
   excludedFromResults?: boolean;
   producer: {
     id: string;
@@ -51,10 +53,13 @@ export function ProductListItem({
   id,
   name,
   status,
-  anonymousCode,
+  anonymousCodePro,
+  anonymousCodePublic,
   excludedFromResults = false,
   producer,
 }: ProductListItemProps) {
+  // Codes pro / public, dans cet ordre.
+  const anonymousCode = formatPanelCodes(anonymousCodePro, anonymousCodePublic);
   const statusInfo = statusConfig[status] ?? {
     label: status,
     className: "bg-muted text-muted-foreground",
@@ -74,7 +79,7 @@ export function ProductListItem({
   return (
     <div className={cn("flex items-center gap-4 border-b px-4 py-3 last:border-b-0 hover:bg-muted/50 transition-colors", excludedFromResults && "opacity-50")}>
       {/* Anonymous code */}
-      <div className="w-16 shrink-0">
+      <div className="w-28 shrink-0" title="Code jury pro / code jury public">
         {anonymousCode ? (
           <span className="font-mono text-sm font-semibold text-primary">
             {anonymousCode}

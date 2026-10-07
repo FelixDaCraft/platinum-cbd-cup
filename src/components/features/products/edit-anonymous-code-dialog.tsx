@@ -16,16 +16,20 @@ import {
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { api } from "~/trpc/react";
+import { JURY_PANEL_LABELS, type JuryPanel } from "~/lib/enums";
 
 export interface EditAnonymousCodeDialogProps {
   productId: string;
   productName: string;
+  /** Panel dont on corrige le code : chaque produit en a un par jury. */
+  panel: JuryPanel;
   anonymousCode: string | null;
 }
 
 export function EditAnonymousCodeDialog({
   productId,
   productName,
+  panel,
   anonymousCode,
 }: EditAnonymousCodeDialogProps) {
   const [open, setOpen] = useState(false);
@@ -52,6 +56,7 @@ export function EditAnonymousCodeDialog({
   const handleSave = () => {
     updateMutation.mutate({
       productId,
+      panel,
       anonymousCode: code === "" ? null : code,
     });
   };
@@ -70,7 +75,12 @@ export function EditAnonymousCodeDialog({
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 w-7 p-0"
+          aria-label={`Modifier le code ${JURY_PANEL_LABELS[panel].toLowerCase()}`}
+        >
           <Pencil className="h-3 w-3" />
         </Button>
       </DialogTrigger>
@@ -112,9 +122,13 @@ export function EditAnonymousCodeDialog({
         {status === "idle" && (
           <>
             <DialogHeader>
-              <DialogTitle>Modifier le code anonyme</DialogTitle>
+              <DialogTitle>
+                Modifier le code anonyme · {JURY_PANEL_LABELS[panel].toLowerCase()}
+              </DialogTitle>
               <DialogDescription>
-                Modifiez le code anonyme du produit {productName}.
+                Code sous lequel le {JURY_PANEL_LABELS[panel].toLowerCase()} note le
+                produit {productName}. Il doit rester unique dans la catégorie, tous
+                jurys confondus.
               </DialogDescription>
             </DialogHeader>
 

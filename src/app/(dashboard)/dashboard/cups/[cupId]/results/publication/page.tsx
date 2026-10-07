@@ -5,7 +5,6 @@ import Link from "next/link";
 import {
   Eye,
   EyeOff,
-  Award,
   Medal,
   BarChart3,
   AlertCircle,
@@ -45,18 +44,9 @@ const visibilityOptions: {
     description: "Afficher tous les produits avec leurs scores complets",
     icon: BarChart3,
   },
-  {
-    value: "labels_and_podium",
-    label: "Labels et podium",
-    description: "Afficher le top 3 et tous les produits labellisés (Or, Argent, Bronze)",
-    icon: Trophy,
-  },
-  {
-    value: "labels",
-    label: "Labels uniquement",
-    description: "Afficher uniquement les produits ayant obtenu un label",
-    icon: Award,
-  },
+  // Pas d'option fondée sur les labels : ce réglage ne porte que sur le
+  // classement du jury pro, qui n'en décerne pas. Une valeur héritée
+  // (« labels », « labels_and_podium ») s'y affiche comme « podium ».
   {
     value: "podium",
     label: "Podium uniquement",
@@ -136,6 +126,10 @@ export default function PublicationPage() {
 
   const isPublished = !!data.resultsPublishedAt;
   const canPublish = data.canPublishResults;
+  // Le jury pro ne décerne pas de label : un réglage hérité fondé sur les
+  // labels revient, pour son classement, au seul podium.
+  const proVisibility: ResultsVisibility =
+    data.resultsVisibility === "all" ? "all" : "podium";
 
   return (
     <div className="space-y-6">
@@ -363,7 +357,7 @@ export default function PublicationPage() {
                       onClick={() =>
                         publishResults.mutate({
                           cupId,
-                          visibility: data.resultsVisibility as ResultsVisibility,
+                          visibility: proVisibility,
                         })
                       }
                     >
@@ -377,10 +371,10 @@ export default function PublicationPage() {
         </div>
       </div>
 
-      {/* Visibility — "pro" cups pick a display mode; "public" (public-jury)
-          cups follow a fixed public policy (top 3 scored, medalists label-only),
-          so the per-cup selector is replaced by an explanatory note for them. */}
-      {data.type === "pro" ? (
+      {/* Visibilité — le classement du jury pro suit le niveau choisi ici ; le
+          classement du jury public suit une règle fixe (top 3 avec note,
+          médaillés avec leur label seulement). */}
+      <>
       <div
         style={{
           background: "var(--n-surface)",
@@ -406,15 +400,16 @@ export default function PublicationPage() {
               marginBottom: "2px",
             }}
           >
-            NIVEAU DE VISIBILITÉ
+            CLASSEMENT JURY PRO · NIVEAU DE VISIBILITÉ
           </p>
           <p className="n-label">
-            Choisissez ce que les visiteurs peuvent voir sur la page publique
+            Choisissez ce que les visiteurs voient du classement pro sur la page
+            publique. Le jury pro ne décerne pas de label.
           </p>
         </div>
         <div style={{ padding: "20px" }}>
           <RadioGroup
-            value={data.resultsVisibility}
+            value={proVisibility}
             onValueChange={(value) =>
               updateVisibility.mutate({
                 cupId,
@@ -426,7 +421,7 @@ export default function PublicationPage() {
           >
             {visibilityOptions.map((option) => {
               const Icon = option.icon;
-              const isSelected = data.resultsVisibility === option.value;
+              const isSelected = proVisibility === option.value;
               return (
                 <div
                   key={option.value}
@@ -486,7 +481,6 @@ export default function PublicationPage() {
           </RadioGroup>
         </div>
       </div>
-      ) : (
         <div
           style={{
             background: "var(--n-surface)",
@@ -512,10 +506,10 @@ export default function PublicationPage() {
                 marginBottom: "2px",
               }}
             >
-              AFFICHAGE PUBLIC DES RÉSULTATS
+              CLASSEMENT JURY PUBLIC · AFFICHAGE
             </p>
             <p className="n-label">
-              Règle standard, identique pour toutes les éditions à jury public
+              Règle standard, identique pour toutes les éditions
             </p>
           </div>
           <div style={{ padding: "20px" }}>
@@ -552,7 +546,7 @@ export default function PublicationPage() {
             </div>
           </div>
         </div>
-      )}
+      </>
 
       {/* Info note */}
       <div

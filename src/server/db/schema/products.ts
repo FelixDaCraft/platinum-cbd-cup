@@ -40,18 +40,27 @@ export const products = pgTable(
       .notNull()
       .$type<ProductStatus>()
       .default("pending"),
-    // Anonymous code for jury notation (format: #A127)
-    // Generated after payment confirmation, null before
-    anonymousCode: text("anonymous_code"),
+    // Codes anonymes, un par panel de jury (format : initiales de catégorie +
+    // nombre, ex. CF23). Chaque panel note sous son propre code : un juré pro
+    // et un juré public ne peuvent pas recouper leurs échantillons. Générés à
+    // la confirmation du paiement, null avant. Les deux codes d'un produit
+    // sont distincts entre eux et de tous ceux de la catégorie, quel que soit
+    // le panel, pour qu'aucune étiquette ne prête à confusion en réception.
+    anonymousCodePro: text("anonymous_code_pro"),
+    anonymousCodePublic: text("anonymous_code_public"),
     // Timestamp when the product was received (set when status changes to "received")
     receivedAt: timestamp("received_at", { withTimezone: true }),
-    // Final score calculated after rating phase closure (0-100 scale)
-    // Weighted average of all jury ratings, normalized to 0-100
-    finalScore: numeric("final_score", { precision: 5, scale: 2 }),
-    // Attributed label based on finalScore and cup label ranges
+    // Résultats calculés à la publication, un jeu par panel (échelle 0-100).
+    // Score = moyenne des moyennes pondérées des jurés du panel.
+    finalScorePro: numeric("final_score_pro", { precision: 5, scale: 2 }),
+    finalScorePublic: numeric("final_score_public", { precision: 5, scale: 2 }),
+    // Rang dans la catégorie, au sein du panel (1 = meilleur score).
+    categoryRankPro: integer("category_rank_pro"),
+    categoryRankPublic: integer("category_rank_public"),
+    // Label attribué d'après le score du jury PUBLIC : le jury pro ne décerne
+    // pas de label. (Sur les éditions antérieures à la cup unique, les cups
+    // « pro » portent encore les labels calculés à l'époque.)
     labelId: text("label_id").references(() => cupLabels.id, { onDelete: "set null" }),
-    // Rank within category (1 = best score)
-    categoryRank: integer("category_rank"),
     // Excluded from public results (hidden entirely from the palmarès).
     excludedFromResults: boolean("excluded_from_results").notNull().default(false),
     // Disqualified (cheating / rule violation): still listed publicly but shown
@@ -62,10 +71,16 @@ export const products = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    // Unique anonymous code per category (allows same code in different categories)
-    unique("product_anonymous_code_category_unique").on(
+    // Code unique par catégorie et par panel (le même code peut exister dans
+    // deux catégories ; l'unicité croisée entre panels est assurée à la
+    // génération, sous verrou).
+    unique("product_anonymous_code_pro_category_unique").on(
       table.categoryId,
-      table.anonymousCode
+      table.anonymousCodePro
+    ),
+    unique("product_anonymous_code_public_category_unique").on(
+      table.categoryId,
+      table.anonymousCodePublic
     ),
     // Jointure la plus fréquente (palmarès, résultats, widget, PDF) et
     // cascade de suppression d'une inscription.

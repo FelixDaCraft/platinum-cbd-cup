@@ -20,6 +20,25 @@ import {
 import { products, labAnalyses } from "~/server/db/schema";
 import { notifyProductStatusChange } from "~/server/services/product-notification.service";
 import type { StoredCompoundRow } from "~/server/db/schema/lab-analyses";
+import { juryPanelEnum } from "~/lib/enums";
+import { codeFor } from "~/server/db/panel-columns";
+import { formatPanelCodes } from "~/lib/panel-codes";
+
+/**
+ * Code imprimé sur une étiquette QR. Notation : le code du panel, le seul que
+ * le juré doive voir. Réception (colis) : les deux, pour que l'organisation
+ * prépare les échantillons des deux jurys.
+ */
+function labelCode(
+  product: { anonymousCodePro: string | null; anonymousCodePublic: string | null },
+  type: "reception" | "notation",
+  panel: "pro" | "public"
+): string | null {
+  return type === "notation"
+    ? codeFor(product, panel)
+    : formatPanelCodes(product.anonymousCodePro, product.anonymousCodePublic);
+}
+import { CLEARED_RESULTS } from "~/server/services/results-computation.service";
 
 const requireCup = (ctx: AuthedContext, cupId: string) =>
   getCupOrThrow(ctx.db, cupId);
@@ -133,7 +152,8 @@ export const productRouter = createTRPCRouter({
         name: string;
         description: string | null;
         status: string;
-        anonymousCode: string | null;
+        anonymousCodePro: string | null;
+        anonymousCodePublic: string | null;
         excludedFromResults: boolean;
         categoryId: string;
         category: {
@@ -157,7 +177,8 @@ export const productRouter = createTRPCRouter({
             name: product.name,
             description: product.description,
             status: product.status,
-            anonymousCode: product.anonymousCode,
+            anonymousCodePro: product.anonymousCodePro,
+            anonymousCodePublic: product.anonymousCodePublic,
             excludedFromResults: product.excludedFromResults,
             categoryId: product.categoryId,
             category: product.category,
@@ -226,6 +247,9 @@ export const productRouter = createTRPCRouter({
       z.object({
         productId: z.string().min(1, "Product ID requis"),
         type: z.enum(["reception", "notation"]).default("reception"),
+        // Panel dont le code est imprimé sur l'étiquette : les échantillons du
+        // jury pro et du jury public portent chacun le code de leur panel.
+        panel: z.enum(juryPanelEnum).default("public"),
       })
     )
     .query(async ({ ctx, input }) => {
@@ -279,7 +303,8 @@ export const productRouter = createTRPCRouter({
       return {
         productId: product.id,
         productName: product.name,
-        anonymousCode: product.anonymousCode,
+        anonymousCode: labelCode(product, input.type, input.panel),
+        panel: input.panel,
         qrCodeDataUrl: dataUrl,
         qrCodeUrl: url,
         type: input.type,
@@ -295,6 +320,7 @@ export const productRouter = createTRPCRouter({
       z.object({
         cupId: z.string().min(1, "Cup ID requis"),
         type: z.enum(["reception", "notation"]).default("reception"),
+        panel: z.enum(juryPanelEnum).default("public"),
       })
     )
     .query(async ({ ctx, input }) => {
@@ -307,7 +333,8 @@ export const productRouter = createTRPCRouter({
             columns: {
               id: true,
               name: true,
-              anonymousCode: true,
+              anonymousCodePro: true,
+              anonymousCodePublic: true,
             },
             with: {
               category: {
@@ -326,7 +353,7 @@ export const productRouter = createTRPCRouter({
         reg.products.map((p) => ({
           id: p.id,
           name: p.name,
-          anonymousCode: p.anonymousCode,
+          anonymousCode: labelCode(p, input.type, input.panel),
           cupId: input.cupId,
           categoryId: p.category.id,
           categoryName: p.category.name,
@@ -427,7 +454,8 @@ export const productRouter = createTRPCRouter({
       return {
         id: product.id,
         name: product.name,
-        anonymousCode: product.anonymousCode,
+        anonymousCodePro: product.anonymousCodePro,
+        anonymousCodePublic: product.anonymousCodePublic,
         status: product.status,
         categoryId: product.category.id,
         categoryName: product.category.name,
@@ -556,6 +584,8 @@ export const productRouter = createTRPCRouter({
     .input(
       z.object({
         productId: z.string().min(1, "Product ID requis"),
+        // Panel dont on corrige le code : chacun a le sien.
+        panel: z.enum(juryPanelEnum),
         anonymousCode: z
           .string()
           .min(1, "Le code ne peut pas etre vide")
@@ -585,29 +615,38 @@ export const productRouter = createTRPCRouter({
         });
       }
 
-      // 3. Check uniqueness within category (if code is not null)
+      // Unicité dans la catégorie, TOUS PANELS CONFONDUS : même règle que la
+      // génération automatique — un code ne désigne qu'un échantillon. Le
+      // produit lui-même compte : ses codes pro et public restent distincts.
       if (input.anonymousCode) {
-        const existing = await ctx.db.query.products.findFirst({
-          where: (p, { eq: eqFn, and: andFn }) =>
+        const code = input.anonymousCode;
+        const clash = await ctx.db.query.products.findFirst({
+          where: (p, { eq: eqFn, and: andFn, or: orFn }) =>
             andFn(
               eqFn(p.categoryId, product.categoryId),
-              eqFn(p.anonymousCode, input.anonymousCode!)
+              orFn(eqFn(p.anonymousCodePro, code), eqFn(p.anonymousCodePublic, code))
             ),
+          columns: { id: true, anonymousCodePro: true, anonymousCodePublic: true },
         });
 
-        if (existing && existing.id !== input.productId) {
+        const isSameSlot =
+          clash?.id === input.productId &&
+          codeFor(clash, input.panel) === code;
+
+        if (clash && !isSameSlot) {
           throw new TRPCError({
             code: "CONFLICT",
-            message: `Le code ${input.anonymousCode} est deja utilise dans cette categorie`,
+            message: `Le code ${code} est deja utilise dans cette categorie`,
           });
         }
       }
 
-      // 5. Update anonymous code
       const [updated] = await ctx.db
         .update(products)
         .set({
-          anonymousCode: input.anonymousCode,
+          ...(input.panel === "pro"
+            ? { anonymousCodePro: input.anonymousCode }
+            : { anonymousCodePublic: input.anonymousCode }),
           updatedAt: new Date(),
         })
         .where(eq(products.id, input.productId))
@@ -786,7 +825,8 @@ export const productRouter = createTRPCRouter({
       type RankedEntry = {
         productId: string;
         productName: string;
-        anonymousCode: string | null;
+        anonymousCodePro: string | null;
+        anonymousCodePublic: string | null;
         producerName: string;
         terpenesTotal: number | null;
         computedTerpeneSum: number | null;
@@ -801,7 +841,8 @@ export const productRouter = createTRPCRouter({
         withoutAnalysis: Array<{
           productId: string;
           productName: string;
-          anonymousCode: string | null;
+          anonymousCodePro: string | null;
+          anonymousCodePublic: string | null;
           producerName: string;
         }>;
       };
@@ -826,7 +867,8 @@ export const productRouter = createTRPCRouter({
             bucket.withoutAnalysis.push({
               productId: product.id,
               productName: product.name,
-              anonymousCode: product.anonymousCode,
+              anonymousCodePro: product.anonymousCodePro,
+              anonymousCodePublic: product.anonymousCodePublic,
               producerName: reg.producer.companyName,
             });
             continue;
@@ -855,7 +897,8 @@ export const productRouter = createTRPCRouter({
           bucket.ranked.push({
             productId: product.id,
             productName: product.name,
-            anonymousCode: product.anonymousCode,
+            anonymousCodePro: product.anonymousCodePro,
+            anonymousCodePublic: product.anonymousCodePublic,
             producerName: reg.producer.companyName,
             terpenesTotal: terp,
             computedTerpeneSum: computed,
@@ -946,7 +989,7 @@ export const productRouter = createTRPCRouter({
         .set({
           excludedFromResults: input.excluded,
           ...(input.excluded
-            ? { finalScore: null, labelId: null, categoryRank: null }
+            ? CLEARED_RESULTS
             : {}),
           updatedAt: new Date(),
         })

@@ -12,6 +12,7 @@ import {
   ResponsiveContainer,
   CartesianGrid,
 } from "recharts";
+import { formatPanelCodes } from "~/lib/panel-codes";
 
 import { api } from "~/trpc/react";
 import {
@@ -127,7 +128,8 @@ type CategoryData = {
   ranked: Array<{
     productId: string;
     productName: string;
-    anonymousCode: string | null;
+    anonymousCodePro: string | null;
+    anonymousCodePublic: string | null;
     producerName: string;
     terpenesTotal: number | null;
     computedTerpeneSum: number | null;
@@ -136,7 +138,8 @@ type CategoryData = {
   withoutAnalysis: Array<{
     productId: string;
     productName: string;
-    anonymousCode: string | null;
+    anonymousCodePro: string | null;
+    anonymousCodePublic: string | null;
     producerName: string;
   }>;
 };
@@ -145,7 +148,7 @@ function CategoryRanking({ category }: { category: CategoryData }) {
   const chartData = useMemo(
     () =>
       category.ranked.map((p, idx) => ({
-        label: p.anonymousCode ?? `#${idx + 1}`,
+        label: formatPanelCodes(p.anonymousCodePro, p.anonymousCodePublic) ?? `#${idx + 1}`,
         name: p.productName,
         producer: p.producerName,
         value:
@@ -177,7 +180,7 @@ function CategoryRanking({ category }: { category: CategoryData }) {
         <StatCard
           label="Meilleur"
           value={`${(best?.terpenesTotal ?? best?.computedTerpeneSum ?? 0).toFixed(2)}%`}
-          sub={best?.anonymousCode ?? best?.productName}
+          sub={formatPanelCodes(best?.anonymousCodePro, best?.anonymousCodePublic) ?? best?.productName}
           accent
         />
         <StatCard
@@ -188,7 +191,7 @@ function CategoryRanking({ category }: { category: CategoryData }) {
         <StatCard
           label="Plus bas"
           value={`${(worst?.terpenesTotal ?? worst?.computedTerpeneSum ?? 0).toFixed(2)}%`}
-          sub={worst?.anonymousCode ?? worst?.productName}
+          sub={formatPanelCodes(worst?.anonymousCodePro, worst?.anonymousCodePublic) ?? worst?.productName}
         />
       </div>
 
@@ -266,7 +269,7 @@ function CategoryRanking({ category }: { category: CategoryData }) {
                     {idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : idx + 1}
                   </td>
                   <td style={{ padding: "8px 12px", fontFamily: "'Space Mono', monospace", color: "var(--n-interactive)" }}>
-                    {p.anonymousCode ?? "—"}
+                    {formatPanelCodes(p.anonymousCodePro, p.anonymousCodePublic) ?? "—"}
                   </td>
                   <td style={{ padding: "8px 12px", color: "var(--n-text-primary)" }}>{p.productName}</td>
                   <td style={{ padding: "8px 12px", color: "var(--n-text-secondary)" }}>
@@ -313,7 +316,7 @@ function CategoryRanking({ category }: { category: CategoryData }) {
               <ul style={{ marginTop: "8px", listStyle: "none", padding: 0 }} className="space-y-1">
                 {category.withoutAnalysis.map((p) => (
                   <li key={p.productId} style={{ fontSize: "12px", color: "var(--n-text-secondary)" }}>
-                    <span style={{ fontFamily: "'Space Mono', monospace" }}>{p.anonymousCode ?? "—"}</span>
+                    <span style={{ fontFamily: "'Space Mono', monospace" }}>{formatPanelCodes(p.anonymousCodePro, p.anonymousCodePublic) ?? "—"}</span>
                     {" — "}
                     {p.productName}
                     {" ("}

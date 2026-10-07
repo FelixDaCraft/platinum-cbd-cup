@@ -6,6 +6,8 @@ import { eq, and, count, isNotNull, inArray } from "drizzle-orm";
 import { convertScoreToScale } from "~/lib/validations/labels";
 import { calculateWeightedScore } from "~/lib/validations/criteria";
 import { ratingCriteria } from "~/server/db/schema/rating-criteria";
+import { juryPanelEnum } from "~/lib/enums";
+import { codeFor, rankFor, scoreFor } from "~/server/db/panel-columns";
 
 /**
  * Scoring Router - Procedures for tracking rating progress and live scores
@@ -46,7 +48,7 @@ export const scoringRouter = createTRPCRouter({
         .where(
           and(
             inArray(schema.products.categoryId, categoryIds),
-            isNotNull(schema.products.anonymousCode)
+            isNotNull(schema.products.anonymousCodePro)
           )
         );
       const totalProducts = productsResult[0]?.count ?? 0;
@@ -131,7 +133,7 @@ export const scoringRouter = createTRPCRouter({
           .where(
             and(
               inArray(schema.products.categoryId, categoryIds),
-              isNotNull(schema.products.anonymousCode)
+              isNotNull(schema.products.anonymousCodePro)
             )
           )
           .groupBy(schema.products.categoryId),
@@ -267,7 +269,7 @@ export const scoringRouter = createTRPCRouter({
               .where(
                 and(
                   inArray(schema.products.categoryId, assignedCategoryIds),
-                  isNotNull(schema.products.anonymousCode)
+                  isNotNull(schema.products.anonymousCodePro)
                 )
               )
               .groupBy(schema.products.categoryId),
@@ -357,10 +359,13 @@ export const scoringRouter = createTRPCRouter({
         cupId: z.string().min(1, "Cup ID requis"),
         categoryId: z.string().optional(),
         limit: z.number().min(1).max(100).default(10),
+        // Classement d'un seul panel : pro et public ne se mélangent pas.
+        panel: z.enum(juryPanelEnum).default("public"),
       })
     )
     .query(async ({ ctx, input }) => {
       const cup = await getCupOrThrow(ctx.db, input.cupId);
+      const panel = input.panel;
 
       // Only allow live scores during or after rating
       if (cup.status !== "rating" && cup.status !== "completed") {
@@ -412,7 +417,7 @@ export const scoringRouter = createTRPCRouter({
         where: (prod, { and: andFn, inArray: inArrayFn, isNotNull: isNotNullFn }) =>
           andFn(
             inArrayFn(prod.categoryId, categoryIds),
-            isNotNullFn(prod.anonymousCode)
+            isNotNullFn(prod.anonymousCodePro)
           ),
         with: {
           category: {
@@ -426,6 +431,7 @@ export const scoringRouter = createTRPCRouter({
               isNotNullFn(rating.submittedAt),
             with: {
               scores: true,
+              jury: { columns: { panel: true } },
             },
           },
           label: {
@@ -437,22 +443,33 @@ export const scoringRouter = createTRPCRouter({
         },
       });
 
+      // Les labels sont décernés par le jury public seul.
+      const labelFor = (product: (typeof products)[number]) =>
+        panel === "public" ? product.label : null;
+
       // Calculate scores for each product
-      const productsWithScores = products.map((product) => {
+      const productsWithScores = products.map((rawProduct) => {
+        // Seules les notes des jurés du panel affiché comptent.
+        const product = {
+          ...rawProduct,
+          ratings: rawProduct.ratings.filter((rating) => rating.jury.panel === panel),
+        };
+        const finalScore = scoreFor(product, panel);
+
         // If cup is completed and has finalScore, use it
         // Convert from 0-100 percentage to rating scale
-        if (cup.status === "completed" && product.finalScore !== null) {
-          const scoreInScale = convertScoreToScale(parseFloat(product.finalScore), cup.ratingScale);
+        if (cup.status === "completed" && finalScore !== null) {
+          const scoreInScale = convertScoreToScale(finalScore, cup.ratingScale);
           return {
             id: product.id,
-            anonymousCode: product.anonymousCode,
+            anonymousCode: codeFor(product, panel),
             name: product.name,
             categoryId: product.category.id,
             categoryName: product.category.name,
             averageScore: scoreInScale,
             ratingsCount: product.ratings.length,
-            categoryRank: product.categoryRank,
-            label: product.label,
+            categoryRank: rankFor(product, panel),
+            label: labelFor(product),
           };
         }
 
@@ -460,7 +477,7 @@ export const scoringRouter = createTRPCRouter({
         if (product.ratings.length === 0) {
           return {
             id: product.id,
-            anonymousCode: product.anonymousCode,
+            anonymousCode: codeFor(product, panel),
             name: product.name,
             categoryId: product.category.id,
             categoryName: product.category.name,
@@ -502,14 +519,14 @@ export const scoringRouter = createTRPCRouter({
 
         return {
           id: product.id,
-          anonymousCode: product.anonymousCode,
+          anonymousCode: codeFor(product, panel),
           name: product.name,
           categoryId: product.category.id,
           categoryName: product.category.name,
           averageScore,
           ratingsCount: product.ratings.length,
-          categoryRank: product.categoryRank,
-          label: product.label,
+          categoryRank: rankFor(product, panel),
+          label: labelFor(product),
         };
       });
 

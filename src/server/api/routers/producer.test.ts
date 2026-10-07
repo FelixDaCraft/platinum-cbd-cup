@@ -514,7 +514,7 @@ describe("Producer Router", () => {
       const { db } = await import("~/server/db");
       vi.mocked(db.query.products.findFirst).mockResolvedValue({
         id: "prod-1",
-        finalScore: 17,
+        finalScorePublic: "17",
         registration: {
           producerId: "producer-999",
           cup: { id: "cup-1", resultsPublishedAt: new Date() },
@@ -554,7 +554,7 @@ describe("Producer Router", () => {
       const { db } = await import("~/server/db");
       vi.mocked(db.query.products.findFirst).mockResolvedValue({
         id: "prod-1",
-        finalScore: 17,
+        finalScorePublic: "17",
         registration: {
           producerId: "producer-123",
           cup: { id: "cup-1", resultsPublishedAt: null },
@@ -579,7 +579,8 @@ describe("Producer Router", () => {
       const { db } = await import("~/server/db");
       vi.mocked(db.query.products.findFirst).mockResolvedValue({
         id: "prod-1",
-        finalScore: null,
+        finalScorePro: null,
+        finalScorePublic: null,
         registration: {
           producerId: "producer-123",
           cup: { id: "cup-1", resultsPublishedAt: new Date() },
@@ -599,7 +600,7 @@ describe("Producer Router", () => {
       const { db } = await import("~/server/db");
       vi.mocked(db.query.products.findFirst).mockResolvedValue({
         id: "prod-1",
-        finalScore: 17,
+        finalScorePublic: "17",
         registration: {
           producerId: "producer-123",
           cup: { id: "cup-1", resultsPublishedAt: new Date() },
@@ -624,7 +625,7 @@ describe("Producer Router", () => {
       const { db } = await import("~/server/db");
       vi.mocked(db.query.products.findFirst).mockResolvedValue({
         id: "prod-1",
-        finalScore: 17,
+        finalScorePublic: "17",
         registration: {
           producerId: "producer-999",
           cup: { id: "cup-1", resultsPublishedAt: new Date() },
@@ -646,7 +647,7 @@ describe("Producer Router", () => {
         id: "reg-1",
         producerId: "producer-999",
         cup: { id: "cup-1", resultsPublishedAt: new Date() },
-        products: [{ id: "prod-1", finalScore: 17 }],
+        products: [{ id: "prod-1", finalScorePublic: "17" }],
       } as never);
 
       const caller = await createCaller();

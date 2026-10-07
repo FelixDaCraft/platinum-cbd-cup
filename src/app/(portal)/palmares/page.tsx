@@ -17,6 +17,8 @@ import {
   reviveCupDates,
 } from "../_lib/cache";
 import { canonical, OG_IMAGE_PAR_DEFAUT } from "../_lib/seo";
+import { JURY_PANEL_LABELS, type JuryPanel } from "~/lib/enums";
+import { panelColumns } from "~/server/db/panel-columns";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -160,8 +162,8 @@ const getCachedPublicJuries = unstable_cache(
 );
 
 const getCachedCupProducts = unstable_cache(
-  (cup: { id: string; ratingScale: string | null }) =>
-    fetchPublishedCupProducts(cup),
+  (cup: { id: string; ratingScale: string | null }, panel: JuryPanel) =>
+    fetchPublishedCupProducts(cup, panel),
   ["palmares-cup-products"],
   PALMARES_CACHE,
 );
@@ -175,15 +177,14 @@ interface PublicJury {
 }
 
 /**
- * Public-facing jury list for a cup. Only `pro` jurys who explicitly
- * consented (showOnPublicResults=true) are exposed — `public` jurys
- * stay anonymous by design.
+ * Public-facing jury list for a cup. Only jurors of the cup's PRO panel who
+ * explicitly consented (showOnPublicResults=true) are exposed — public-panel
+ * jurors stay anonymous by design.
  */
 async function fetchPublicJuries(cupId: string): Promise<PublicJury[]> {
   const rows = await db
     .select({
       profileId: schema.juryProfiles.id,
-      profileType: schema.juryProfiles.juryType,
       profileDisplayName: schema.juryProfiles.displayName,
       profileExpertise: schema.juryProfiles.expertise,
       profileBio: schema.juryProfiles.bio,
@@ -201,7 +202,7 @@ async function fetchPublicJuries(cupId: string): Promise<PublicJury[]> {
       and(
         eq(schema.cupJuries.cupId, cupId),
         eq(schema.cupJuries.isActive, true),
-        eq(schema.juryProfiles.juryType, "pro"),
+        eq(schema.cupJuries.panel, "pro"),
         eq(schema.juryProfiles.showOnPublicResults, true),
       ),
     );
@@ -239,14 +240,17 @@ async function fetchProducts(
   cupId: string,
   cup: { ratingScale: string | null },
   labels: CupLabel[],
+  panel: JuryPanel,
 ): Promise<ProductRow[]> {
+  // Classement d'un seul panel : ses codes, ses scores, ses rangs.
+  const cols = panelColumns(panel);
   const rows = await db
     .select({
       productId: schema.products.id,
       productName: schema.products.name,
-      anonymousCode: schema.products.anonymousCode,
-      finalScore: schema.products.finalScore,
-      categoryRank: schema.products.categoryRank,
+      anonymousCode: cols.anonymousCode,
+      finalScore: cols.finalScore,
+      categoryRank: cols.categoryRank,
       categoryId: schema.categories.id,
       categoryName: schema.categories.name,
       categorySort: schema.categories.sortOrder,
@@ -271,13 +275,16 @@ async function fetchProducts(
       and(
         eq(schema.registrations.cupId, cupId),
         eq(schema.products.excludedFromResults, false),
-        isNotNull(schema.products.finalScore),
+        isNotNull(cols.finalScore),
       ),
     )
     .orderBy(
       asc(schema.categories.sortOrder),
       asc(schema.categories.name),
-      desc(schema.products.finalScore),
+      desc(cols.finalScore),
+      // Départage des ex aequo par le rang officiel (computeResults), sans
+      // quoi deux scores égaux s'affichaient dans un ordre arbitraire.
+      asc(cols.categoryRank),
     );
 
   return rows
@@ -285,7 +292,8 @@ async function fetchProducts(
     .map((r) => {
       const score = parseFloat(r.finalScore!);
       const dq = r.disqualified;
-      const label = dq ? null : resolveLabel(score, labels);
+      // Seul le jury public décerne des labels.
+      const label = dq || panel !== "public" ? null : resolveLabel(score, labels);
       const rank = r.categoryRank ?? 0;
       return {
         rank,
@@ -337,7 +345,7 @@ export const metadata: Metadata = {
 export default async function PalmaresPage({
   searchParams,
 }: {
-  searchParams: Promise<{ edition?: string; cat?: string }>;
+  searchParams: Promise<{ edition?: string; cat?: string; jury?: string }>;
 }) {
   const sp = await searchParams;
   const cups = (await getCachedPublishedCups()).map(reviveCupDates);
@@ -416,30 +424,46 @@ export default async function PalmaresPage({
   // so its palmarès shows the ranking WITHOUT any score (Thomas, 06/2026).
   const hideScores = selectedYear === "2023";
 
-  const [labels, allCategories, allProducts, publicJuries] = await Promise.all([
-    getCachedCupLabels(selectedCup.id),
-    getCachedCategories(selectedCup.id),
-    // Seuls l'identifiant et l'échelle entrent dans la clé de cache : passer
-    // la ligne entière y ferait entrer `updatedAt` et invaliderait tout à la
-    // moindre écriture sur la cup.
-    getCachedCupProducts({
-      id: selectedCup.id,
-      ratingScale: selectedCup.ratingScale,
-    }),
-    getCachedPublicJuries(selectedCup.id),
-  ]);
+  // Seuls l'identifiant et l'échelle entrent dans la clé de cache : passer
+  // la ligne entière y ferait entrer `updatedAt` et invaliderait tout à la
+  // moindre écriture sur la cup.
+  const cupKey = { id: selectedCup.id, ratingScale: selectedCup.ratingScale };
+  const [labels, allCategories, publicPanelProducts, proPanelProducts, publicJuries] =
+    await Promise.all([
+      getCachedCupLabels(selectedCup.id),
+      getCachedCategories(selectedCup.id),
+      getCachedCupProducts(cupKey, "public"),
+      getCachedCupProducts(cupKey, "pro"),
+      getCachedPublicJuries(selectedCup.id),
+    ]);
 
-  // Public results policy depends on the cup's jury model:
+  // Une édition réunit un jury public et un jury pro, chacun avec son
+  // classement ; ?jury= choisit celui qu'on affiche. Les éditions antérieures
+  // n'ont qu'un panel : seul celui-là est proposé.
+  const productsByPanel: Record<JuryPanel, ProductRow[]> = {
+    public: publicPanelProducts,
+    pro: proPanelProducts,
+  };
+  // Le classement public d'abord : c'est lui qui porte les labels.
+  const availablePanels = (["public", "pro"] as const).filter(
+    (panel) => productsByPanel[panel].length > 0,
+  );
+  const selectedPanel: JuryPanel =
+    availablePanels.find((panel) => panel === sp.jury) ?? availablePanels[0] ?? "public";
+  const allProducts = productsByPanel[selectedPanel];
+  const panelParam = availablePanels.length > 1 ? `&jury=${selectedPanel}` : "";
+
+  // Public results policy depends on the jury panel displayed:
   //
-  //  • PUBLIC-JURY cups → restricted display, regardless of resultsVisibility:
+  //  • PUBLIC panel → restricted display, regardless of resultsVisibility:
   //      - Podium    : top 3 of each category, shown WITH their final score.
   //      - Médaillés : every other label-winner, shown WITH the label but
   //                    WITHOUT the score ("Médaillé" placeholder).
   //      - Everything else (no podium, no label) is hidden.
   //
-  //  • PRO-PANEL cups → the organizer-configured resultsVisibility, with full
+  //  • PRO panel → the organizer-configured resultsVisibility, with full
   //    scores shown for every visible product (the historical behaviour).
-  const isPublicJuryCup = selectedCup.type === "public";
+  const isPublicJuryCup = selectedPanel === "public";
 
   const proVisibility = (selectedCup.resultsVisibility ?? "labels") as
     | "podium"
@@ -452,16 +476,9 @@ export default async function PalmaresPage({
   const isVisible = (p: ProductRow): boolean => {
     if (p.disqualified) return true;
     if (isPublicJuryCup) return p.isPodium || p.labelName != null;
-    switch (proVisibility) {
-      case "all":
-        return true;
-      case "podium":
-        return p.isPodium;
-      case "labels":
-        return p.labelName != null;
-      default: // labels_and_podium
-        return p.isPodium || p.labelName != null;
-    }
+    // Le jury pro ne décerne pas de label : hors « all », seul son podium
+    // est public (un réglage hérité « labels » revient au podium).
+    return proVisibility === "all" || p.isPodium;
   };
   // Public winner badge: EVERY public category winner (rank 1) wears the uniform
   // "Prix du public" medal — never a score-tier label like OR/Argent (Thomas,
@@ -841,6 +858,42 @@ export default async function PalmaresPage({
         </div>
       </section>
 
+      {/* ── JURY SWITCH ─────────────────────────────────────────────── */}
+      {/* Chaque édition a deux classements, jury public et jury pro. Le
+          filtre de catégorie est conservé d'un classement à l'autre. */}
+      {availablePanels.length > 1 && (
+        <div
+          className="palmares-jury-strip"
+          role="tablist"
+          aria-label="Classement"
+          style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}
+        >
+          {availablePanels.map((panel) => {
+            const isActive = panel === selectedPanel;
+            return (
+              <Link
+                key={panel}
+                role="tab"
+                aria-selected={isActive}
+                href={`?edition=${selectedCup.id}&jury=${panel}${
+                  activeCategoryId ? `&cat=${activeCategoryId}` : ""
+                }`}
+                scroll={false}
+                className="btn ghost"
+                style={{
+                  padding: "10px 16px",
+                  background: isActive ? "var(--fg)" : "transparent",
+                  color: isActive ? "var(--bg)" : "var(--fg)",
+                  textDecoration: "none",
+                }}
+              >
+                Classement {JURY_PANEL_LABELS[panel].toLowerCase()}
+              </Link>
+            );
+          })}
+        </div>
+      )}
+
       {/* ── CATEGORY FILTER CHIPS ───────────────────────────────────── */}
       <div
         className="palmares-category-strip"
@@ -858,8 +911,8 @@ export default async function PalmaresPage({
               c.id === "ALL" ? !activeCategoryId : activeCategoryId === c.id;
             const href =
               c.id === "ALL"
-                ? `?edition=${selectedCup.id}`
-                : `?edition=${selectedCup.id}&cat=${c.id}`;
+                ? `?edition=${selectedCup.id}${panelParam}`
+                : `?edition=${selectedCup.id}${panelParam}&cat=${c.id}`;
             return (
               <Link
                 key={c.id}
@@ -1143,10 +1196,13 @@ export default async function PalmaresPage({
 
 // Wrapper that fetches labels first then products (labels needed to compute
 // label name per row in fetchProducts). Kept inline so the page reads top-down.
-async function fetchPublishedCupProducts(cup: {
-  id: string;
-  ratingScale: string | null;
-}): Promise<ProductRow[]> {
+async function fetchPublishedCupProducts(
+  cup: {
+    id: string;
+    ratingScale: string | null;
+  },
+  panel: JuryPanel,
+): Promise<ProductRow[]> {
   const labels = await fetchCupLabels(cup.id);
-  return fetchProducts(cup.id, cup, labels);
+  return fetchProducts(cup.id, cup, labels, panel);
 }

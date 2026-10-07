@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
+import { formatPanelCodes } from "~/lib/panel-codes";
 
 import {
   Collapsible,
@@ -130,7 +131,9 @@ export default function ProducerRegistrationsPage() {
       return count + reg.products.filter((p) => p.status === "pending").length;
     }, 0);
     const resultsAvailable = registrations.filter(
-      (r) => r.cup.resultsPublishedAt && r.products.some((p) => p.finalScore)
+      (r) =>
+        r.cup.resultsPublishedAt &&
+        r.products.some((p) => p.finalScorePro ?? p.finalScorePublic)
     ).length;
 
     return {
@@ -568,7 +571,10 @@ export default function ProducerRegistrationsPage() {
                                       productName={product.name}
                                       anonymousCode={
                                         registration.cup.resultsPublishedAt
-                                          ? product.anonymousCode
+                                          ? formatPanelCodes(
+                                              product.anonymousCodePro,
+                                              product.anonymousCodePublic
+                                            )
                                           : null
                                       }
                                     />
@@ -648,7 +654,7 @@ export default function ProducerRegistrationsPage() {
               {completedCompetitions.map((registration, idx) => {
                 const hasResults =
                   registration.cup.resultsPublishedAt &&
-                  registration.products.some((p) => p.finalScore);
+                  registration.products.some((p) => p.finalScorePro ?? p.finalScorePublic);
                 const labelsCount = registration.products.filter((p) => p.label).length;
 
                 return (

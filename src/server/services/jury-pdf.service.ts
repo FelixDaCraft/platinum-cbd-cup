@@ -23,6 +23,7 @@ import { weightedAverageOrNull } from "./weighted-score";
 import { TRPCError } from "@trpc/server";
 import path from "path";
 import { existsSync } from "fs";
+import { panelColumns } from "~/server/db/panel-columns";
 
 const styles = StyleSheet.create({
   page: {
@@ -689,9 +690,10 @@ export async function generateJurySynthesisPdf(
     .select({
       productId: schema.products.id,
       productName: schema.products.name,
-      anonymousCode: schema.products.anonymousCode,
-      finalScore: schema.products.finalScore,
-      categoryRank: schema.products.categoryRank,
+      // Le juré retrouve ses codes et le classement de son panel.
+      anonymousCode: panelColumns(cupJury.panel).anonymousCode,
+      finalScore: panelColumns(cupJury.panel).finalScore,
+      categoryRank: panelColumns(cupJury.panel).categoryRank,
       categoryId: schema.products.categoryId,
       categoryName: schema.categories.name,
       producerName: schema.producers.companyName,
@@ -822,7 +824,8 @@ export async function generateJurySynthesisPdf(
       juryScore: juryScore !== null ? Math.round(juryScore * 100) / 100 : null,
       finalScore,
       difference: difference !== null ? Math.round(difference * 100) / 100 : null,
-      label: product.labelName
+      // Labels décernés par le jury public seul.
+      label: cupJury.panel === "public" && product.labelName
         ? { name: product.labelName, color: product.labelColor, icon: product.labelIcon }
         : null,
     };
@@ -1418,8 +1421,8 @@ export async function generateJuryProductDetailPdf(
     .select({
       productId: schema.products.id,
       productName: schema.products.name,
-      anonymousCode: schema.products.anonymousCode,
-      finalScore: schema.products.finalScore,
+      anonymousCode: panelColumns(cupJury.panel).anonymousCode,
+      finalScore: panelColumns(cupJury.panel).finalScore,
       categoryId: schema.products.categoryId,
       categoryName: schema.categories.name,
       producerName: schema.producers.companyName,
@@ -1487,6 +1490,14 @@ export async function generateJuryProductDetailPdf(
     .innerJoin(
       schema.productRatings,
       eq(schema.criterionScores.productRatingId, schema.productRatings.id)
+    )
+    // Moyennes de catégorie calculées sur les seuls jurés du panel.
+    .innerJoin(
+      schema.cupJuries,
+      and(
+        eq(schema.productRatings.juryId, schema.cupJuries.id),
+        eq(schema.cupJuries.panel, cupJury.panel)
+      )
     )
     .innerJoin(schema.products, eq(schema.productRatings.productId, schema.products.id))
     .innerJoin(
@@ -1615,8 +1626,8 @@ export async function generateJuryAllDetailsPdf(
     .select({
       productId: schema.products.id,
       productName: schema.products.name,
-      anonymousCode: schema.products.anonymousCode,
-      finalScore: schema.products.finalScore,
+      anonymousCode: panelColumns(cupJury.panel).anonymousCode,
+      finalScore: panelColumns(cupJury.panel).finalScore,
       categoryId: schema.products.categoryId,
       categoryName: schema.categories.name,
       producerName: schema.producers.companyName,
@@ -1716,6 +1727,14 @@ export async function generateJuryAllDetailsPdf(
     .innerJoin(
       schema.productRatings,
       eq(schema.criterionScores.productRatingId, schema.productRatings.id)
+    )
+    // Moyennes de catégorie calculées sur les seuls jurés du panel.
+    .innerJoin(
+      schema.cupJuries,
+      and(
+        eq(schema.productRatings.juryId, schema.cupJuries.id),
+        eq(schema.cupJuries.panel, cupJury.panel)
+      )
     )
     .innerJoin(schema.products, eq(schema.productRatings.productId, schema.products.id))
     .innerJoin(

@@ -71,6 +71,11 @@ fait foi :
 | `0002_corrections_schema.sql` | Le gros œuvre : 108 colonnes de date passées en `timestamptz`, `json` → `jsonb`, compteurs texte → entier, clés étrangères manquantes (avec purge préalable des orphelins), colonnes héritées de Stripe supprimées. **Réécrit à la main** — voir l'en-tête du fichier. |
 | `0003_renommage_tables_historiques.sql` | `cupmetrics_historical_*` → `historical_*`. Un `RENAME`, jamais un `DROP` + `CREATE` : ces tables portent les palmarès des éditions antérieures. |
 | `0004_checks_etats_restants.sql` | Trois contraintes `CHECK` sur les derniers états métier stockés en `text`. |
+| `0005_corrections_enum_et_galerie.sql` | Purge des valeurs d'enum héritées du SaaS, galerie des cups en `jsonb`. |
+| `0006_retrait_prefixe_anonymisation.sql` | Retrait de `cups.anonymization_prefix`, jamais lue. |
+| `0007_quotas_categories.sql` | Quotas d'inscription par catégorie (`max_products`, `max_products_per_producer`) et réservation des places pendant le paiement (`registrations.payment_reserved_until`). Purement additive. |
+| `0008_double_jury_ajout.sql` | Cup unique à deux jurys, étape 1 : `cup_juries.panel`, codes / scores / rangs doublés en `*_pro` et `*_public` sur `products`, avec **report** des données existantes dans les colonnes du panel de leur cup. N'efface rien. |
+| `0009_double_jury_retrait.sql` | Étape 2 : retrait de `cups.type` et des anciennes colonnes `anonymous_code`, `final_score`, `category_rank`. **Destructive** — ne s'applique qu'après 0008, dans la même chaîne. |
 | `meta/` | Snapshots et `_journal.json` que drizzle-kit utilise pour calculer le diff suivant. **Se committe avec le SQL**, sinon la migration suivante repart d'un état faux. |
 
 Procédure pour tout changement de schéma :
@@ -98,7 +103,7 @@ le libellé est faux depuis la bascule, la commande exécutée est bien
 `drizzle-kit migrate`.
 
 Reprendre une migration à froid sur une base vide (nouvel environnement) :
-`pnpm db:migrate` suffit, les cinq fichiers `0000` → `0004` s'appliquent dans
+`pnpm db:migrate` suffit, les fichiers `0000` → `0009` s'appliquent dans
 l'ordre du journal. Ne pas lancer `baseline-migrations.mjs` sur une base
 vierge : il marquerait `0000_baseline_production` comme appliquée alors que
 rien n'existe, et les migrations suivantes échoueraient sur des tables

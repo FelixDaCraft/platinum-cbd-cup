@@ -37,7 +37,6 @@ interface CupCardProps {
   cup: {
     id: string;
     name: string;
-    type: "public" | "pro";
     status: string;
     confirmedCount: number;
     pendingCount: number;
@@ -142,7 +141,7 @@ function CupCard({ cup }: CupCardProps) {
                 className="n-label"
                 style={{ color: "var(--n-text-disabled)" }}
               >
-                {cup.type === "public" ? "PUBLIQUE" : "PRO"}
+                PRO · PUBLIC
               </span>
             </div>
           </div>

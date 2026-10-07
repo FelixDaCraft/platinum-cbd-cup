@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { TRPCError } from "@trpc/server";
+import { JURY_PANEL_LABELS } from "~/lib/enums";
 
 import { api } from "~/trpc/server";
 
@@ -146,7 +147,7 @@ export default async function ProducerWidgetPage({
 
                 {entry.products.map((product) => (
                   <div
-                    key={product.id}
+                    key={product.key}
                     style={{
                       display: "flex",
                       alignItems: "center",
@@ -164,6 +165,9 @@ export default async function ProducerWidgetPage({
                       }}
                     >
                       {product.name}
+                      <span style={{ color: palette.muted }}>
+                        {` · ${JURY_PANEL_LABELS[product.panel]}`}
+                      </span>
                     </span>
                     <span
                       style={{

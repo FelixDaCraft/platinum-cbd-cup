@@ -16,7 +16,8 @@ import {
   juryProcedure,
 } from "~/server/api/trpc";
 import { getCupOrThrow } from "~/server/api/helpers/cup";
-import { assertProducerMayJudge } from "~/server/api/helpers/jury";
+import { assertMayJoinPanel } from "~/server/api/helpers/jury";
+import { codeFor, panelColumns } from "~/server/db/panel-columns";
 import * as schema from "~/server/db/schema";
 import { generateId } from "~/server/db/schema/id";
 import { hashPassword } from "better-auth/crypto";
@@ -553,7 +554,8 @@ export const juryRouter = createTRPCRouter({
         });
       }
 
-      await assertProducerMayJudge(ctx.db, ctx.userId, invitation.cupId);
+      // Une invitation fait entrer dans le panel pro.
+      await assertMayJoinPanel(ctx.db, ctx.userId, invitation.cupId, "pro");
 
       // Check if user is already a jury for this cup
       const existingJury = await ctx.db.query.cupJuries.findFirst({
@@ -582,6 +584,15 @@ export const juryRouter = createTRPCRouter({
             createdAt: now,
             updatedAt: now,
           });
+        } else if (existingProfile.juryType !== "pro") {
+          // Un juré public (entré par code ou QR sur une autre édition) qui
+          // accepte une invitation devient juré pro : son profil doit lui
+          // ouvrir les réglages réservés aux pros (nom affiché au palmarès,
+          // expertise), sans quoi il ne pourrait jamais y figurer.
+          await tx
+            .update(schema.juryProfiles)
+            .set({ juryType: "pro", updatedAt: now })
+            .where(eq(schema.juryProfiles.id, existingProfile.id));
         }
 
         if (!existingJury) {
@@ -590,6 +601,7 @@ export const juryRouter = createTRPCRouter({
             cupId: invitation.cupId,
             userId: ctx.userId,
             invitationId: invitation.id,
+            panel: "pro",
             joinedAt: now,
           });
         }
@@ -765,6 +777,7 @@ export const juryRouter = createTRPCRouter({
           userId: userId,
           invitationId: invitation.id,
           juryProfileId: juryProfileId,
+          panel: "pro",
           joinedAt: now,
         });
 
@@ -1402,7 +1415,8 @@ export const juryRouter = createTRPCRouter({
       const products = confirmedRegistrations.flatMap((r) =>
         r.products.map((p) => ({
           categoryName: p.category.name,
-          productCode: p.anonymousCode ?? `#${p.id.slice(0, 4).toUpperCase()}`,
+          // Le code du panel du juré : c'est sous celui-là qu'il note.
+          productCode: codeFor(p, jury.panel) ?? `#${p.id.slice(0, 4).toUpperCase()}`,
         }))
       );
 
@@ -1484,7 +1498,8 @@ export const juryRouter = createTRPCRouter({
         r.products.map((p) => ({
           categoryId: p.categoryId,
           categoryName: p.category.name,
-          productCode: p.anonymousCode ?? `#${p.id.slice(0, 4).toUpperCase()}`,
+          fallbackCode: `#${p.id.slice(0, 4).toUpperCase()}`,
+          codes: { pro: p.anonymousCodePro, public: p.anonymousCodePublic },
         }))
       );
 
@@ -1497,7 +1512,11 @@ export const juryRouter = createTRPCRouter({
           );
           const juryProducts = allProducts
             .filter((p) => assignedCategoryIds.has(p.categoryId))
-            .map(({ categoryName, productCode }) => ({ categoryName, productCode }));
+            // Chaque juré reçoit les codes de son panel.
+            .map(({ categoryName, codes, fallbackCode }) => ({
+              categoryName,
+              productCode: codes[jury.panel] ?? fallbackCode,
+            }));
 
           return {
             cupJuryId: jury.id,
@@ -1643,7 +1662,8 @@ export const juryRouter = createTRPCRouter({
                 : [];
               return {
                 id: p.id,
-                anonymousCode: p.anonymousCode,
+                // Code du panel du juré : le seul qu'il doive connaître.
+                anonymousCode: codeFor(p, juryMembership.panel),
                 categoryId: p.categoryId,
                 categoryName: p.category.name,
                 // Mark as rated if there's a submitted rating
@@ -1671,6 +1691,7 @@ export const juryRouter = createTRPCRouter({
         },
         jury: {
           id: juryMembership.id,
+          panel: juryMembership.panel,
           samplesReceivedAt: juryMembership.samplesReceivedAt,
           joinedAt: juryMembership.joinedAt,
           categoryAssignments: juryMembership.categoryAssignments.map((a) => ({
@@ -1799,7 +1820,7 @@ export const juryRouter = createTRPCRouter({
             eq(schema.products.categoryId, product.categoryId)
           )
         )
-        .orderBy(schema.products.anonymousCode);
+        .orderBy(panelColumns(juryMembership.panel).anonymousCode);
 
       const totalProducts = allProductsResult.length;
 
@@ -1836,7 +1857,7 @@ export const juryRouter = createTRPCRouter({
         },
         product: {
           id: product.id,
-          anonymousCode: product.anonymousCode,
+          anonymousCode: codeFor(product, juryMembership.panel),
           categoryId: product.categoryId,
           categoryName: product.category.name,
         },
@@ -2226,7 +2247,7 @@ export const juryRouter = createTRPCRouter({
         const sameCategoryProducts = await ctx.db
           .select({
             id: schema.products.id,
-            anonymousCode: schema.products.anonymousCode,
+            anonymousCode: panelColumns(juryMembership.panel).anonymousCode,
           })
           .from(schema.products)
           .innerJoin(
@@ -2240,7 +2261,7 @@ export const juryRouter = createTRPCRouter({
               eq(schema.products.categoryId, product.categoryId)
             )
           )
-          .orderBy(schema.products.anonymousCode);
+          .orderBy(panelColumns(juryMembership.panel).anonymousCode);
 
         const unratedInCategory = sameCategoryProducts.filter(
           (p) => !ratedSet.has(p.id)
@@ -2546,7 +2567,8 @@ export const juryRouter = createTRPCRouter({
       // Le meme controle existe sur `juryCodes.activate` et `acceptInvitation` ;
       // ce chemin-ci est la troisieme porte d'entree et doit l'appliquer aussi,
       // sinon la garde se contourne en demandant un jeton public.
-      await assertProducerMayJudge(ctx.db, ctx.userId, tokenRecord.cupId);
+      // Un jeton public fait entrer dans le panel public.
+      await assertMayJoinPanel(ctx.db, ctx.userId, tokenRecord.cupId, "public");
 
       const now = new Date();
 
@@ -2613,6 +2635,7 @@ export const juryRouter = createTRPCRouter({
             cupId: tokenRecord.cupId,
             userId: ctx.userId,
             juryProfileId: juryProfileId,
+            panel: "public",
             isActive: true,
             joinedAt: now,
             // Public juries don't need to confirm samples (they buy packs with samples included)
@@ -3173,14 +3196,18 @@ export const juryRouter = createTRPCRouter({
         };
       }
 
+      // Le juré se compare au classement de SON panel, sous les codes qu'il
+      // a eus en main.
+      const panelCols = panelColumns(cupJury.panel);
+
       // Get all products from confirmed registrations in assigned categories
       const allProducts = await ctx.db
         .select({
           productId: schema.products.id,
           productName: schema.products.name,
-          anonymousCode: schema.products.anonymousCode,
-          finalScore: schema.products.finalScore,
-          categoryRank: schema.products.categoryRank,
+          anonymousCode: panelCols.anonymousCode,
+          finalScore: panelCols.finalScore,
+          categoryRank: panelCols.categoryRank,
           categoryId: schema.products.categoryId,
           categoryName: schema.categories.name,
           producerName: schema.producers.companyName,
@@ -3322,7 +3349,8 @@ export const juryRouter = createTRPCRouter({
           juryScore: juryScore !== null ? Math.round(juryScore * 100) / 100 : null,
           finalScore,
           difference: difference !== null ? Math.round(difference * 100) / 100 : null,
-          label: product.labelName
+          // Les labels sont décernés par le jury public : un juré pro n'en voit pas.
+          label: cupJury.panel === "public" && product.labelName
             ? {
                 name: product.labelName,
                 color: product.labelColor,
@@ -3423,8 +3451,8 @@ export const juryRouter = createTRPCRouter({
         .select({
           productId: schema.products.id,
           productName: schema.products.name,
-          anonymousCode: schema.products.anonymousCode,
-          finalScore: schema.products.finalScore,
+          anonymousCode: panelColumns(cupJury.panel).anonymousCode,
+          finalScore: panelColumns(cupJury.panel).finalScore,
           categoryId: schema.products.categoryId,
           categoryName: schema.categories.name,
           producerName: schema.producers.companyName,
@@ -3500,7 +3528,8 @@ export const juryRouter = createTRPCRouter({
 
       const juryScoreMap = new Map(juryScores.map((s) => [s.criterionId, s.score]));
 
-      // Compute category averages for each criterion (all juries, all products in category)
+      // Moyennes de catégorie par critère : tous les jurés DU PANEL du juré,
+      // tous les produits de la catégorie.
       const categoryAvgRows = await ctx.db
         .select({
           criterionId: schema.criterionScores.criterionId,
@@ -3510,6 +3539,13 @@ export const juryRouter = createTRPCRouter({
         .innerJoin(
           schema.productRatings,
           eq(schema.criterionScores.productRatingId, schema.productRatings.id)
+        )
+        .innerJoin(
+          schema.cupJuries,
+          and(
+            eq(schema.productRatings.juryId, schema.cupJuries.id),
+            eq(schema.cupJuries.panel, cupJury.panel)
+          )
         )
         .innerJoin(schema.products, eq(schema.productRatings.productId, schema.products.id))
         .innerJoin(
