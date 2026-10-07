@@ -507,10 +507,11 @@ export default async function PalmaresPage({
   const hideScores = year === 2023;
 
   // Politique d'affichage public, selon le jury :
-  //  • PUBLIC → podium (3 premiers, avec leur note), puis les autres
-  //    produits labellisés, avec leur label mais SANS note. Le premier de
-  //    chaque catégorie reçoit le « Prix du public », jamais un label de
-  //    palier (Thomas, 06/2026).
+  //  • PUBLIC → podium, puis les autres produits labellisés, groupés par
+  //    label. Rang et note sont publiés pour tous (décision du 07/10/2026,
+  //    qui remplace la règle « notes réservées au podium » de 06/2026). Le
+  //    premier de chaque catégorie reçoit le « Prix du public », jamais un
+  //    label de palier (Thomas, 06/2026).
   //  • PRO → aucun label ; le podium, et le classement complet avec les
   //    notes seulement si l'organisateur a choisi « all ».
   // Un produit disqualifié est toujours montré, comme tel, en fin de liste.
@@ -725,9 +726,13 @@ export default async function PalmaresPage({
                     {rows.map((r) => (
                       <li key={r.code}>
                         <span>
+                          <span className="pal-rank">{r.rank > 0 ? `${r.rank}e` : "—"}</span>
                           <b>{r.productName || r.code}</b> ·{" "}
                           <span className="pal-muted">{r.producerName}</span>
                         </span>
+                        {!hideScores && (
+                          <span className="pal-score">{frScore(r.score, cup.ratingScale)}</span>
+                        )}
                       </li>
                     ))}
                   </ul>
@@ -735,8 +740,7 @@ export default async function PalmaresPage({
               ))}
             </div>
             <p className="pal-note">
-              Au-delà du podium, seul le label est publié : les notes détaillées
-              sont envoyées à chaque producteur.
+              Le détail des notes par critère est envoyé à chaque producteur.
             </p>
           </div>
         )}
