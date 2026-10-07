@@ -4,21 +4,17 @@ import Link from "next/link";
 import { eq, desc, isNotNull, and, asc } from "drizzle-orm";
 import { db } from "~/server/db";
 import * as schema from "~/server/db/schema";
-import {
-  Eyebrow,
-  Pill,
-} from "~/components/portal/platinum";
-import { MobilePalmaresBackdrop } from "~/components/portal/mobile/mobile-palmares-backdrop";
-import { DesktopEmblem } from "../_components/desktop-emblem";
-import { RankingRow } from "./_components/ranking-row";
+import type { Cup } from "~/server/db/schema/cups";
+import { EditionSelect } from "./_components/edition-select";
 import {
   PORTAL_CACHE_TAGS,
   PORTAL_REVALIDATE,
   reviveCupDates,
 } from "../_lib/cache";
 import { canonical, OG_IMAGE_PAR_DEFAUT } from "../_lib/seo";
-import { JURY_PANEL_LABELS, type JuryPanel } from "~/lib/enums";
+import type { JuryPanel } from "~/lib/enums";
 import { panelColumns } from "~/server/db/panel-columns";
+
 
 // ---------------------------------------------------------------------------
 // Types
@@ -315,6 +311,63 @@ async function fetchProducts(
     });
 }
 
+
+// ---------------------------------------------------------------------------
+// Éditions et classements
+// ---------------------------------------------------------------------------
+
+/** Millésime d'une édition : l'année du nom, sinon celle de la cérémonie. */
+function editionYear(cup: Cup): number {
+  const fromName = /\b(20\d{2})\b/.exec(cup.name)?.[1];
+  if (fromName) return Number(fromName);
+  return new Date(cup.eventDate ?? cup.ratingEndAt ?? cup.createdAt).getFullYear();
+}
+
+/** 2023 = 1re édition. */
+function editionOrdinal(year: number): string {
+  const n = Math.max(1, year - 2022);
+  return n === 1 ? "1re édition" : `${n}e édition`;
+}
+
+const PANEL_NAME: Record<JuryPanel, string> = {
+  public: "Jury public",
+  pro: "Jury professionnel",
+};
+
+/** Indice de nom des éditions historiques, une cup par jury (« … - Jury PRO »). */
+const PANEL_HINT: Record<JuryPanel, RegExp> = {
+  public: /jury\s+public/i,
+  pro: /jury\s+pro\b/i,
+};
+
+/** Un classement publié : la cup qui le porte et ses lignes. */
+interface Ranking {
+  panel: JuryPanel;
+  cup: Cup;
+  rows: ProductRow[];
+}
+
+/** « OR » → « Or ». */
+function titleCase(name: string): string {
+  return name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
+}
+
+function scaleMax(scale: string | null | undefined): number {
+  return Number((scale ?? "0-20").split("-")[1] ?? 20);
+}
+
+function frScore(score: number, scale: string | null | undefined): string {
+  const digits = scale === "0-100" ? 1 : 2;
+  return `${score.toLocaleString("fr-FR", {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  })} / ${scaleMax(scale)}`;
+}
+
+function frNumber(n: number): string {
+  return n.toLocaleString("fr-FR", { maximumFractionDigits: 2 });
+}
+
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
@@ -328,7 +381,7 @@ async function fetchProducts(
 export const metadata: Metadata = {
   title: "Palmarès",
   description:
-    "Le palmarès complet de la Platinum CBD Cup : lauréats, médailles et classements par catégorie de chaque édition.",
+    "Le palmarès complet de la Platinum CBD Cup : lauréats, labels et classements par catégorie de chaque édition, jury public et jury professionnel.",
   alternates: {
     canonical: canonical("/palmares"),
   },
@@ -336,12 +389,36 @@ export const metadata: Metadata = {
     type: "website",
     title: "Palmarès — Platinum CBD Cup",
     description:
-      "Lauréats, médailles et classements par catégorie de chaque édition de la Platinum CBD Cup.",
+      "Lauréats, labels et classements par catégorie de chaque édition de la Platinum CBD Cup.",
     url: canonical("/palmares"),
     images: [OG_IMAGE_PAR_DEFAUT],
   },
 };
 
+function EmptyState({ title, text }: { title: string; text: string }) {
+  return (
+    <div className="pal">
+      <section className="pal-head">
+        <h1 className="display">Palmarès</h1>
+      </section>
+      <div className="pal-empty">
+        <h2>{title}</h2>
+        <p>{text}</p>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Une édition = une année. Les éditions récentes portent leurs deux
+ * classements dans une seule cup ; les anciennes avaient une cup par jury
+ * (« PlatinumCBD CUP 2025 - Jury PRO » / « - Jury Public »). Le sélecteur
+ * d'édition regroupe donc par année, et le choix du jury désigne ensuite le
+ * classement — quelle que soit la cup qui le porte.
+ *
+ * Paramètres : `edition` (année ; un identifiant de cup reste accepté pour
+ * les anciens liens), `jury` (public | pro), `cat` (catégorie affichée).
+ */
 export default async function PalmaresPage({
   searchParams,
 }: {
@@ -350,847 +427,417 @@ export default async function PalmaresPage({
   const sp = await searchParams;
   const cups = (await getCachedPublishedCups()).map(reviveCupDates);
 
-  const headerSection = (
-    <section style={{ paddingTop: 40, paddingBottom: 32 }}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "flex-end",
-          flexWrap: "wrap",
-          gap: 24,
-        }}
-      >
-        <div>
-          <Eyebrow idx={4}>Palmarès · Public ledger</Eyebrow>
-          <h1 className="display" style={{ marginTop: 18, marginBottom: 8 }}>
-            Results<em>.</em>
-          </h1>
-        </div>
-
-        {cups.length > 0 && (
-          <div
-            className="palmares-edition-strip"
-            style={{ display: "flex", gap: 12, flexWrap: "wrap" }}
-          >
-            {cups.map((c) => {
-              const isActive =
-                sp.edition === c.id || (!sp.edition && c.id === cups[0]?.id);
-              const label = c.name.replace(/^PlatinumCBD CUP /i, "Ed · ");
-              return (
-                <Link
-                  key={c.id}
-                  href={`?edition=${c.id}`}
-                  scroll={false}
-                  className="btn ghost"
-                  style={{
-                    padding: "10px 16px",
-                    background: isActive ? "var(--fg)" : "transparent",
-                    color: isActive ? "var(--bg)" : "var(--fg)",
-                    textDecoration: "none",
-                  }}
-                >
-                  {label}
-                </Link>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    </section>
-  );
-
   if (cups.length === 0) {
     return (
-      <div className="page-enter">
-        {headerSection}
-        <div className="card">
-          <Eyebrow>Aucun palmarès publié</Eyebrow>
-          <p className="lede" style={{ marginTop: 14 }}>
-            Le palmarès de l&apos;édition en cours sera publié à l&apos;issue
-            de la cérémonie.
-          </p>
-        </div>
-      </div>
+      <EmptyState
+        title="Aucun palmarès publié"
+        text="Le palmarès de l'édition en cours sera publié à l'issue de la cérémonie."
+      />
     );
   }
 
-  const selectedCup = cups.find((c) => c.id === sp.edition) ?? cups[0]!;
-  const selectedYear = new Date(selectedCup.eventDate ?? selectedCup.createdAt)
-    .getFullYear()
-    .toString();
-
-  // The 2023 edition was ranked by the judges' placement, not by numeric notes,
-  // so its palmarès shows the ranking WITHOUT any score (Thomas, 06/2026).
-  const hideScores = selectedYear === "2023";
+  const years = [...new Set(cups.map(editionYear))].sort((a, b) => b - a);
+  const cupFromParam = cups.find((c) => c.id === sp.edition);
+  const yearFromParam = sp.edition && /^\d{4}$/.test(sp.edition) ? Number(sp.edition) : null;
+  const year = cupFromParam
+    ? editionYear(cupFromParam)
+    : yearFromParam && years.includes(yearFromParam)
+      ? yearFromParam
+      : years[0]!;
 
   // Seuls l'identifiant et l'échelle entrent dans la clé de cache : passer
   // la ligne entière y ferait entrer `updatedAt` et invaliderait tout à la
   // moindre écriture sur la cup.
-  const cupKey = { id: selectedCup.id, ratingScale: selectedCup.ratingScale };
-  const [labels, allCategories, publicPanelProducts, proPanelProducts, publicJuries] =
-    await Promise.all([
-      getCachedCupLabels(selectedCup.id),
-      getCachedCategories(selectedCup.id),
-      getCachedCupProducts(cupKey, "public"),
-      getCachedCupProducts(cupKey, "pro"),
-      getCachedPublicJuries(selectedCup.id),
-    ]);
-
-  // Une édition réunit un jury public et un jury pro, chacun avec son
-  // classement ; ?jury= choisit celui qu'on affiche. Les éditions antérieures
-  // n'ont qu'un panel : seul celui-là est proposé.
-  const productsByPanel: Record<JuryPanel, ProductRow[]> = {
-    public: publicPanelProducts,
-    pro: proPanelProducts,
-  };
-  // Le classement public d'abord : c'est lui qui porte les labels.
-  const availablePanels = (["public", "pro"] as const).filter(
-    (panel) => productsByPanel[panel].length > 0,
+  const yearCups = cups.filter((c) => editionYear(c) === year);
+  const perCup = await Promise.all(
+    yearCups.map(async (cup) => {
+      const key = { id: cup.id, ratingScale: cup.ratingScale };
+      const [publicRows, proRows] = await Promise.all([
+        getCachedCupProducts(key, "public"),
+        getCachedCupProducts(key, "pro"),
+      ]);
+      return { cup, public: publicRows, pro: proRows };
+    }),
   );
-  const selectedPanel: JuryPanel =
-    availablePanels.find((panel) => panel === sp.jury) ?? availablePanels[0] ?? "public";
-  const allProducts = productsByPanel[selectedPanel];
-  const panelParam = availablePanels.length > 1 ? `&jury=${selectedPanel}` : "";
 
-  // Public results policy depends on the jury panel displayed:
-  //
-  //  • PUBLIC panel → restricted display, regardless of resultsVisibility:
-  //      - Podium    : top 3 of each category, shown WITH their final score.
-  //      - Médaillés : every other label-winner, shown WITH the label but
-  //                    WITHOUT the score ("Médaillé" placeholder).
-  //      - Everything else (no podium, no label) is hidden.
-  //
-  //  • PRO panel → the organizer-configured resultsVisibility, with full
-  //    scores shown for every visible product (the historical behaviour).
-  const isPublicJuryCup = selectedPanel === "public";
+  // Le classement public d'abord : c'est lui qui porte les labels.
+  const rankings: Ranking[] = [];
+  for (const panel of ["public", "pro"] as const) {
+    const candidates = perCup
+      .filter((x) => x[panel].length > 0)
+      .sort(
+        (a, b) =>
+          Number(PANEL_HINT[panel].test(b.cup.name)) -
+          Number(PANEL_HINT[panel].test(a.cup.name)),
+      );
+    const best = candidates[0];
+    if (best) rankings.push({ panel, cup: best.cup, rows: best[panel] });
+  }
 
-  const proVisibility = (selectedCup.resultsVisibility ?? "labels") as
-    | "podium"
-    | "labels"
-    | "labels_and_podium"
-    | "all";
+  const editionOptions = years.map((y) => ({
+    value: String(y),
+    label: `${y} · ${editionOrdinal(y)}`,
+  }));
 
-  // A disqualified product is ALWAYS shown (as "DISQUALIFIÉ"), overriding the
-  // cup's normal display rule. Otherwise the standard public/pro logic applies.
-  const isVisible = (p: ProductRow): boolean => {
-    if (p.disqualified) return true;
-    if (isPublicJuryCup) return p.isPodium || p.labelName != null;
-    // Le jury pro ne décerne pas de label : hors « all », seul son podium
-    // est public (un réglage hérité « labels » revient au podium).
-    return proVisibility === "all" || p.isPodium;
-  };
-  // Public winner badge: EVERY public category winner (rank 1) wears the uniform
-  // "Prix du public" medal — never a score-tier label like OR/Argent (Thomas,
-  // 06/2026). Score-tier labels stay on the non-winning public ranks only.
-  const withPublicMedal = isPublicJuryCup
-    ? allProducts.map((p) =>
-        p.rank === 1 && !p.disqualified
-          ? { ...p, labelName: "Prix du public", labelColor: "var(--accent)" }
-          : p,
-      )
-    : allProducts;
-  const products = withPublicMedal.filter(isVisible);
-
-  // Public-jury cups mask the score everywhere except the podium; pro cups
-  // always reveal it.
-  const maskNonPodiumScore = isPublicJuryCup;
-
-  // Labels/medals are a PUBLIC-jury signal only — the Pro jury never shows label
-  // badges, on any edition (Thomas, 06/2026). This also keeps the methodology
-  // table public-only.
-  const showLabels = isPublicJuryCup;
-
-  if (products.length === 0) {
+  if (rankings.length === 0) {
     return (
-      <div className="page-enter">
-        {headerSection}
-        <div className="card">
-          <Eyebrow>Pas encore de palmarès</Eyebrow>
-          <p className="lede" style={{ marginTop: 14 }}>
-            Aucun résultat publié pour cette édition.
-          </p>
-        </div>
-      </div>
+      <EmptyState
+        title="Pas encore de palmarès"
+        text="Aucun résultat publié pour cette édition."
+      />
     );
   }
 
-  // Best-in-show = highest-scoring product. Scores are a podium-only signal,
-  // so the hero is drawn from the podium first. In practice the global top
-  // scorer is always a category rank-1 (podium), so this matches the absolute
-  // max; the fallback only guards degenerate editions where ranks were never
-  // committed (it then loses its score below, never contradicting the table).
-  const top =
-    [...products].filter((p) => p.isPodium).sort((a, b) => b.score - a.score)[0] ??
-    [...products]
-      .filter((p) => !p.disqualified)
-      .sort((a, b) => b.score - a.score)[0] ??
-    [...products].sort((a, b) => b.score - a.score)[0]!;
+  const ranking =
+    rankings.find((r) => r.panel === sp.jury) ??
+    rankings.find((r) => r.cup.id === cupFromParam?.id) ??
+    rankings[0]!;
+  const { panel, cup } = ranking;
+  const isPublic = panel === "public";
 
-  // Filter chips use real category metadata (sorted)
-  const activeCategoryId = sp.cat;
-  const filtered = activeCategoryId
-    ? products.filter((p) => p.categoryId === activeCategoryId)
-    : products;
+  const proRanking = rankings.find((r) => r.panel === "pro");
+  const [labels, allCategories, publicJuries] = await Promise.all([
+    getCachedCupLabels(cup.id),
+    getCachedCategories(cup.id),
+    proRanking ? getCachedPublicJuries(proRanking.cup.id) : Promise.resolve([]),
+  ]);
 
-  // Group filtered rows by category (preserves the SQL order: by sort_order
-  // then category name then score desc within category)
-  const grouped: CategoryGroup[] = [];
-  for (const row of filtered) {
-    let g = grouped.find((x) => x.id === row.categoryId);
-    if (!g) {
-      g = { id: row.categoryId, name: row.categoryName, rows: [] };
-      grouped.push(g);
-    }
-    g.rows.push(row);
-  }
-  // Disqualified products always sink to the bottom of their category (the sort
-  // is stable, so ranked rows keep their score-desc order above them).
-  for (const g of grouped) {
-    g.rows.sort((a, b) => Number(a.disqualified) - Number(b.disqualified));
-  }
+  // L'édition 2023 a été classée par placement, sans notes chiffrées : son
+  // palmarès montre le classement sans aucun score (Thomas, 06/2026).
+  const hideScores = year === 2023;
 
-  // Geographic split (2025+): when the cup's categories carry a "(France)" /
-  // "(Europe)" tag, the rankings are presented under two "Classement" banners
-  // — France first, then Europe — each preserving the category sort order.
-  // Editions without the tag (2023/2024/2026) fall through to the flat list.
-  const cupHasRegions = allCategories.some(
-    (c) => categoryRegion(c.name) !== null,
+  // Politique d'affichage public, selon le jury :
+  //  • PUBLIC → podium (3 premiers, avec leur note), puis les autres
+  //    produits labellisés, avec leur label mais SANS note. Le premier de
+  //    chaque catégorie reçoit le « Prix du public », jamais un label de
+  //    palier (Thomas, 06/2026).
+  //  • PRO → aucun label ; le podium, et le classement complet avec les
+  //    notes seulement si l'organisateur a choisi « all ».
+  // Un produit disqualifié est toujours montré, comme tel, en fin de liste.
+  const proShowsAll = (cup.resultsVisibility ?? "labels") === "all";
+
+  const categories = allCategories.filter((c) =>
+    ranking.rows.some((r) => r.categoryId === c.id),
   );
-  const regionSections: { label: string; groups: CategoryGroup[] }[] = [];
-  if (cupHasRegions) {
-    const franceGroups = grouped.filter((g) => categoryRegion(g.name) === "FR");
-    const europeGroups = grouped.filter((g) => categoryRegion(g.name) === "EU");
-    const otherGroups = grouped.filter((g) => categoryRegion(g.name) === null);
-    if (franceGroups.length > 0)
-      regionSections.push({ label: "France", groups: franceGroups });
-    if (europeGroups.length > 0)
-      regionSections.push({ label: "Europe", groups: europeGroups });
-    if (otherGroups.length > 0)
-      regionSections.push({ label: "Autres", groups: otherGroups });
-  }
+  const activeCategory =
+    categories.find((c) => c.id === sp.cat) ?? categories[0]!;
+  const categoryRows = ranking.rows.filter((r) => r.categoryId === activeCategory.id);
+  const ranked = categoryRows.filter((r) => !r.disqualified);
+  const podium = ranked
+    .filter((r) => r.isPodium)
+    .sort((a, b) => a.rank - b.rank);
+  const disqualified = categoryRows.filter((r) => r.disqualified);
 
-  // Single category block (header + column labels + rows). Reused by both the
-  // flat list and the region-grouped layout. `withTopBorder` draws the divider
-  // between consecutive categories (the first in a list/section omits it).
-  const renderCategory = (group: CategoryGroup, withTopBorder: boolean) => (
-    <div key={group.id}>
-      {/* Category header */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "baseline",
-          justifyContent: "space-between",
-          padding: "20px 28px 14px",
-          borderTop: withTopBorder ? "1px solid var(--line)" : 0,
-        }}
-      >
-        <div
-          className="mono"
-          style={{
-            fontSize: 17,
-            letterSpacing: "-0.01em",
-            textTransform: "uppercase",
-            color: "var(--fg)",
-          }}
-        >
-          {cupHasRegions ? stripRegion(group.name) : group.name}
-        </div>
-        <div
-          className="mono fg3"
-          style={{
-            fontSize: 11,
-            letterSpacing: ".1em",
-            textTransform: "uppercase",
-          }}
-        >
-          {group.rows.length} {group.rows.length > 1 ? "produits" : "produit"}
-        </div>
-      </div>
-
-      {/* Column header — desktop only. The mobile card layout is
-          self-explanatory so the column header is hidden via CSS below 880px. */}
-      <div
-        className="ranking-header"
-        style={{
-          display: "grid",
-          gridTemplateColumns: showLabels
-            ? "60px 80px 1.2fr 1fr 90px 110px"
-            : "60px 80px 1.2fr 1fr 90px",
-          padding: "10px 28px",
-          borderTop: "1px solid var(--line)",
-          borderBottom: "1px solid var(--line)",
-          fontFamily: "var(--mono)",
-          fontSize: 10,
-          letterSpacing: ".12em",
-          textTransform: "uppercase",
-          color: "var(--fg-3)",
-        }}
-      >
-        <span>Rang</span>
-        <span>Code</span>
-        <span>Variété</span>
-        <span>Producteur</span>
-        <span style={{ textAlign: "right" }}>Score</span>
-        {showLabels && <span style={{ textAlign: "right" }}>Label</span>}
-      </div>
-
-      {/* Rows */}
-      {group.rows.map((row, i) => (
-        <RankingRow
-          key={row.code + row.categoryId}
-          row={row}
-          isLast={i === group.rows.length - 1}
-          showLabel={showLabels}
-          maskNonPodiumScore={maskNonPodiumScore}
-          hideScore={hideScores}
-        />
-      ))}
-    </div>
-  );
-
-  // Dedupe labels by name (the prod data has duplicate rows like "Label OR" /
-  // "Label OR" or "Label Argent" / "Label ARGENT" — same threshold + color).
-  const labelLegend = Array.from(
+  // Paliers de label, dédoublonnés par nom (la base historique contient
+  // « Label OR » et « Label Or », même seuil, même couleur).
+  const tiers = Array.from(
     labels
       .slice()
       .sort((a, b) => b.minScore - a.minScore)
       .reduce((map, l) => {
-        const cleanName = cleanLabel(l.name) ?? l.name;
-        if (!map.has(cleanName)) {
-          map.set(cleanName, {
-            name: cleanName,
-            color: l.color ?? "var(--accent)",
-            range:
-              l.maxScore != null
-                ? `${l.minScore.toFixed(1)} – ${l.maxScore.toFixed(1)}`
-                : `≥ ${l.minScore.toFixed(1)}`,
-          });
-        }
+        const key = cleanLabel(l.name) ?? l.name;
+        if (!map.has(key)) map.set(key, { key, ...l });
         return map;
-      }, new Map<string, { name: string; color: string; range: string }>())
+      }, new Map<string, CupLabel & { key: string }>())
       .values(),
   );
 
+  const medalGroups = isPublic
+    ? tiers
+        .map((tier) => ({
+          tier,
+          rows: ranked.filter((r) => !r.isPodium && r.labelName === tier.key),
+        }))
+        .filter((g) => g.rows.length > 0)
+    : [];
+  const fullRanking =
+    !isPublic && proShowsAll ? ranked.filter((r) => !r.isPodium) : [];
+
+  // 2025 : catégories dédoublées France / Europe. Les puces sont alors
+  // groupées par région, sans répéter la région dans chaque libellé.
+  const hasRegions = categories.some((c) => categoryRegion(c.name) !== null);
+  const chipGroups: { label: string | null; items: typeof categories }[] = hasRegions
+    ? (
+        [
+          { label: "France", items: categories.filter((c) => categoryRegion(c.name) === "FR") },
+          { label: "Europe", items: categories.filter((c) => categoryRegion(c.name) === "EU") },
+          { label: "Autres", items: categories.filter((c) => categoryRegion(c.name) === null) },
+        ] as const
+      ).filter((g) => g.items.length > 0)
+    : [{ label: null, items: categories }];
+  const chipName = (name: string) => (hasRegions ? stripRegion(name) : name);
+  const categoryTitle = (name: string) => {
+    const region = categoryRegion(name);
+    return region ? `${stripRegion(name)} · ${region === "FR" ? "France" : "Europe"}` : name;
+  };
+
+  const href = (params: { jury?: JuryPanel; cat?: string }) => {
+    const q = new URLSearchParams({ edition: String(year) });
+    const j = params.jury ?? panel;
+    if (rankings.length > 1) q.set("jury", j);
+    if (params.cat) q.set("cat", params.cat);
+    return `/palmares?${q.toString()}`;
+  };
+
+  const productCount = ranking.rows.length;
+  const others = categories.filter((c) => c.id !== activeCategory.id);
+  const countIn = (categoryId: string) =>
+    ranking.rows.filter((r) => r.categoryId === categoryId).length;
+
   return (
-    <>
-      {/* Page-level 3D emblem — same size + tilt as the home hero, fixed
-          to the viewport top-right so it stays visible while scrolling.
-          Rendered OUTSIDE the .page-enter wrapper because that wrapper
-          animates a transform on mount, and any ancestor with a transform
-          becomes the containing block for `position: fixed` — which would
-          collapse the emblem back to absolute-style behaviour and make
-          it scroll with the content. Non-interactive so clicks fall through. */}
-      <div
-        aria-hidden="true"
-        className="palmares-desktop-emblem"
-        style={{
-          position: "fixed",
-          top: 0,
-          right: 0,
-          zIndex: 0,
-          pointerEvents: "none",
-        }}
-      >
-        {/* Monté uniquement au-dessus de 881px : masquer ce canvas via
-            .palmares-desktop-emblem{display:none} laissait un second contexte
-            WebGL vivant sous MobilePalmaresBackdrop. */}
-        <DesktopEmblem size={735} tiltZ={-0.18} interactive={false} />
-      </div>
-
-      {/* Mobile-only fixed full-viewport 3D backdrop. Returns null above
-          880px (the useMediaQuery gate inside the component handles that),
-          so desktop renders the existing top-right emblem only. */}
-      <MobilePalmaresBackdrop />
-
-      <div className="page-enter" style={{ position: "relative", zIndex: 1 }}>
-        {headerSection}
-
-        {/* ── BEST IN SHOW ─────────────────────────────────────────────── */}
-        <section
-          className="card"
-          data-best-in-show
-          style={{
-            marginBottom: 32,
-            background: "color-mix(in srgb, var(--bg-2) 55%, transparent)",
-            backdropFilter: "blur(10px) saturate(140%)",
-            WebkitBackdropFilter: "blur(10px) saturate(140%)",
-          }}
-        >
-          <div>
-          <Pill variant="accent" dot>
-            BEST IN SHOW · {selectedYear}
-          </Pill>
-
-          <div
-            className="display"
-            style={{
-              fontSize: "clamp(48px, 7vw, 96px)",
-              marginTop: 18,
-              marginBottom: 6,
-            }}
-          >
-            {top.productName || top.code}
-            <em>.</em>
-          </div>
-
-          <div
-            className="mono"
-            style={{
-              fontSize: 13,
-              color: "var(--fg-2)",
-              letterSpacing: ".06em",
-              marginBottom: 22,
-            }}
-          >
-            {top.producerName} · {top.categoryName}
-            {top.code ? ` · ${top.code}` : ""}
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              gap: 40,
-              alignItems: "flex-end",
-              flexWrap: "wrap",
-            }}
-          >
-            {/* Public-jury cups expose the hero score only when the best-in-show
-                is a podium product (consistent with the table's top-3-only
-                policy); pro cups always show it. */}
-            {!hideScores && (top.isPodium || !maskNonPodiumScore) && (
-              <div>
-                <div
-                  className="mono fg3"
-                  style={{
-                    fontSize: 11,
-                    letterSpacing: ".1em",
-                    textTransform: "uppercase",
-                  }}
-                >
-                  Score final · {selectedCup.ratingScale ?? "0-20"}
-                </div>
-                <div
-                  className="mono tabular"
-                  style={{
-                    fontSize: 56,
-                    fontWeight: 300,
-                    letterSpacing: "-0.02em",
-                    color: "var(--accent)",
-                  }}
-                >
-                  {top.scoreFormatted}
-                </div>
-              </div>
-            )}
-
-            {showLabels && top.labelName && (
-              <div>
-                <div
-                  className="mono fg3"
-                  style={{
-                    fontSize: 11,
-                    letterSpacing: ".1em",
-                    textTransform: "uppercase",
-                  }}
-                >
-                  {top.labelName === "Prix du public" ? "Distinction" : "Label"}
-                </div>
-                {top.labelName === "Prix du public" ? (
-                  /* ── Hero winner badge — "Prix du public" at display scale ──
-                     A squared plaque instead of a plain text line. Uses the same
-                     two-line ◆ PRIX ◆ / du public treatment as the row badge,
-                     scaled up to feel like a real medal in this context. */
-                  <div
-                    className="mono"
-                    style={{
-                      display: "inline-flex",
-                      flexDirection: "column",
-                      alignItems: "center",
-                      gap: 4,
-                      marginTop: 8,
-                      padding: "10px 18px",
-                      borderRadius: 4,
-                      border: "1px solid var(--accent)",
-                      background: "var(--accent-dim)",
-                      lineHeight: 1,
-                    }}
-                  >
-                    <span
-                      style={{
-                        fontSize: 10,
-                        letterSpacing: ".25em",
-                        color: "var(--accent-hi)",
-                        textTransform: "uppercase",
-                      }}
-                    >
-                      ◆ PRIX ◆
-                    </span>
-                    <span
-                      style={{
-                        fontSize: 18,
-                        letterSpacing: ".14em",
-                        color: "var(--accent)",
-                        textTransform: "uppercase",
-                        fontWeight: 400,
-                      }}
-                    >
-                      du public
-                    </span>
-                  </div>
-                ) : (
-                  <div
-                    className="mono"
-                    style={{
-                      fontSize: 24,
-                      fontWeight: 400,
-                      letterSpacing: ".05em",
-                      marginTop: 4,
-                      color: top.labelColor ?? "var(--accent)",
-                    }}
-                  >
-                    {top.labelName}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+    <div className="pal">
+      {/* ── EN-TÊTE ──────────────────────────────────────────────────── */}
+      <section className="pal-head">
+        <div className="pal-head-title">
+          <h1 className="display">
+            Palmarès <em>{year}</em>
+          </h1>
+          <p>
+            {titleCase(editionOrdinal(year))} · {productCount} produit
+            {productCount > 1 ? "s" : ""} · {categories.length} catégorie
+            {categories.length > 1 ? "s" : ""}
+          </p>
         </div>
+        <EditionSelect options={editionOptions} current={String(year)} />
       </section>
 
-      {/* ── JURY SWITCH ─────────────────────────────────────────────── */}
-      {/* Chaque édition a deux classements, jury public et jury pro. Le
-          filtre de catégorie est conservé d'un classement à l'autre. */}
-      {availablePanels.length > 1 && (
-        <div
-          className="palmares-jury-strip"
-          role="tablist"
-          aria-label="Classement"
-          style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}
-        >
-          {availablePanels.map((panel) => {
-            const isActive = panel === selectedPanel;
-            return (
+      {/* ── JURY ET CATÉGORIES ───────────────────────────────────────── */}
+      <section className="pal-controls">
+        {rankings.length > 1 && (
+          <nav className="pal-jury" aria-label="Classement affiché">
+            {rankings.map((r) => (
               <Link
-                key={panel}
-                role="tab"
-                aria-selected={isActive}
-                href={`?edition=${selectedCup.id}&jury=${panel}${
-                  activeCategoryId ? `&cat=${activeCategoryId}` : ""
-                }`}
+                key={r.panel}
+                href={href({ jury: r.panel, cat: activeCategory.id })}
                 scroll={false}
-                className="btn ghost"
-                style={{
-                  padding: "10px 16px",
-                  background: isActive ? "var(--fg)" : "transparent",
-                  color: isActive ? "var(--bg)" : "var(--fg)",
-                  textDecoration: "none",
-                }}
+                aria-current={r.panel === panel ? "true" : undefined}
               >
-                Classement {JURY_PANEL_LABELS[panel].toLowerCase()}
+                {PANEL_NAME[r.panel]}
               </Link>
-            );
-          })}
-        </div>
-      )}
+            ))}
+          </nav>
+        )}
 
-      {/* ── CATEGORY FILTER CHIPS ───────────────────────────────────── */}
-      <div
-        className="palmares-category-strip"
-        style={{
-          display: "flex",
-          gap: 8,
-          marginBottom: 24,
-          flexWrap: "wrap",
-        }}
-      >
-        {[{ id: "ALL", name: "Toutes" } as { id: string; name: string }]
-          .concat(allCategories.map((c) => ({ id: c.id, name: c.name })))
-          .map((c) => {
-            const isActive =
-              c.id === "ALL" ? !activeCategoryId : activeCategoryId === c.id;
-            const href =
-              c.id === "ALL"
-                ? `?edition=${selectedCup.id}${panelParam}`
-                : `?edition=${selectedCup.id}${panelParam}&cat=${c.id}`;
-            return (
-              <Link
-                key={c.id}
-                href={href}
-                scroll={false}
-                className="mono"
-                style={{
-                  padding: "8px 14px",
-                  fontSize: 11,
-                  letterSpacing: ".1em",
-                  textTransform: "uppercase",
-                  borderRadius: 999,
-                  background: isActive ? "var(--fg)" : "transparent",
-                  color: isActive ? "var(--bg)" : "var(--fg-2)",
-                  border: `1px solid ${
-                    isActive ? "var(--fg)" : "var(--line-strong)"
-                  }`,
-                  textDecoration: "none",
-                }}
-              >
-                {c.name}
-              </Link>
-            );
-          })}
-      </div>
+        <p className="pal-explain">
+          {isPublic ? (
+            <>
+              Des consommateurs ont noté chaque produit à l&apos;aveugle.
+              {tiers.length > 0 && (
+                <>
+                  {" "}Leur note décerne les labels :{" "}
+                  {tiers.map((t, i) => (
+                    <span key={t.key}>
+                      <b style={{ color: t.color ?? "var(--accent-hi)" }}>
+                        {titleCase(t.key)}
+                      </b>{" "}
+                      {t.maxScore == null
+                        ? `dès ${frNumber(t.minScore)}/${scaleMax(cup.ratingScale)}`
+                        : `de ${frNumber(t.minScore)} à ${frNumber(t.maxScore)}`}
+                      {i < tiers.length - 1 ? ", " : "."}
+                    </span>
+                  ))}
+                </>
+              )}{" "}
+              Le premier de chaque catégorie reçoit le Prix du public.
+            </>
+          ) : (
+            <>
+              Des professionnels (producteurs, sommeliers, analystes) ont noté
+              chaque produit à l&apos;aveugle. Leur note établit le classement
+              de chaque catégorie ; le jury professionnel ne décerne pas de
+              label.
+            </>
+          )}
+        </p>
 
-      {/* ── RANKINGS GROUPED BY CATEGORY ────────────────────────────── */}
-      <section
-        className="card"
-        data-rankings-card
-        style={{
-          padding: 0,
-          overflow: "hidden",
-          marginBottom: 24,
-          // Mostly opaque so the table text stays legible over the 3D emblem
-          // backdrop (the glass blur is kept for a subtle depth hint only).
-          background: "color-mix(in srgb, var(--bg-2) 94%, transparent)",
-          backdropFilter: "blur(14px) saturate(140%)",
-          WebkitBackdropFilter: "blur(14px) saturate(140%)",
-        }}
-      >
-        {grouped.length === 0 ? (
-          <div
-            style={{
-              padding: "32px 28px",
-              color: "var(--fg-3)",
-              fontFamily: "var(--mono)",
-              fontSize: 12,
-            }}
-          >
-            Aucun produit dans cette catégorie.
-          </div>
-        ) : cupHasRegions ? (
-          regionSections.map((section, si) => (
-            <div key={section.label}>
-              {/* Region banner — "CLASSEMENT FRANCE" / "CLASSEMENT EUROPE" */}
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 14,
-                  padding: "24px 28px 16px",
-                  borderTop:
-                    si === 0 ? 0 : "1px solid var(--line-strong)",
-                }}
-              >
-                <span
-                  className="mono"
-                  style={{
-                    fontSize: 12,
-                    letterSpacing: ".2em",
-                    textTransform: "uppercase",
-                    color: "var(--accent)",
-                    fontWeight: 500,
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  Classement {section.label}
-                </span>
-                <span
-                  aria-hidden="true"
-                  style={{ flex: 1, height: 1, background: "var(--line)" }}
-                />
-                <span
-                  className="mono fg3"
-                  style={{
-                    fontSize: 10,
-                    letterSpacing: ".12em",
-                    textTransform: "uppercase",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {section.groups.length} catégorie
-                  {section.groups.length > 1 ? "s" : ""}
-                </span>
+        {categories.length > 1 && (
+          <nav className="pal-cats" aria-label="Catégories">
+            {chipGroups.map((group) => (
+              <div key={group.label ?? "all"} className="pal-cats-group">
+                {group.label && <span className="pal-cats-label">{group.label}</span>}
+                {group.items.map((c) => (
+                  <Link
+                    key={c.id}
+                    href={href({ cat: c.id })}
+                    scroll={false}
+                    aria-current={c.id === activeCategory.id ? "true" : undefined}
+                  >
+                    {chipName(c.name)}
+                  </Link>
+                ))}
               </div>
-              {section.groups.map((group, gi) =>
-                renderCategory(group, gi !== 0),
-              )}
-            </div>
-          ))
-        ) : (
-          grouped.map((group, gi) => renderCategory(group, gi !== 0))
+            ))}
+          </nav>
         )}
       </section>
 
-      {/* ── JURY ────────────────────────────────────────────────────────
-          Pro jurys who opted in via their profile. Public jurys never
-          appear here — they remain anonymous by design. */}
+      {/* ── CATÉGORIE AFFICHÉE ───────────────────────────────────────── */}
+      <section className="pal-category">
+        <div className="pal-category-head">
+          <h2 className="section-title">{categoryTitle(activeCategory.name)}</h2>
+          <p>
+            {categoryRows.length} produit{categoryRows.length > 1 ? "s" : ""} en compétition
+          </p>
+        </div>
+
+        {podium.length > 0 && (
+          <ol className="pal-podium" aria-label="Podium">
+            {podium.map((p) => {
+              const showScore = !hideScores;
+              const tier = isPublic && p.rank > 1 ? p.labelName : null;
+              const meta = [
+                showScore ? frScore(p.score, cup.ratingScale) : null,
+                tier ? `Label ${titleCase(tier)}` : null,
+              ].filter(Boolean);
+              return (
+                <li key={p.code} className={`is-rank-${Math.min(p.rank, 3)}`}>
+                  {isPublic && p.rank === 1 && (
+                    <span className="pal-podium-prize">Prix du public</span>
+                  )}
+                  <span className="pal-podium-rank">
+                    {p.rank}
+                    <sup>{p.rank === 1 ? "er" : "e"}</sup>
+                  </span>
+                  <span className="pal-podium-name">{p.productName || p.code}</span>
+                  <span className="pal-podium-producer">{p.producerName}</span>
+                  {meta.length > 0 && <span className="pal-podium-meta">{meta.join(" · ")}</span>}
+                </li>
+              );
+            })}
+          </ol>
+        )}
+
+        {medalGroups.length > 0 && (
+          <div className="pal-medals">
+            <h3>Les autres médaillés</h3>
+            <div className="pal-medals-grid">
+              {medalGroups.map(({ tier, rows }) => (
+                <div key={tier.key}>
+                  <p className="pal-medal-title" style={{ color: tier.color ?? undefined }}>
+                    <span
+                      className="pal-medal-dot"
+                      style={{ background: tier.color ?? "var(--accent)" }}
+                      aria-hidden="true"
+                    />
+                    Label {titleCase(tier.key)}
+                  </p>
+                  <ul className="pal-list">
+                    {rows.map((r) => (
+                      <li key={r.code}>
+                        <span>
+                          <b>{r.productName || r.code}</b> ·{" "}
+                          <span className="pal-muted">{r.producerName}</span>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+            <p className="pal-note">
+              Au-delà du podium, seul le label est publié : les notes détaillées
+              sont envoyées à chaque producteur.
+            </p>
+          </div>
+        )}
+
+        {fullRanking.length > 0 && (
+          <div className="pal-medals">
+            <h3>Suite du classement</h3>
+            <ol className="pal-list">
+              {fullRanking.map((r) => (
+                <li key={r.code}>
+                  <span>
+                    <span className="pal-rank">{r.rank > 0 ? `${r.rank}e` : "—"}</span>
+                    <b>{r.productName || r.code}</b> ·{" "}
+                    <span className="pal-muted">{r.producerName}</span>
+                  </span>
+                  {!hideScores && (
+                    <span className="pal-score">{frScore(r.score, cup.ratingScale)}</span>
+                  )}
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
+
+        {disqualified.length > 0 && (
+          <div className="pal-medals">
+            <h3>Disqualifiés</h3>
+            <ul className="pal-list">
+              {disqualified.map((r) => (
+                <li key={r.code}>
+                  <span>
+                    <b>{r.productName || r.code}</b> ·{" "}
+                    <span className="pal-muted">{r.producerName}</span>
+                  </span>
+                  <span className="pal-dq">Disqualifié</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </section>
+
+      {/* ── AUTRES CATÉGORIES ────────────────────────────────────────── */}
+      {others.length > 0 && (
+        <section className="pal-others" aria-label="Autres catégories">
+          {others.map((c) => {
+            const n = countIn(c.id);
+            return (
+              <Link key={c.id} href={href({ cat: c.id })} className="pal-other">
+                <span className="pal-other-name">{categoryTitle(c.name)}</span>
+                <span className="pal-muted">
+                  {n} produit{n > 1 ? "s" : ""} · voir le classement →
+                </span>
+              </Link>
+            );
+          })}
+        </section>
+      )}
+
+      {/* ── JURY PROFESSIONNEL ───────────────────────────────────────────
+          Les jurés pro qui y ont consenti. Le jury public reste anonyme. */}
       {publicJuries.length > 0 && (
-        <section style={{ marginTop: 32 }}>
-          <Eyebrow>Jury · {publicJuries.length} membre{publicJuries.length > 1 ? "s" : ""}</Eyebrow>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
-              gap: 16,
-              marginTop: 20,
-            }}
-          >
+        <section className="pal-juries">
+          <h2 className="section-title">Le jury professionnel {year}</h2>
+          <ul>
             {publicJuries.map((j) => (
-              <article
-                key={j.id}
-                className="card"
-                style={{
-                  padding: 20,
-                  background: "color-mix(in srgb, var(--bg-2) 60%, transparent)",
-                  backdropFilter: "blur(14px) saturate(140%)",
-                  WebkitBackdropFilter: "blur(14px) saturate(140%)",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 12,
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <div
-                    style={{
-                      width: 48,
-                      height: 48,
-                      borderRadius: "50%",
-                      background: "var(--bg)",
-                      border: "1px solid var(--line-strong)",
-                      flexShrink: 0,
-                      overflow: "hidden",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
+              <li key={j.id} className="pal-juror">
+                <div className="pal-juror-id">
+                  <span className="pal-juror-avatar">
                     {j.image ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={j.image}
-                        alt={j.displayName}
-                        // 48x48 : la taille du médaillon parent. La pastille
-                        // réserve déjà la place, mais l'attribut évite au
-                        // navigateur de repeindre le cercle à l'arrivée de
-                        // chaque portrait. Le jury est en bas de page, d'où
-                        // le chargement paresseux.
+                        alt=""
                         width={48}
                         height={48}
                         loading="lazy"
                         decoding="async"
-                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
                       />
                     ) : (
-                      <span
-                        className="mono"
-                        style={{
-                          fontSize: 14,
-                          color: "var(--fg-2)",
-                          letterSpacing: "0.05em",
-                        }}
-                      >
-                        {j.displayName
-                          .split(" ")
-                          .map((s) => s[0])
-                          .filter(Boolean)
-                          .slice(0, 2)
-                          .join("")
-                          .toUpperCase()}
-                      </span>
+                      j.displayName
+                        .split(" ")
+                        .map((s) => s[0])
+                        .filter(Boolean)
+                        .slice(0, 2)
+                        .join("")
+                        .toUpperCase()
                     )}
-                  </div>
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <p
-                      style={{
-                        fontSize: 14,
-                        fontWeight: 500,
-                        color: "var(--fg)",
-                        margin: 0,
-                        whiteSpace: "nowrap",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                      }}
-                    >
-                      {j.displayName}
-                    </p>
-                    {j.expertise && (
-                      <p
-                        className="mono"
-                        style={{
-                          fontSize: 10,
-                          color: "var(--fg-3)",
-                          letterSpacing: "0.1em",
-                          textTransform: "uppercase",
-                          margin: 0,
-                          marginTop: 2,
-                        }}
-                      >
-                        {j.expertise}
-                      </p>
-                    )}
-                  </div>
+                  </span>
+                  <span>
+                    <b>{j.displayName}</b>
+                    {j.expertise && <span className="pal-muted">{j.expertise}</span>}
+                  </span>
                 </div>
-                {j.bio && (
-                  <p
-                    style={{
-                      fontSize: 13,
-                      lineHeight: 1.55,
-                      color: "var(--fg-2)",
-                      margin: 0,
-                    }}
-                  >
-                    {j.bio}
-                  </p>
-                )}
-              </article>
+                {j.bio && <p>{j.bio}</p>}
+              </li>
             ))}
-          </div>
+          </ul>
         </section>
       )}
-
-      {/* ── METHODOLOGY ─────────────────────────────────────────────── */}
-      {showLabels && (
-        <section className="grid g-2" style={{ marginTop: 32 }}>
-          <div
-            className="card"
-            data-methodology-card
-            style={{
-              background: "color-mix(in srgb, var(--bg-2) 60%, transparent)",
-              backdropFilter: "blur(14px) saturate(140%)",
-              WebkitBackdropFilter: "blur(14px) saturate(140%)",
-            }}
-          >
-            <Eyebrow>
-              Méthodologie · Échelle {selectedCup.ratingScale ?? "0-20"}
-            </Eyebrow>
-            <div style={{ marginTop: 20 }}>
-              {labelLegend.length === 0 ? (
-                <p
-                  className="lede"
-                  style={{ marginTop: 4, color: "var(--fg-3)" }}
-                >
-                  Aucun palier de label défini pour cette édition.
-                </p>
-              ) : (
-                labelLegend.map((l) => (
-                  <div key={l.name} className="kv">
-                    <span
-                      className="kv-k"
-                      style={{
-                        color: l.color,
-                        letterSpacing: ".15em",
-                      }}
-                    >
-                      {l.name}
-                    </span>
-                    <span className="kv-v tabular">{l.range}</span>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </section>
-      )}
-      </div>
-    </>
+    </div>
   );
 }
 
