@@ -333,16 +333,24 @@ export const registrationRouter = createTRPCRouter({
 
       // Produits deja regles sur cette cup : le panier en cours est alors une
       // commande complementaire, et l'ecran le dit au producteur.
-      const paidProductsCount = existingRegistrations
+      const paidProducts = existingRegistrations
         .filter((reg) => reg.status === "confirmed")
-        .reduce((sum, reg) => sum + reg.products.length, 0);
+        .flatMap((reg) => reg.products);
+      const paidProductsCount = paidProducts.length;
       const isSupplement = paidProductsCount > 0;
+      // Par categorie : la page d'inscription en deduit ce que le maximum par
+      // producteur laisse encore inscrire.
+      const paidProductsByCategory: Record<string, number> = {};
+      for (const product of paidProducts) {
+        paidProductsByCategory[product.categoryId] =
+          (paidProductsByCategory[product.categoryId] ?? 0) + 1;
+      }
 
       const pendingRegistration = existingRegistrations.find(
         (reg) => reg.status === "pending_payment"
       );
       if (pendingRegistration) {
-        return { ...pendingRegistration, isSupplement, paidProductsCount };
+        return { ...pendingRegistration, isSupplement, paidProductsCount, paidProductsByCategory };
       }
 
       const cancelledRegistration = existingRegistrations.find(
@@ -381,6 +389,7 @@ export const registrationRouter = createTRPCRouter({
           products: [],
           isSupplement,
           paidProductsCount,
+          paidProductsByCategory,
         };
       }
 
@@ -417,7 +426,7 @@ export const registrationRouter = createTRPCRouter({
             message: "Inscription en cours de creation, rechargez la page.",
           });
         }
-        return { ...concurrent, isSupplement, paidProductsCount };
+        return { ...concurrent, isSupplement, paidProductsCount, paidProductsByCategory };
       }
 
       return {
@@ -425,6 +434,7 @@ export const registrationRouter = createTRPCRouter({
         products: [],
         isSupplement,
         paidProductsCount,
+        paidProductsByCategory,
       };
     }),
 

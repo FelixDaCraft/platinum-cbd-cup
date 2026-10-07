@@ -360,6 +360,19 @@ async function ouvrirAssistantInscription(
   );
   await page.goto(`/cups/${cupId}/register`);
   await initialisation;
+
+  // Un panier laissé par un test précédent (paiement coupé) fait reprendre
+  // l'assistant au panier : on repart sur l'ajout d'un produit.
+  // Le panier se charge après l'initialisation : on attend l'un des deux
+  // écrans d'arrivée avant de trancher.
+  const panier = page.getByRole("heading", { name: "Votre panier" });
+  const categories = page.getByRole("heading", { name: "Choix de la catégorie" });
+  await expect(panier.or(categories)).toBeVisible({ timeout: 30_000 });
+  // Laisse au panier, chargé juste après, le temps de faire basculer l'écran.
+  await page.waitForLoadState("networkidle");
+  if (await panier.isVisible()) {
+    await page.getByRole("button", { name: /ajouter un autre produit/i }).click();
+  }
 }
 
 /**
@@ -498,14 +511,28 @@ test.describe("Producteur · inscription à une édition", () => {
     await page.getByLabel("Producteur / Lab *").fill("E2E Test");
     await page.locator('input[name="thc"]').fill("0.28");
     await page.locator('input[name="cbd"]').fill("12.4");
+    await page.getByRole("button", { name: /ajouter au panier/i }).click();
+
+    // Étape 3 — panier : le spécimen y figure, on en ajoute un second, réglé
+    // avec lui en une seule fois.
+    await expect(page.getByRole("heading", { name: "Votre panier" })).toBeVisible();
+    await expect(page.getByText(nomSpecimen).first()).toBeVisible();
+    const second = `E2E-Ecran-bis-${suffixe()}`;
+    await page.getByRole("button", { name: /ajouter un autre produit/i }).click();
+    await page.getByRole("button", { name: ed.categorieNom }).click();
+    await page.getByRole("button", { name: /continuer/i }).click();
+    await page.getByLabel("Nom du spécimen *").fill(second);
+    await page.locator('input[name="thc"]').fill("0.2");
+    await page.getByRole("button", { name: /ajouter au panier/i }).click();
+    await expect(page.getByText(second).first()).toBeVisible();
     await page.getByRole("button", { name: /continuer/i }).click();
 
-    // Étape 3 — contact (lu sur le profil producteur, rien à saisir)
+    // Étape 4 — contact (lu sur le profil producteur, rien à saisir)
     await expect(page.getByText("Email du compte")).toBeVisible();
     await expect(page.getByText(PRODUCTEUR.email)).toBeVisible();
     await page.getByRole("button", { name: /continuer/i }).click();
 
-    // Étape 4 — règlement
+    // Étape 5 — règlement, pour tout le panier
     await expect(page.getByRole("heading", { name: "Paiement" })).toBeVisible();
     await page.getByRole("checkbox").check();
     await page.getByRole("button", { name: /^Payer/ }).click();
@@ -534,14 +561,11 @@ test.describe("Producteur · inscription à une édition", () => {
     }>(ctx, "registration.getById", { registrationId: ed.inscriptionId });
     await ctx.dispose();
 
-    const enregistre = inscription.data?.products.find(
-      (p) => p.name === nomSpecimen
-    );
-    expect(
-      enregistre,
-      `spécimen « ${nomSpecimen} » attaché à l'inscription`
-    ).toBeTruthy();
-    expect(enregistre!.priceAtRegistration).toBe(PRIX_CENTIMES);
+    for (const nom of [nomSpecimen, second]) {
+      const enregistre = inscription.data?.products.find((p) => p.name === nom);
+      expect(enregistre, `spécimen « ${nom} » attaché à l'inscription`).toBeTruthy();
+      expect(enregistre!.priceAtRegistration).toBe(PRIX_CENTIMES);
+    }
   });
 
   test("@P0 un taux de THC supérieur à la limite européenne bloque le règlement, un taux conforme le laisse aller jusqu'au paiement", async ({
@@ -557,24 +581,22 @@ test.describe("Producteur · inscription à une édition", () => {
     await page.getByLabel("Nom du spécimen *").fill(`E2E-THC-${suffixe()}`);
     await page.getByLabel("Producteur / Lab *").fill("E2E Test");
     await page.locator('input[name="thc"]').fill("0.9");
-    await page.getByRole("button", { name: /continuer/i }).click();
-    await page.getByRole("button", { name: /continuer/i }).click();
+    await page.getByRole("button", { name: /ajouter au panier/i }).click();
 
-    await page.getByRole("checkbox").check();
-    await page.getByRole("button", { name: /^Payer/ }).click();
-
-    // Refus explicite, chiffré : la tournure existe bien dans l'application.
+    // Refus explicite, chiffré, dès l'ajout au panier : la tournure existe
+    // bien dans l'application.
     await expect(
       page.getByText(/dépasse la limite de 0\.3%/i)
     ).toBeVisible();
 
-    // Contre-épreuve immédiate : le même parcours, ramené sous la limite,
+    // Contre-épreuve immédiate : le même spécimen, ramené sous la limite,
     // franchit ce garde-fou et ne s'arrête que sur le paiement.
-    await page.getByRole("button", { name: /précédent/i }).click();
-    await page.getByRole("button", { name: /précédent/i }).click();
     await page.locator('input[name="thc"]').fill("0.25");
+    await page.getByRole("button", { name: /ajouter au panier/i }).click();
+    await expect(page.getByRole("heading", { name: "Votre panier" })).toBeVisible();
     await page.getByRole("button", { name: /continuer/i }).click();
     await page.getByRole("button", { name: /continuer/i }).click();
+    await page.getByRole("checkbox").check();
     await page.getByRole("button", { name: /^Payer/ }).click();
 
     await expect(

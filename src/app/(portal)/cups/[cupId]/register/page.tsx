@@ -23,9 +23,20 @@ interface FormData {
   thc: string;
   cbd: string;
   hasCoa: boolean;
-  // Étape 4
+  // Étape 5
   accept: boolean;
 }
+
+/** Champs du spécimen, remis à zéro après chaque ajout au panier. */
+const EMPTY_SPECIMEN = {
+  categoryId: "",
+  name: "",
+  origin: "",
+  vintage: "",
+  thc: "",
+  cbd: "",
+  hasCoa: false,
+} as const;
 
 /** Taux de Δ9-THC maximal admis par la réglementation européenne, en %. */
 const MAX_THC_PERCENT = 0.3;
@@ -46,9 +57,13 @@ function formatEuros(cents: number): string {
 const STEPS = [
   { n: 1, l: "Catégorie" },
   { n: 2, l: "Spécimen" },
-  { n: 3, l: "Contact" },
-  { n: 4, l: "Paiement" },
+  { n: 3, l: "Panier" },
+  { n: 4, l: "Contact" },
+  { n: 5, l: "Paiement" },
 ];
+
+const STEP_CART = 3;
+const STEP_PAY = 5;
 
 function Stepper({ step }: { step: number }) {
   return (
@@ -154,8 +169,11 @@ export default function RegisterPage() {
     enabled: !!session?.user,
   });
 
-  // addProduct — used at step 4 (Payer) to commit the specimen into the DB
+  // Panier : chaque spécimen est enregistré sur l'inscription dès l'étape 2
+  // (« Ajouter au panier »), ce qui fait jouer les quotas tout de suite ; un
+  // seul paiement, une seule facture règlent ensuite tout le panier.
   const addProduct = api.registration.addProduct.useMutation();
+  const removeProduct = api.registration.removeProduct.useMutation();
 
   // createCheckoutSession — la redirection est déclenchée dans handlePay, qui
   // traite l'absence d'URL comme une erreur au lieu de laisser croire au succès.
@@ -197,17 +215,37 @@ export default function RegisterPage() {
   const selectedCategory =
     categories.find((category) => category.id === data.categoryId) ?? null;
 
+  // Panier : lu sur l'inscription en attente, source de vérité du montant.
+  const registrationId = getOrCreate.data?.id;
+  const { data: cart, refetch: refetchCart } = api.registration.getById.useQuery(
+    { registrationId: registrationId ?? "" },
+    { enabled: !!registrationId }
+  );
+  const cartProducts = cart?.products ?? [];
+
   // Le montant débité est celui que le serveur recalcule à partir des produits ;
-  // c'est donc ce prix-là qui doit s'afficher, pas une grille locale.
-  const feeInCents = selectedCategory
-    ? categoryPriceInCents(selectedCategory)
-    : 0;
+  // c'est donc ce total-là qui doit s'afficher, pas une grille locale.
+  const totalInCents = cart?.totalAmount ?? 0;
+
+  /** Produits du producteur dans une catégorie : panier + commandes réglées. */
+  const heldInCategory = (categoryId: string) =>
+    cartProducts.filter((p) => p.categoryId === categoryId).length +
+    (getOrCreate.data?.paidProductsByCategory?.[categoryId] ?? 0);
 
   // ---------------------------------------------------------------------------
   // Initialize registration once cup data is available and user is logged in
   // ---------------------------------------------------------------------------
 
   const [registrationInitialized, setRegistrationInitialized] = useState(false);
+
+  // Un panier laissé en attente (paiement abandonné) se reprend au panier.
+  const [resumed, setResumed] = useState(false);
+  useEffect(() => {
+    if (!resumed && cart) {
+      setResumed(true);
+      if (cart.products.length > 0) setStep(STEP_CART);
+    }
+  }, [cart, resumed]);
 
   useEffect(() => {
     if (
@@ -223,28 +261,22 @@ export default function RegisterPage() {
   }, [cupData, session, registrationInitialized, getOrCreate, cupId]);
 
   // ---------------------------------------------------------------------------
-  // Étape 4 → "Payer"
+  // Étape 2 → « Ajouter au panier »
   // ---------------------------------------------------------------------------
 
-  const handlePay = async () => {
-    if (!data.accept) {
-      setSubmitError("Vous devez accepter le règlement pour continuer.");
-      return;
-    }
+  const handleAddToCart = async () => {
     if (!selectedCategory) {
       setSubmitError("Choisissez une catégorie à l'étape 1.");
       return;
     }
     if (!data.name.trim() || !data.producer.trim()) {
-      setSubmitError(
-        "Le nom du spécimen et le producteur sont obligatoires (étape 2)."
-      );
+      setSubmitError("Le nom du spécimen et le producteur sont obligatoires.");
       return;
     }
 
     const thc = Number(data.thc.replace(",", "."));
     if (!data.thc.trim() || Number.isNaN(thc)) {
-      setSubmitError("Renseignez le taux de Δ9-THC déclaré (étape 2).");
+      setSubmitError("Renseignez le taux de Δ9-THC déclaré.");
       return;
     }
     if (thc > MAX_THC_PERCENT) {
@@ -254,19 +286,17 @@ export default function RegisterPage() {
       return;
     }
 
-    if (!getOrCreate.data?.id) {
+    if (!registrationId) {
       setSubmitError("Inscription non initialisée. Rechargez la page.");
       return;
     }
-
-    const registrationId = getOrCreate.data.id;
 
     setSubmitting(true);
     setSubmitError(null);
 
     try {
-      // Étape A : enregistrer le produit sur l'inscription.
-      // NOTE: addProduct n'accepte que registrationId, categoryId, name, description.
+      // Le serveur contrôle ici les quotas de la catégorie (places restantes,
+      // maximum par producteur, panier et commandes réglées compris).
       // TODO: origine, millésime, THC, CBD et COA sont empaquetés dans `description`
       // faute de colonnes dédiées ; ils devraient devenir des attributs structurés
       // du produit pour alimenter les PDF, les analyses labo et les filtres.
@@ -285,15 +315,53 @@ export default function RegisterPage() {
           .filter(Boolean)
           .join(" · ") || undefined,
       });
+      await refetchCart();
+      // Le producteur / lab est conservé : c'est souvent le même d'un spécimen à l'autre.
+      setData((d) => ({ ...d, ...EMPTY_SPECIMEN }));
+      setStep(STEP_CART);
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : "Une erreur est survenue.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
-      // Étape B : créer la commande Viva et partir sur le checkout hébergé.
+  const handleRemove = async (productId: string) => {
+    setSubmitError(null);
+    try {
+      await removeProduct.mutateAsync({ productId });
+      await refetchCart();
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : "Une erreur est survenue.");
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // Étape 5 → « Payer » : un paiement, une facture pour tout le panier
+  // ---------------------------------------------------------------------------
+
+  const handlePay = async () => {
+    if (!data.accept) {
+      setSubmitError("Vous devez accepter le règlement pour continuer.");
+      return;
+    }
+    if (!registrationId || cartProducts.length === 0) {
+      setSubmitError("Votre panier est vide : ajoutez au moins un produit.");
+      return;
+    }
+
+    setSubmitting(true);
+    setSubmitError(null);
+
+    try {
+      // Commande Viva pour tout le panier, puis checkout hébergé.
       // L'inscription reste `pending_payment` : elle n'est confirmée qu'au
       // retour de Viva (page /register/success) ou par le webhook.
       const session = await createCheckoutSession.mutateAsync({ registrationId });
 
       if (!session.checkoutUrl) {
         setSubmitError(
-          "Le paiement n'est pas disponible pour le moment. Votre inscription est enregistrée mais non payée : réessayez depuis « Mes inscriptions »."
+          "Le paiement n'est pas disponible pour le moment. Votre panier est conservé : réessayez depuis « Mes inscriptions »."
         );
         setSubmitting(false);
         return;
@@ -430,7 +498,13 @@ export default function RegisterPage() {
                 <div className="grid g-2" style={{ marginTop: 20 }}>
                   {categories.map((category) => {
                     const sel = data.categoryId === category.id;
-                    const full = category.isFull;
+                    const held = heldInCategory(category.id);
+                    // Maximum par producteur atteint : panier et commandes
+                    // réglées compris.
+                    const atProducerMax =
+                      category.maxProductsPerProducer !== null &&
+                      held >= category.maxProductsPerProducer;
+                    const full = category.isFull || atProducerMax;
                     return (
                       <button
                         key={category.id}
@@ -486,6 +560,7 @@ export default function RegisterPage() {
                           </div>
                         )}
                         {(full ||
+                          held > 0 ||
                           category.remainingPlaces !== null ||
                           category.maxProductsPerProducer !== null) && (
                           <div
@@ -496,8 +571,10 @@ export default function RegisterPage() {
                               color: full ? "var(--danger)" : "var(--fg-2)",
                             }}
                           >
-                            {full
+                            {category.isFull
                               ? "Complet"
+                              : atProducerMax
+                                ? `Maximum atteint (${held}/${category.maxProductsPerProducer} par producteur)`
                               : [
                                   category.remainingPlaces !== null
                                     ? `${category.remainingPlaces} place${category.remainingPlaces > 1 ? "s" : ""} restante${category.remainingPlaces > 1 ? "s" : ""}`
@@ -505,6 +582,7 @@ export default function RegisterPage() {
                                   category.maxProductsPerProducer !== null
                                     ? `${category.maxProductsPerProducer} produit${category.maxProductsPerProducer > 1 ? "s" : ""} max. par producteur`
                                     : null,
+                                  held > 0 ? `${held} déjà dans votre inscription` : null,
                                 ]
                                   .filter(Boolean)
                                   .join(" · ")}
@@ -612,11 +690,100 @@ export default function RegisterPage() {
                   </span>
                 </label>
               </div>
+              {submitError && (
+                <div
+                  style={{
+                    marginTop: 16,
+                    padding: "12px 16px",
+                    border: "1px solid var(--line-strong)",
+                    borderRadius: 10,
+                    background: "var(--bg)",
+                    color: "var(--fg-2)",
+                    fontSize: 13,
+                  }}
+                >
+                  {submitError}
+                </div>
+              )}
             </>
           )}
 
-          {/* ── ÉTAPE 3 — CONTACT ─────────────────────────────────────────── */}
-          {step === 3 && (
+          {/* ── ÉTAPE 3 — PANIER ──────────────────────────────────────────── */}
+          {step === STEP_CART && (
+            <>
+              <h2 className="section-title" style={{ fontSize: 22 }}>
+                Votre panier
+              </h2>
+              <p style={{ marginTop: 8, fontSize: 13, color: "var(--fg-2)", lineHeight: 1.6 }}>
+                Inscrivez tous vos spécimens, dans une ou plusieurs catégories :
+                ils seront réglés en un seul paiement, sur une seule facture.
+              </p>
+              {cartProducts.length === 0 ? (
+                <p style={{ marginTop: 20, fontSize: 13, color: "var(--fg-3)" }}>
+                  Aucun produit pour l&apos;instant.
+                </p>
+              ) : (
+                <div style={{ marginTop: 20 }}>
+                  {cartProducts.map((product) => (
+                    <div
+                      key={product.id}
+                      className="kv"
+                      style={{ alignItems: "center", gap: 12 }}
+                    >
+                      <span className="kv-k" style={{ textTransform: "none" }}>
+                        <span style={{ color: "var(--fg)" }}>{product.name}</span>
+                        <span style={{ display: "block", fontSize: 11, color: "var(--fg-3)" }}>
+                          {product.category.name}
+                        </span>
+                      </span>
+                      <span className="kv-v" style={{ display: "flex", gap: 14, alignItems: "center" }}>
+                        <span className="tabular">{formatEuros(product.priceAtRegistration)}</span>
+                        <button
+                          type="button"
+                          className="btn ghost"
+                          style={{ padding: "4px 10px", fontSize: 11 }}
+                          disabled={removeProduct.isPending}
+                          onClick={() => void handleRemove(product.id)}
+                          aria-label={`Retirer ${product.name}`}
+                        >
+                          Retirer
+                        </button>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <button
+                type="button"
+                className="btn"
+                style={{ marginTop: 20 }}
+                onClick={() => {
+                  setSubmitError(null);
+                  setStep(1);
+                }}
+              >
+                + Ajouter un autre produit
+              </button>
+              {submitError && (
+                <div
+                  style={{
+                    marginTop: 16,
+                    padding: "12px 16px",
+                    border: "1px solid var(--line-strong)",
+                    borderRadius: 10,
+                    background: "var(--bg)",
+                    color: "var(--fg-2)",
+                    fontSize: 13,
+                  }}
+                >
+                  {submitError}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* ── ÉTAPE 4 — CONTACT ─────────────────────────────────────────── */}
+          {step === 4 && (
             <>
               <h2 className="section-title" style={{ fontSize: 22 }}>
                 Contact
@@ -707,8 +874,8 @@ export default function RegisterPage() {
             </>
           )}
 
-          {/* ── ÉTAPE 4 — PAIEMENT ────────────────────────────────────────── */}
-          {step === 4 && (
+          {/* ── ÉTAPE 5 — PAIEMENT ────────────────────────────────────────── */}
+          {step === STEP_PAY && (
             <>
               <h2 className="section-title" style={{ fontSize: 22 }}>
                 Paiement
@@ -749,8 +916,9 @@ export default function RegisterPage() {
                 >
                   En validant, vous serez redirigé vers la page de paiement de{" "}
                   <b style={{ color: "var(--fg)" }}>Viva.com</b> pour régler{" "}
-                  <b style={{ color: "var(--fg)" }}>{formatEuros(feeInCents)}</b>
-                  . Votre inscription est confirmée dès que le paiement est
+                  <b style={{ color: "var(--fg)" }}>{formatEuros(totalInCents)}</b>{" "}
+                  pour {cartProducts.length} produit{cartProducts.length > 1 ? "s" : ""}
+                  , en une seule fois. Votre inscription est confirmée dès que le paiement est
                   encaissé ; vous recevez alors votre facture par email.
                 </p>
               </div>
@@ -778,7 +946,7 @@ export default function RegisterPage() {
                 >
                   J&apos;accepte le règlement de la Platinum CBD Cup. Je
                   certifie que le spécimen respecte la réglementation européenne
-                  en vigueur (Δ9-THC ≤ 0,3%).
+                  en vigueur (Δ9-THC ≤ 0,3%) pour chacun des spécimens inscrits.
                 </span>
               </label>
 
@@ -813,17 +981,29 @@ export default function RegisterPage() {
           >
             <button
               className="btn ghost"
-              disabled={step === 1}
-              onClick={() => setStep((s) => Math.max(1, s - 1))}
-              style={{ opacity: step === 1 ? 0.3 : 1 }}
+              disabled={step === 1 && cartProducts.length === 0}
+              onClick={() => {
+                setSubmitError(null);
+                // Depuis le choix de catégorie, « Précédent » ramène au panier
+                // quand il contient déjà des produits.
+                setStep((s) => (s === 1 ? STEP_CART : Math.max(1, s - 1)));
+              }}
+              style={{ opacity: step === 1 && cartProducts.length === 0 ? 0.3 : 1 }}
             >
-              ← Précédent
+              {step === 1 && cartProducts.length > 0 ? "← Panier" : "← Précédent"}
             </button>
             <button
               className="btn accent"
-              disabled={submitting || (step === 1 && !selectedCategory)}
+              disabled={
+                submitting ||
+                (step === 1 && !selectedCategory) ||
+                (step === STEP_CART && cartProducts.length === 0)
+              }
               onClick={() => {
-                if (step === 4) {
+                setSubmitError(null);
+                if (step === 2) {
+                  void handleAddToCart();
+                } else if (step === STEP_PAY) {
                   void handlePay();
                 } else {
                   setStep((s) => Math.min(STEPS.length, s + 1));
@@ -831,10 +1011,14 @@ export default function RegisterPage() {
               }}
             >
               {submitting
-                ? "Redirection vers le paiement…"
-                : step === 4
-                  ? `Payer ${formatEuros(feeInCents)}`
-                  : "Continuer"}{" "}
+                ? step === STEP_PAY
+                  ? "Redirection vers le paiement…"
+                  : "Ajout…"
+                : step === 2
+                  ? "Ajouter au panier"
+                  : step === STEP_PAY
+                    ? `Payer ${formatEuros(totalInCents)}`
+                    : "Continuer"}{" "}
               {!submitting && <span className="btn-arrow">→</span>}
             </button>
           </div>
@@ -847,22 +1031,36 @@ export default function RegisterPage() {
         >
           <Eyebrow>Récapitulatif</Eyebrow>
           <div style={{ marginTop: 16 }}>
-            <div className="kv">
-              <span className="kv-k">Catégorie</span>
-              <span className="kv-v">{selectedCategory?.name ?? "—"}</span>
-            </div>
-            <div className="kv">
-              <span className="kv-k">Spécimen</span>
-              <span className="kv-v">{data.name || "—"}</span>
-            </div>
-            <div className="kv">
-              <span className="kv-k">Producteur</span>
-              <span className="kv-v">{data.producer || "—"}</span>
-            </div>
-            <div className="kv">
-              <span className="kv-k">Frais d&apos;inscription</span>
-              <span className="kv-v">{formatEuros(feeInCents)}</span>
-            </div>
+            {cartProducts.map((product) => (
+              <div key={product.id} className="kv">
+                <span className="kv-k" style={{ textTransform: "none" }}>
+                  {product.name}
+                  <span style={{ display: "block", fontSize: 11, color: "var(--fg-3)" }}>
+                    {product.category.name}
+                  </span>
+                </span>
+                <span className="kv-v tabular">{formatEuros(product.priceAtRegistration)}</span>
+              </div>
+            ))}
+            {/* Spécimen en cours de saisie, pas encore ajouté au panier */}
+            {step <= 2 && selectedCategory && (
+              <div className="kv" style={{ opacity: 0.6 }}>
+                <span className="kv-k" style={{ textTransform: "none" }}>
+                  {data.name || "Nouveau spécimen"}
+                  <span style={{ display: "block", fontSize: 11, color: "var(--fg-3)" }}>
+                    {selectedCategory.name} · à ajouter
+                  </span>
+                </span>
+                <span className="kv-v tabular">
+                  {formatEuros(categoryPriceInCents(selectedCategory))}
+                </span>
+              </div>
+            )}
+            {cartProducts.length === 0 && !(step <= 2 && selectedCategory) && (
+              <p style={{ fontSize: 12.5, color: "var(--fg-3)", margin: 0 }}>
+                Panier vide.
+              </p>
+            )}
           </div>
           <div
             style={{
@@ -889,7 +1087,7 @@ export default function RegisterPage() {
               className="mono tabular"
               style={{ fontSize: 28, fontWeight: 300 }}
             >
-              {formatEuros(feeInCents)}
+              {formatEuros(totalInCents)}
             </span>
           </div>
         </div>
