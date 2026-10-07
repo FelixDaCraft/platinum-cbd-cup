@@ -2,7 +2,7 @@ import "~/styles/globals.css";
 
 import { type Metadata, type Viewport } from "next";
 import { headers } from "next/headers";
-import { Geist, Geist_Mono, Inter } from "next/font/google";
+import { Geist, Geist_Mono, Hanken_Grotesk } from "next/font/google";
 
 // L'URL de base était recopiée ici aussi (metadataBase, openGraph.url et les
 // deux images de partage en dur sur platinumcbdcup.eu) : sur un
@@ -57,8 +57,8 @@ const THEME_CONFIG = {
   primaryColor: "#d4af37",
   secondaryColor: "#f5e6a8",
   customCss: null,
-  headingFont: "Inter",
-  bodyFont: "Inter",
+  headingFont: "Hanken Grotesk",
+  bodyFont: "Hanken Grotesk",
 };
 
 const PORTAL_THEME: PortalThemeConfig = {
@@ -69,8 +69,8 @@ const PORTAL_THEME: PortalThemeConfig = {
   logoUrl: null,
   faviconUrl: null,
   bannerUrl: null,
-  headingFont: "Inter",
-  bodyFont: "Inter",
+  headingFont: "Hanken Grotesk",
+  bodyFont: "Hanken Grotesk",
   customCss: null,
   cssVariables: generateCssVariables(THEME_CONFIG),
   defaultLocale: "fr",
@@ -141,8 +141,11 @@ export const metadata: Metadata = {
   // dépréciée mais toujours lue par iOS : c'est donc elle qui va ici.
   other: { "apple-mobile-web-app-capable": "yes" },
   icons: {
-    icon: [{ url: "/favicon.png" }],
-    apple: [{ url: "/brand/platinum-cbd-cup-logo.png" }],
+    icon: [
+      { url: "/favicon.ico", sizes: "48x48" },
+      { url: "/favicon.png", type: "image/png", sizes: "512x512" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180" }],
   },
   robots: {
     index: true,
@@ -195,7 +198,8 @@ const geist = Geist({
 });
 
 /**
- * Inter et Geist Mono — les deux familles du design system Platinum.
+ * Hanken Grotesk (texte et titres du portail, direction « Grand Cru ») et
+ * Geist Mono (codes et chiffres ponctuels).
  *
  * Elles arrivaient par un <link rel="stylesheet"> vers fonts.googleapis.com :
  * une résolution DNS + un handshake TLS vers un tiers, bloquants avant le
@@ -206,10 +210,10 @@ const geist = Geist({
  * fichier couvre toute la plage 100-900 utilisée par le design system, là où
  * l'ancienne feuille Google en téléchargeait une par graisse.
  */
-const inter = Inter({
+const hanken = Hanken_Grotesk({
   subsets: ["latin"],
   display: "swap",
-  variable: "--font-inter",
+  variable: "--font-hanken",
 });
 
 const geistMono = Geist_Mono({
@@ -221,15 +225,15 @@ const geistMono = Geist_Mono({
 /**
  * Branche les familles auto-hébergées sur les variables du design system.
  *
- * platinumCSS déclare `--sans: "Inter", …` et `--mono: "Geist Mono", …` avec
+ * platinumCSS déclare `--sans: "Hanken Grotesk", …` et `--mono: "Geist Mono", …` avec
  * les noms littéraux des polices Google. Cette surcharge doit être injectée
  * APRÈS platinumCSS (même spécificité, la dernière règle gagne). Les noms
- * littéraux restent en repli : si une autre feuille charge encore Inter,
+ * littéraux restent en repli : si une autre feuille charge encore la police,
  * le rendu est identique.
  */
 const fontVariablesCss = `
 :root{
-  --sans: var(--font-inter), "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --sans: var(--font-hanken), "Hanken Grotesk", ui-sans-serif, system-ui, -apple-system, sans-serif;
   --mono: var(--font-geist-mono), "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
 }
 `.trim();
@@ -268,7 +272,7 @@ export default async function RootLayout({
   const styleString = generateStyleString(PORTAL_THEME.cssVariables);
 
   // CSS variables only. Heading + body fonts are owned by the Platinum
-  // design system (Louize Display / Geist Mono / Inter via platinumCSS).
+  // design system (Hanken Grotesk, Louize Display pour le logo, via platinumCSS).
   // The legacy `#portal-root h1-h6 !important` font override was a remnant
   // of the multi-tenant CupMetrics theming and was overriding `.display`
   // and `.section-title` with Inter — preventing Louize from ever rendering.
@@ -283,10 +287,10 @@ ${PORTAL_THEME.customCss ? sanitizeCustomCss(PORTAL_THEME.customCss) : ""}
     <html
       lang="fr"
       suppressHydrationWarning
-      className={`${geist.variable} ${inter.variable} ${geistMono.variable}`}
+      className={`${geist.variable} ${hanken.variable} ${geistMono.variable}`}
     >
       <head>
-        {/* Louize Display — police d'affichage de tous les H1 du portail.
+        {/* Louize Display — logo et nom de la cup, au-dessus de la ligne de flottaison.
             Déclarée en @font-face à l'intérieur de platinumCSS, elle n'est
             donc découverte qu'après l'analyse de ce bloc : sans preload, les
             titres s'affichaient d'abord en serif système puis basculaient
