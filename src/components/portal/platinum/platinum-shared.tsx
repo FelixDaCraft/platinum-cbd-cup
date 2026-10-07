@@ -1,7 +1,6 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useState, useEffect } from "react";
 
 // ---------------------------------------------------------------------------
 // Pill
@@ -50,119 +49,12 @@ interface EyebrowProps {
 }
 
 /**
- * Monospace uppercase section label. Renders:
- *   <div class="eyebrow"><b>001</b> children</div>
- * when idx is supplied, plain otherwise.
+ * Petit intitulé de section, en capitales. `idx` (l'ancienne numérotation
+ * « 001 ») est ignoré : la direction « Grand Cru » ne numérote plus les
+ * sections.
  */
-export function Eyebrow({ idx, children }: EyebrowProps) {
-  return (
-    <div className="eyebrow">
-      {idx !== undefined && <b>{String(idx).padStart(3, "0")}</b>}{" "}
-      {children}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Countdown
-// ---------------------------------------------------------------------------
-
-interface CountdownProps {
-  /** Target timestamp in milliseconds */
-  target: number;
-  compact?: boolean;
-}
-
-const pad = (n: number, w = 2) => String(n).padStart(w, "0");
-
-/**
- * Live countdown to a target timestamp.
- *
- * compact → "DDD:HH:MM:SS" monospace inline
- * default → 4 large tabular blocks with DAYS / HRS / MIN / SEC labels
- */
-export function Countdown({ target, compact = false }: CountdownProps) {
-  // Start mounted=false so SSR and first client render produce identical
-  // placeholders. The interval kicks in only after hydration → no mismatch.
-  const [mounted, setMounted] = useState(false);
-  const [now, setNow] = useState(target);
-
-  useEffect(() => {
-    setMounted(true);
-    setNow(Date.now());
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, []);
-
-  const diff = mounted ? Math.max(0, target - now) : 0;
-  const days = Math.floor(diff / 86400000);
-  const hours = Math.floor((diff % 86400000) / 3600000);
-  const mins = Math.floor((diff % 3600000) / 60000);
-  const secs = Math.floor((diff % 60000) / 1000);
-
-  if (compact) {
-    return (
-      <span
-        className="mono tabular"
-        style={{ letterSpacing: ".05em" }}
-        suppressHydrationWarning
-      >
-        {pad(days, 3)}:{pad(hours)}:{pad(mins)}:{pad(secs)}
-      </span>
-    );
-  }
-
-  const units = [
-    { v: pad(days, 3), l: "DAYS" },
-    { v: pad(hours), l: "HRS" },
-    { v: pad(mins), l: "MIN" },
-    { v: pad(secs), l: "SEC" },
-  ];
-
-  return (
-    <div
-      style={{
-        display: "flex",
-        gap: 18,
-        alignItems: "flex-end",
-        fontFamily: "var(--mono)",
-      }}
-    >
-      {units.map((x) => (
-        <div
-          key={x.l}
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "flex-start",
-            gap: 6,
-          }}
-        >
-          <div
-            className="tabular"
-            style={{
-              fontSize: "clamp(42px, 6vw, 72px)",
-              lineHeight: 1,
-              fontWeight: 300,
-              letterSpacing: "-0.03em",
-            }}
-            suppressHydrationWarning
-          >
-            {x.v}
-          </div>
-          <div
-            style={{
-              fontSize: 10,
-              letterSpacing: ".15em",
-              color: "var(--fg-3)",
-            }}
-          >
-            {x.l}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
+export function Eyebrow({ children }: EyebrowProps) {
+  return <div className="eyebrow">{children}</div>;
 }
 
 // ---------------------------------------------------------------------------
@@ -207,39 +99,6 @@ export function Placeholder({ label, aspect = "1/1", caption, style }: Placehold
 }
 
 // ---------------------------------------------------------------------------
-// Ticker
-// ---------------------------------------------------------------------------
-
-interface TickerProps {
-  items: string[];
-}
-
-/**
- * Infinite horizontally-scrolling ticker bar.
- * Two identical groups + 50% translate produce a seamless gap-free loop.
- */
-export function Ticker({ items }: TickerProps) {
-  if (items.length === 0) return null;
-  const renderGroup = (key: string, ariaHidden = false) => (
-    <div className="ticker-group" key={key} aria-hidden={ariaHidden}>
-      {items.map((t, i) => (
-        <span key={`${key}-${i}`}>
-          <span className="dot" /> {t}
-        </span>
-      ))}
-    </div>
-  );
-  return (
-    <div className="ticker">
-      <div className="ticker-track">
-        {renderGroup("a")}
-        {renderGroup("b", true)}
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Field
 // ---------------------------------------------------------------------------
 
@@ -261,7 +120,7 @@ interface FieldProps {
 }
 
 /**
- * Labeled input with hairline border and focus accent. Mono uppercase label.
+ * Champ libellé : libellé, saisie, puis erreur et aide.
  * Stateful focus glow handled via inline event handlers (design fidelity).
  */
 export function Field({
@@ -284,18 +143,8 @@ export function Field({
   const describedBy = [errorId, hintId].filter(Boolean).join(" ") || undefined;
 
   return (
-    <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-      <span
-        className="mono"
-        style={{
-          fontSize: 10.5,
-          letterSpacing: ".1em",
-          color: "var(--fg-3)",
-          textTransform: "uppercase",
-        }}
-      >
-        {label}
-      </span>
+    <label style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <span className="field-label">{label}</span>
       <input
         type={type}
         name={name}
@@ -319,20 +168,12 @@ export function Field({
         style={error ? { borderColor: "var(--danger)" } : undefined}
       />
       {error && (
-        <span
-          id={errorId}
-          className="mono"
-          style={{ fontSize: 10.5, letterSpacing: ".08em", color: "var(--danger)" }}
-        >
+        <span id={errorId} className="field-error">
           {error}
         </span>
       )}
       {hint && (
-        <span
-          id={hintId}
-          className="mono fg3"
-          style={{ fontSize: 10, letterSpacing: ".08em" }}
-        >
+        <span id={hintId} className="field-hint">
           {hint}
         </span>
       )}

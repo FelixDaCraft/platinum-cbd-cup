@@ -454,19 +454,6 @@ h2.section-title{
 }
 
 /* ── Ticker ───────────────────────────────────────────── */
-.ticker{
-  overflow: hidden; white-space: nowrap;
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
-  font-family: var(--mono); font-size: 11px;
-  padding: 12px 0; color: var(--fg-2); letter-spacing: .1em;
-  text-transform: uppercase;
-}
-.ticker-track{ display:inline-flex; animation: tick 60s linear infinite; will-change: transform; }
-.ticker-group{ display:inline-flex; gap: 40px; padding-right: 40px; flex-shrink: 0; }
-.ticker-group span{ display:inline-flex; align-items:center; gap: 10px; flex-shrink: 0; }
-.ticker-group .dot{ width:5px; height:5px; border-radius:50%; background: var(--accent); }
-@keyframes tick{ from{ transform: translateX(0); } to{ transform: translateX(-50%); } }
 
 /* ── Emblème 3D ───────────────────────────────────────────
    spin3d et spinRing servaient au PlatinumTrophy en CSS-3D, remplacé par
@@ -744,6 +731,75 @@ select.field-input option{ background: var(--bg-2); color: var(--fg); }
   .pal-juries{ padding-bottom: 48px; }
 }
 
+/* ── Pages secondaires (direction « Grand Cru ») ──────────
+   Gabarits communs : conteneur (.pg, .pg--narrow pour le texte, .pg--form
+   pour les formulaires), en-tête (.pg-head), sections (.pg-section), texte
+   long (.prose), carte de formulaire (.form-card), messages (.notice). */
+.pg{ width: 100%; max-width: 1200px; margin: 0 auto; padding-bottom: 96px; display: flex; flex-direction: column; }
+.pg--narrow{ max-width: 760px; }
+.pg--form{ max-width: 560px; }
+.pg-head{ padding: 72px 0 40px; display: flex; flex-direction: column; gap: 16px; }
+.pg-head h1{ margin: 0; }
+.pg-head .eyebrow{ margin: 0; }
+.pg-lede{ margin: 0; max-width: 640px; font-size: 19px; line-height: 1.6; color: var(--fg-2); }
+.pg-section{ padding: 48px 0; display: flex; flex-direction: column; gap: 28px; }
+.pg-section + .pg-section{ border-top: 1px solid var(--line); }
+.pg-section-head{ display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; }
+.pg-grid{ display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 24px; }
+.pg-tile{ padding: 28px; border-radius: 16px; background: var(--bg-2); border: 1px solid var(--line); display: flex; flex-direction: column; gap: 12px; color: var(--fg); text-decoration: none; }
+a.pg-tile{ transition: border-color .2s ease; }
+a.pg-tile:hover{ border-color: var(--accent); }
+.pg-tile h3{ margin: 0; font-size: 22px; }
+.pg-tile p{ margin: 0; font-size: 16px; line-height: 1.55; color: var(--fg-2); }
+.pg-meta{ font-size: 15px; color: var(--fg-3); }
+.pg-link{ font-weight: 600; color: var(--accent-hi); text-decoration: none; }
+.pg-link:hover{ text-decoration: underline; text-underline-offset: 4px; }
+
+.prose{ font-size: 17px; line-height: 1.7; color: var(--fg-2); }
+.prose > * + *{ margin-top: 1em; }
+.prose h2{ margin-top: 2em; font-size: 28px; line-height: 1.2; color: var(--fg); }
+.prose h3{ margin-top: 1.6em; font-size: 21px; color: var(--fg); }
+.prose h2 + *, .prose h3 + *{ margin-top: .6em; }
+.prose p, .prose ul, .prose ol{ margin-bottom: 0; }
+.prose ul, .prose ol{ padding-left: 1.3em; }
+.prose li + li{ margin-top: .4em; }
+.prose strong, .prose b{ color: var(--fg); }
+.prose a{ color: var(--accent-hi); text-underline-offset: 3px; }
+.prose img{ max-width: 100%; height: auto; border-radius: 12px; }
+.prose blockquote{ margin-left: 0; padding-left: 18px; border-left: 2px solid var(--accent); color: var(--fg); }
+
+.form-card{ padding: 36px; border-radius: 20px; background: var(--bg-2); border: 1px solid var(--line); display: flex; flex-direction: column; gap: 22px; }
+.form-card h2{ margin: 0; font-size: 24px; }
+.form-stack{ display: flex; flex-direction: column; gap: 18px; }
+.form-row{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 18px; }
+.form-actions{ display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; }
+.form-actions .btn{ min-width: 180px; }
+.form-foot{ font-size: 15px; color: var(--fg-2); }
+.form-foot a{ color: var(--accent-hi); font-weight: 600; }
+.field-label{ font-size: 15px; font-weight: 600; color: var(--fg); }
+.field-hint{ font-size: 14px; line-height: 1.45; color: var(--fg-3); }
+.field-error{ font-size: 14px; line-height: 1.45; color: var(--danger); }
+textarea.field-input{ height: auto; min-height: 140px; padding: 12px 14px; line-height: 1.5; resize: vertical; }
+
+.notice{ padding: 16px 18px; border-radius: 12px; border: 1px solid var(--line-strong); background: var(--bg-2); font-size: 16px; line-height: 1.55; color: var(--fg); }
+.notice.is-info{ border-color: color-mix(in srgb, var(--accent) 45%, transparent); background: var(--accent-dim); }
+.notice.is-success{ border-color: rgba(127,214,154,.45); background: rgba(127,214,154,.08); }
+.notice.is-error{ border-color: color-mix(in srgb, var(--danger) 55%, transparent); background: color-mix(in srgb, var(--danger) 8%, transparent); }
+.notice b{ font-weight: 700; }
+
+@media (max-width: 880px){
+  .pg{ padding-bottom: 48px; }
+  .pg-head{ padding: 32px 0 24px; gap: 12px; }
+  .pg-lede{ font-size: 17px; }
+  .pg-section{ padding: 32px 0; gap: 20px; }
+  .pg-grid{ grid-template-columns: 1fr; gap: 14px; }
+  .pg-tile{ padding: 22px; }
+  .prose{ font-size: 16px; }
+  .prose h2{ font-size: 23px; }
+  .form-card{ padding: 22px; border-radius: 16px; }
+  .form-actions .btn{ width: 100%; }
+}
+
 /* ── Reduced motion (WCAG 2.3.3) ──────────────────────────
    Users with vestibular disorders or who set prefers-reduced-motion
    should not see the ticker, the shadow pulse, the live dot, etc. */
@@ -754,7 +810,6 @@ select.field-input option{ background: var(--bg-2); color: var(--fg); }
     transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
   }
-  .ticker-track,
   .live-dot{ animation: none !important; }
 }
 `;

@@ -10,9 +10,7 @@ export { PlatinumShell } from "./platinum-shell";
 export {
   Pill,
   Eyebrow,
-  Countdown,
   Placeholder,
-  Ticker,
   Field,
   Check,
 } from "./platinum-shared";
