@@ -23,7 +23,7 @@ import {
 } from "~/lib/validations/phases";
 import { canPublishCup } from "~/lib/validations/publish";
 import { isVivaConfigured } from "~/lib/viva";
-import { eq, and, count, inArray, asc, isNotNull } from "drizzle-orm";
+import { eq, and, count, inArray, asc, isNotNull, sql } from "drizzle-orm";
 import { computeResults } from "~/server/api/routers/results";
 import { getCategoryOccupancy } from "~/server/services/category-quota.service";
 import { juryPanelEnum } from "~/lib/enums";
@@ -392,6 +392,64 @@ export const cupRouter = createTRPCRouter({
       }
 
       return updatedCup;
+    }),
+
+  /**
+   * Supprime définitivement une cup en brouillon.
+   *
+   * Toutes les tables qui pointent vers une cup suppriment en cascade —
+   * inscriptions, produits et paiements compris. Or une cup dépubliée
+   * redevient un brouillon et peut déjà porter des inscriptions réglées :
+   * seule une cup en brouillon SANS AUCUNE inscription peut donc partir.
+   * Le contrôle et la suppression tiennent dans un seul DELETE conditionnel,
+   * pour qu'une inscription arrivée entre-temps ne puisse pas être emportée.
+   *
+   * `confirmName` doit reprendre le nom exact de la cup : garde-fou contre
+   * une suppression sur la mauvaise édition.
+   */
+  delete: organizerProcedure
+    .input(
+      z.object({
+        cupId: z.string().min(1, "Cup ID requis"),
+        confirmName: z.string(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const existingCup = await requireCup(ctx, input.cupId);
+
+      if (existingCup.status !== "draft") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Seule une cup en brouillon (jamais publiée ou dépubliée) peut être supprimée",
+        });
+      }
+      if (input.confirmName.trim() !== existingCup.name.trim()) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Le nom saisi ne correspond pas au nom de la cup",
+        });
+      }
+
+      const deleted = await ctx.db
+        .delete(schema.cups)
+        .where(
+          and(
+            eq(schema.cups.id, input.cupId),
+            eq(schema.cups.status, "draft"),
+            sql`not exists (select 1 from ${schema.registrations} where ${schema.registrations.cupId} = ${schema.cups.id})`
+          )
+        )
+        .returning({ id: schema.cups.id });
+
+      if (deleted.length === 0) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message:
+            "Cette cup a déjà des inscriptions : elle ne peut pas être supprimée. Retirez-les d'abord, ou gardez-la en brouillon.",
+        });
+      }
+
+      return { id: input.cupId };
     }),
 
   /**

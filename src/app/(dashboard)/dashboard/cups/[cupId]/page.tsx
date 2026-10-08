@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import {
@@ -12,6 +12,8 @@ import {
   DialogTitle,
   DialogFooter,
 } from "~/components/ui/dialog";
+import { Button } from "~/components/ui/button";
+import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "~/components/ui/radio-group";
 import { api } from "~/trpc/react";
@@ -38,6 +40,9 @@ export default function CupDetailPage() {
   const cupId = params.cupId as string;
   const [isScaleDialogOpen, setIsScaleDialogOpen] = useState(false);
   const [selectedScale, setSelectedScale] = useState<RatingScale>("0-20");
+  const router = useRouter();
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [deleteConfirmName, setDeleteConfirmName] = useState("");
 
   const utils = api.useUtils();
   const {
@@ -52,6 +57,17 @@ export default function CupDetailPage() {
       void utils.cup.getById.invalidate({ id: cupId });
       setIsScaleDialogOpen(false);
       toast.success("Échelle de notation modifiée");
+    },
+    onError: (err) => {
+      toast.error(err.message);
+    },
+  });
+
+  const deleteCup = api.cup.delete.useMutation({
+    onSuccess: () => {
+      void utils.cup.list.invalidate();
+      toast.success("Cup supprimée");
+      router.push("/dashboard/cups");
     },
     onError: (err) => {
       toast.error(err.message);
@@ -387,6 +403,119 @@ export default function CupDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Suppression : brouillons uniquement (le serveur refuse aussi une cup
+          qui a déjà des inscriptions, même dépubliée). */}
+      {cup.status === "draft" && (
+        <div
+          className="n-card"
+          style={{
+            borderColor: "var(--n-accent)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "16px",
+            flexWrap: "wrap",
+          }}
+        >
+          <div style={{ flex: "1 1 280px" }}>
+            <p
+              style={{
+                fontSize: "11px",
+                letterSpacing: "0.08em",
+                color: "var(--n-accent)",
+                textTransform: "uppercase",
+                margin: "0 0 4px 0",
+              }}
+            >
+              ZONE DE DANGER
+            </p>
+            <p
+              className="n-font-body"
+              style={{ fontSize: "14px", color: "var(--n-text-secondary)", margin: 0 }}
+            >
+              Supprimer définitivement cette cup en brouillon, avec ses
+              catégories, critères, labels et jurys. Impossible si des
+              producteurs y sont déjà inscrits.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="n-btn-secondary"
+            onClick={() => {
+              setDeleteConfirmName("");
+              setIsDeleteDialogOpen(true);
+            }}
+            style={{ flexShrink: 0, borderColor: "var(--n-accent)", color: "var(--n-accent)" }}
+          >
+            SUPPRIMER LA CUP
+          </button>
+        </div>
+      )}
+
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle
+              className="n-font-display"
+              style={{ color: "var(--n-text-display)" }}
+            >
+              SUPPRIMER LA CUP
+            </DialogTitle>
+            <DialogDescription
+              style={{
+                fontFamily: '"Space Grotesk", sans-serif',
+                fontSize: "14px",
+                color: "var(--n-text-secondary)",
+              }}
+            >
+              Cette action est définitive. Pour confirmer, saisissez le nom de
+              la cup : <strong style={{ color: "var(--n-text-display)" }}>{cup.name}</strong>
+            </DialogDescription>
+          </DialogHeader>
+
+          <form
+            id="delete-cup-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              deleteCup.mutate({ cupId, confirmName: deleteConfirmName });
+            }}
+          >
+            <Label htmlFor="delete-cup-confirm" className="sr-only">
+              Nom de la cup
+            </Label>
+            <Input
+              id="delete-cup-confirm"
+              value={deleteConfirmName}
+              onChange={(e) => setDeleteConfirmName(e.target.value)}
+              placeholder={cup.name}
+              autoComplete="off"
+            />
+          </form>
+
+          <DialogFooter style={{ gap: "8px" }}>
+            {/* Composants ui partagés : le dialogue est rendu dans un portail,
+                hors de .nothing-org, où les classes n-btn-* ne s'appliquent pas. */}
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsDeleteDialogOpen(false)}
+            >
+              Annuler
+            </Button>
+            <Button
+              type="submit"
+              form="delete-cup-form"
+              variant="destructive"
+              disabled={
+                deleteCup.isPending || deleteConfirmName.trim() !== cup.name.trim()
+              }
+            >
+              {deleteCup.isPending ? "Suppression…" : "Supprimer définitivement"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Rating Scale Dialog */}
       <Dialog open={isScaleDialogOpen} onOpenChange={setIsScaleDialogOpen}>
