@@ -78,6 +78,13 @@
       "when": 1791394735432,
       "tag": "0010_commandes_complementaires",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1791550537420,
+      "tag": "0011_criteres_par_jury",
+      "breakpoints": true
     }
   ]
 }

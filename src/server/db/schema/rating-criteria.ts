@@ -1,7 +1,8 @@
-import { pgTable, text, timestamp, integer, index } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { pgTable, text, timestamp, integer, index, check } from "drizzle-orm/pg-core";
+import { relations, sql } from "drizzle-orm";
 import { generateId } from "./id";
 import { categories } from "./categories";
+import type { JuryPanel } from "./juries";
 
 /**
  * Rating Criteria table - Evaluation criteria for categories
@@ -19,6 +20,12 @@ export const ratingCriteria = pgTable(
     categoryId: text("category_id")
       .notNull()
       .references(() => categories.id, { onDelete: "cascade" }),
+    /**
+     * Jury qui note ce critère. Le jury pro et le jury public ont chacun leur
+     * propre grille (2026 : 9 critères pro, 5 publics par catégorie) ; un
+     * juré ne voit que les critères de son panel.
+     */
+    panel: text("panel").notNull().$type<JuryPanel>().default("pro"),
     name: text("name").notNull(), // "Aspect visuel", "Arôme", "Goût", etc.
     description: text("description"), // Detailed description for juries
     coefficient: integer("coefficient").notNull().default(1), // Weight 1-10
@@ -29,6 +36,8 @@ export const ratingCriteria = pgTable(
   (table) => [
     // La grille de notation charge les critères d'une catégorie.
     index("rating_criteria_category_id_idx").on(table.categoryId),
+    index("rating_criteria_category_panel_idx").on(table.categoryId, table.panel),
+    check("rating_criteria_panel_check", sql`${table.panel} in ('pro', 'public')`),
   ]
 );
 

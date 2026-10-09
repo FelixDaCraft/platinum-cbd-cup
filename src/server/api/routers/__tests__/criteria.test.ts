@@ -44,7 +44,10 @@ vi.mock("~/server/db", () => {
   const selectChain = () => {
     const chain = {
       from: () => chain,
-      where: () => Promise.resolve(dbState.selectResults.shift() ?? []),
+      where: () => {
+        const rows = Promise.resolve(dbState.selectResults.shift() ?? []);
+        return Object.assign(rows, { groupBy: () => rows });
+      },
     };
     return chain;
   };
@@ -106,9 +109,27 @@ describe("Criteria Router", () => {
       }
     });
 
+    it("rejects missing panel", () => {
+      const result = createCriterionSchema.safeParse({
+        categoryId: "cat-1",
+        name: "Arôme",
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it("rejects an unknown panel", () => {
+      const result = createCriterionSchema.safeParse({
+        categoryId: "cat-1",
+        panel: "invités",
+        name: "Arôme",
+      });
+      expect(result.success).toBe(false);
+    });
+
     it("rejects empty name", () => {
       const result = createCriterionSchema.safeParse({
         categoryId: "cat-1",
+        panel: "pro",
         name: "",
       });
 
@@ -121,6 +142,7 @@ describe("Criteria Router", () => {
     it("rejects name too long (over 100 chars)", () => {
       const result = createCriterionSchema.safeParse({
         categoryId: "cat-1",
+        panel: "pro",
         name: "a".repeat(101),
       });
 
@@ -133,6 +155,7 @@ describe("Criteria Router", () => {
     it("rejects coefficient < 1", () => {
       const result = createCriterionSchema.safeParse({
         categoryId: "cat-1",
+        panel: "pro",
         name: "Test",
         coefficient: 0,
       });
@@ -146,6 +169,7 @@ describe("Criteria Router", () => {
     it("rejects coefficient > 10", () => {
       const result = createCriterionSchema.safeParse({
         categoryId: "cat-1",
+        panel: "pro",
         name: "Test",
         coefficient: 11,
       });
@@ -159,6 +183,7 @@ describe("Criteria Router", () => {
     it("rejects non-integer coefficient", () => {
       const result = createCriterionSchema.safeParse({
         categoryId: "cat-1",
+        panel: "pro",
         name: "Test",
         coefficient: 1.5,
       });
@@ -172,6 +197,7 @@ describe("Criteria Router", () => {
     it("accepts description as optional", () => {
       const result = createCriterionSchema.safeParse({
         categoryId: "cat-1",
+        panel: "pro",
         name: "Aspect visuel",
       });
 
@@ -181,6 +207,7 @@ describe("Criteria Router", () => {
     it("rejects description too long (over 500 chars)", () => {
       const result = createCriterionSchema.safeParse({
         categoryId: "cat-1",
+        panel: "pro",
         name: "Test",
         description: "a".repeat(501),
       });
@@ -194,6 +221,7 @@ describe("Criteria Router", () => {
     it("accepts valid criterion with all fields", () => {
       const result = createCriterionSchema.safeParse({
         categoryId: "cat-1",
+        panel: "pro",
         name: "Aspect visuel",
         description: "Apparence générale du produit",
         coefficient: 2,
@@ -209,6 +237,7 @@ describe("Criteria Router", () => {
     it("uses default coefficient of 1 when not provided", () => {
       const result = createCriterionSchema.safeParse({
         categoryId: "cat-1",
+        panel: "pro",
         name: "Test",
       });
 
@@ -268,6 +297,7 @@ describe("Criteria Router", () => {
     it("rejects empty criterionIds array", () => {
       const result = reorderCriteriaSchema.safeParse({
         categoryId: "cat-1",
+        panel: "pro",
         criterionIds: [],
       });
 
@@ -277,6 +307,7 @@ describe("Criteria Router", () => {
     it("accepts valid reorder input", () => {
       const result = reorderCriteriaSchema.safeParse({
         categoryId: "cat-1",
+        panel: "pro",
         criterionIds: ["crit-1", "crit-2", "crit-3"],
       });
 
@@ -491,14 +522,14 @@ describe("Criteria Router", () => {
         await codeOf(() => caller.getCategoryCriteria({ categoryId: "cat-1" }))
       ).toBe("UNAUTHORIZED");
       expect(
-        await codeOf(() => caller.create({ categoryId: "cat-1", name: "Arôme" }))
+        await codeOf(() => caller.create({ categoryId: "cat-1", panel: "pro", name: "Arôme" }))
       ).toBe("UNAUTHORIZED");
       expect(await codeOf(() => caller.delete({ criterionId: "cri-1" }))).toBe(
         "UNAUTHORIZED"
       );
       expect(
         await codeOf(() =>
-          caller.reorder({ categoryId: "cat-1", criterionIds: ["cri-1"] })
+          caller.reorder({ categoryId: "cat-1", panel: "pro", criterionIds: ["cri-1"] })
         )
       ).toBe("UNAUTHORIZED");
       expect(
@@ -514,7 +545,7 @@ describe("Criteria Router", () => {
         await codeOf(() => caller.getCategoryCriteria({ categoryId: "cat-1" }))
       ).toBe("FORBIDDEN");
       expect(
-        await codeOf(() => caller.create({ categoryId: "cat-1", name: "Arôme" }))
+        await codeOf(() => caller.create({ categoryId: "cat-1", panel: "pro", name: "Arôme" }))
       ).toBe("FORBIDDEN");
       expect(await codeOf(() => caller.delete({ criterionId: "cri-1" }))).toBe(
         "FORBIDDEN"
@@ -574,7 +605,7 @@ describe("Criteria Router", () => {
 
         expect(
           await codeOf(() =>
-            caller.create({ categoryId: "cat-1", name: "Arôme", coefficient: 2 })
+            caller.create({ categoryId: "cat-1", panel: "pro", name: "Arôme", coefficient: 2 })
           )
         ).toBe("BAD_REQUEST");
         expect(
@@ -585,7 +616,7 @@ describe("Criteria Router", () => {
         );
         expect(
           await codeOf(() =>
-            caller.reorder({ categoryId: "cat-1", criterionIds: ["cri-1"] })
+            caller.reorder({ categoryId: "cat-1", panel: "pro", criterionIds: ["cri-1"] })
           )
         ).toBe("BAD_REQUEST");
         expect(
@@ -633,7 +664,7 @@ describe("Criteria Router", () => {
       // Critère étranger à la catégorie.
       expect(
         await codeOf(() =>
-          caller.reorder({ categoryId: "cat-1", criterionIds: ["cri-1", "cri-3"] })
+          caller.reorder({ categoryId: "cat-1", panel: "pro", criterionIds: ["cri-1", "cri-3"] })
         )
       ).toBe("BAD_REQUEST");
 
@@ -641,7 +672,7 @@ describe("Criteria Router", () => {
       // en double.
       expect(
         await codeOf(() =>
-          caller.reorder({ categoryId: "cat-1", criterionIds: ["cri-1"] })
+          caller.reorder({ categoryId: "cat-1", panel: "pro", criterionIds: ["cri-1"] })
         )
       ).toBe("BAD_REQUEST");
 
@@ -663,6 +694,7 @@ describe("Criteria Router", () => {
       const caller = await createCaller();
       await caller.reorder({
         categoryId: "cat-1",
+        panel: "pro",
         criterionIds: ["cri-3", "cri-1", "cri-2"],
       });
 
@@ -675,8 +707,10 @@ describe("Criteria Router", () => {
       vi.mocked(db.query.categories.findFirst).mockResolvedValue(
         categoryWithCup("draft") as never
       );
+      // Les deux jurys ont déjà leur grille.
       vi.mocked(db.query.ratingCriteria.findMany).mockResolvedValue([
-        { id: "cri-1" },
+        { id: "cri-1", panel: "pro" },
+        { id: "cri-2", panel: "public" },
       ] as never);
 
       const caller = await createCaller();
@@ -697,8 +731,30 @@ describe("Criteria Router", () => {
       const caller = await createCaller();
       const result = await caller.initializeDefaultCriteria({ categoryId: "cat-1" });
 
-      expect(result.created).toBe(DEFAULT_CRITERIA.length);
+      // Une grille par défaut pour chacun des deux jurys.
+      expect(result.created).toBe(DEFAULT_CRITERIA.length * 2);
       expect(inserted).toHaveLength(1);
+      const rows = inserted[0] as { panel: string }[];
+      expect(rows.filter((r) => r.panel === "pro")).toHaveLength(DEFAULT_CRITERIA.length);
+      expect(rows.filter((r) => r.panel === "public")).toHaveLength(DEFAULT_CRITERIA.length);
+    });
+
+    it("ne complète que le jury encore sans critère", async () => {
+      await asOrganizer();
+      const { db } = await import("~/server/db");
+      vi.mocked(db.query.categories.findFirst).mockResolvedValue(
+        categoryWithCup("draft") as never
+      );
+      vi.mocked(db.query.ratingCriteria.findMany).mockResolvedValue([
+        { id: "cri-1", panel: "pro" },
+      ] as never);
+
+      const caller = await createCaller();
+      const result = await caller.initializeDefaultCriteria({ categoryId: "cat-1" });
+
+      expect(result.created).toBe(DEFAULT_CRITERIA.length);
+      const rows = inserted[0] as { panel: string }[];
+      expect(rows.every((r) => r.panel === "public")).toBe(true);
     });
 
     // Dupliquer d'une cup vers une autre mélangerait deux barèmes : le
@@ -731,11 +787,12 @@ describe("Criteria Router", () => {
         .mockResolvedValueOnce(categoryWithCup("draft", { id: "cat-1" }) as never)
         .mockResolvedValueOnce(categoryWithCup("draft", { id: "cat-2" }) as never);
       vi.mocked(db.query.ratingCriteria.findMany).mockResolvedValue([
-        { id: "cri-1", name: "Arôme", description: null, coefficient: 2, sortOrder: 0 },
-        { id: "cri-2", name: "Goût", description: null, coefficient: 3, sortOrder: 1 },
+        { id: "cri-1", panel: "pro", name: "Arôme", description: null, coefficient: 2, sortOrder: 0 },
+        { id: "cri-2", panel: "pro", name: "Goût", description: null, coefficient: 3, sortOrder: 1 },
+        { id: "cri-3", panel: "public", name: "Plaisir", description: null, coefficient: 1, sortOrder: 0 },
       ] as never);
-      // La catégorie cible contient déjà 2 critères.
-      selectResults.push([{ count: 2 }]);
+      // La catégorie cible a déjà 2 critères pro et aucun critère public.
+      selectResults.push([{ panel: "pro", count: 2 }]);
 
       const caller = await createCaller();
       const result = await caller.duplicateFromCategory({
@@ -743,9 +800,15 @@ describe("Criteria Router", () => {
         targetCategoryId: "cat-2",
       });
 
-      expect(result.duplicated).toBe(2);
-      const copied = inserted[0] as { sortOrder: number; categoryId: string }[];
-      expect(copied.map((c) => c.sortOrder)).toEqual([2, 3]);
+      expect(result.duplicated).toBe(3);
+      const copied = inserted[0] as { sortOrder: number; categoryId: string; panel: string }[];
+      // Chaque critère garde son jury et se range à la suite de la grille
+      // de ce jury dans la cible.
+      expect(copied.map((c) => [c.panel, c.sortOrder])).toEqual([
+        ["pro", 2],
+        ["pro", 3],
+        ["public", 0],
+      ]);
       expect(copied.every((c) => c.categoryId === "cat-2")).toBe(true);
     });
 

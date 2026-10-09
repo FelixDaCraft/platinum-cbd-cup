@@ -14,10 +14,17 @@ const createMockDb = () => ({
       findMany: vi.fn(),
     },
     ratingCriteria: {
-      findFirst: vi.fn(),
+      findMany: vi.fn(),
     },
   },
 });
+
+/** Grille complète : un critère pro et un critère public par catégorie. */
+const fullGrid = (...categoryIds: string[]) =>
+  categoryIds.flatMap((categoryId) => [
+    { categoryId, panel: "pro" },
+    { categoryId, panel: "public" },
+  ]);
 
 describe("canPublishCup", () => {
   let mockDb: ReturnType<typeof createMockDb>;
@@ -40,11 +47,7 @@ describe("canPublishCup", () => {
       mockDb.query.categories.findMany.mockResolvedValue([
         { id: "cat_1", cupId: "cup_123", name: "Vins Rouges" },
       ]);
-      mockDb.query.ratingCriteria.findFirst.mockResolvedValue({
-        id: "crit_1",
-        categoryId: "cat_1",
-        name: "Arôme",
-      });
+      mockDb.query.ratingCriteria.findMany.mockResolvedValue(fullGrid("cat_1"));
 
       const result = await canPublishCup("cup_123", mockDb as never);
 
@@ -58,7 +61,7 @@ describe("canPublishCup", () => {
       mockDb.query.categories.findMany.mockResolvedValue([
         { id: "cat_1", cupId: "cup_123", name: "Vins Rouges" },
       ]);
-      mockDb.query.ratingCriteria.findFirst.mockResolvedValue(null);
+      mockDb.query.ratingCriteria.findMany.mockResolvedValue([]);
 
       const result = await canPublishCup("cup_123", mockDb as never);
 
@@ -70,16 +73,29 @@ describe("canPublishCup", () => {
       mockDb.query.categories.findMany.mockResolvedValue([
         { id: "cat_1", cupId: "cup_123", name: "Vins Rouges" },
       ]);
-      mockDb.query.ratingCriteria.findFirst.mockResolvedValue({
-        id: "crit_1",
-        categoryId: "cat_1",
-        name: "Arôme",
-      });
+      mockDb.query.ratingCriteria.findMany.mockResolvedValue(fullGrid("cat_1"));
 
       const result = await canPublishCup("cup_123", mockDb as never);
 
       expect(result.canPublish).toBe(true);
       expect(result.errors).not.toContain("Au moins un critère de notation est requis");
+    });
+
+    it("should return an error per jury when a category lacks that jury's criteria", async () => {
+      mockDb.query.categories.findMany.mockResolvedValue([
+        { id: "cat_1", cupId: "cup_123", name: "Fleurs Indoor" },
+        { id: "cat_2", cupId: "cup_123", name: "Hash" },
+      ]);
+      mockDb.query.ratingCriteria.findMany.mockResolvedValue([
+        { categoryId: "cat_1", panel: "pro" },
+        { categoryId: "cat_1", panel: "public" },
+        { categoryId: "cat_2", panel: "pro" },
+      ]);
+
+      const result = await canPublishCup("cup_123", mockDb as never);
+
+      expect(result.canPublish).toBe(false);
+      expect(result.errors).toEqual(["Aucun critère pour le jury public dans : Hash"]);
     });
 
     it("should not check criteria if no categories exist", async () => {
@@ -90,7 +106,7 @@ describe("canPublishCup", () => {
       // Should only have category error, not criteria error
       expect(result.errors).toHaveLength(1);
       expect(result.errors).toContain("Au moins une catégorie est requise");
-      expect(mockDb.query.ratingCriteria.findFirst).not.toHaveBeenCalled();
+      expect(mockDb.query.ratingCriteria.findMany).not.toHaveBeenCalled();
     });
   });
 
@@ -100,11 +116,7 @@ describe("canPublishCup", () => {
         { id: "cat_1", cupId: "cup_123", name: "Vins Rouges" },
         { id: "cat_2", cupId: "cup_123", name: "Vins Blancs" },
       ]);
-      mockDb.query.ratingCriteria.findFirst.mockResolvedValue({
-        id: "crit_1",
-        categoryId: "cat_1",
-        name: "Arôme",
-      });
+      mockDb.query.ratingCriteria.findMany.mockResolvedValue(fullGrid("cat_1", "cat_2"));
 
       const result = await canPublishCup("cup_123", mockDb as never);
 
@@ -119,17 +131,13 @@ describe("canPublishCup", () => {
         { id: "cat_2", cupId: "cup_123", name: "Vins Blancs" },
         { id: "cat_3", cupId: "cup_123", name: "Rosés" },
       ]);
-      mockDb.query.ratingCriteria.findFirst.mockResolvedValue({
-        id: "crit_1",
-        categoryId: "cat_2", // Criterion in second category
-        name: "Couleur",
-      });
+      mockDb.query.ratingCriteria.findMany.mockResolvedValue(fullGrid("cat_1", "cat_2", "cat_3"));
 
       const result = await canPublishCup("cup_123", mockDb as never);
 
       expect(result.canPublish).toBe(true);
-      // Verify findFirst was called (criteria check happened)
-      expect(mockDb.query.ratingCriteria.findFirst).toHaveBeenCalled();
+      // Vérifie que la grille des critères a bien été lue
+      expect(mockDb.query.ratingCriteria.findMany).toHaveBeenCalled();
     });
   });
 
@@ -149,7 +157,7 @@ describe("canPublishCup", () => {
       mockDb.query.categories.findMany.mockResolvedValue([
         { id: "cat_1", cupId: "cup_123", name: "Category" },
       ]);
-      mockDb.query.ratingCriteria.findFirst.mockResolvedValue(null);
+      mockDb.query.ratingCriteria.findMany.mockResolvedValue([]);
 
       const result = await canPublishCup("cup_123", mockDb as never);
 
@@ -168,11 +176,7 @@ describe("canPublishCup", () => {
       mockDb.query.categories.findMany.mockResolvedValue([
         { id: "cat_1", cupId: "cup_123", name: "Category" },
       ]);
-      mockDb.query.ratingCriteria.findFirst.mockResolvedValue({
-        id: "crit_1",
-        categoryId: "cat_1",
-        name: "Criterion",
-      });
+      mockDb.query.ratingCriteria.findMany.mockResolvedValue(fullGrid("cat_1"));
 
       const result = await canPublishCup("cup_123", mockDb as never);
 
@@ -190,11 +194,7 @@ describe("canPublishCup", () => {
       mockDb.query.categories.findMany.mockResolvedValue([
         { id: "cat_1", cupId: "cup_123", name: "Category" },
       ]);
-      mockDb.query.ratingCriteria.findFirst.mockResolvedValue({
-        id: "crit_1",
-        categoryId: "cat_1",
-        name: "Criterion",
-      });
+      mockDb.query.ratingCriteria.findMany.mockResolvedValue(fullGrid("cat_1"));
 
       const result = await canPublishCup("cup_123", mockDb as never);
 
@@ -210,11 +210,7 @@ describe("canPublishCup", () => {
       mockDb.query.categories.findMany.mockResolvedValue([
         { id: "cat_1", cupId: "cup_123", name: "Category" },
       ]);
-      mockDb.query.ratingCriteria.findFirst.mockResolvedValue({
-        id: "crit_1",
-        categoryId: "cat_1",
-        name: "Criterion",
-      });
+      mockDb.query.ratingCriteria.findMany.mockResolvedValue(fullGrid("cat_1"));
 
       // Payments are configured globally (VIVA_* env), passed in by the caller.
       const result = await canPublishCup("cup_123", mockDb as never, true);

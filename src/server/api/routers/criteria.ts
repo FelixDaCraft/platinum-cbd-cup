@@ -1,7 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { nanoid } from "nanoid";
-import { eq, asc, count, inArray } from "drizzle-orm";
+import { and, eq, asc, count, inArray } from "drizzle-orm";
 
 import { createTRPCRouter, organizerProcedure } from "~/server/api/trpc";
 import { Errors } from "~/lib/errors";
@@ -18,6 +18,7 @@ import {
   DEFAULT_CRITERIA,
 } from "~/lib/validations/criteria";
 import { getRatingScaleValues } from "~/lib/validations/cup";
+import { juryPanelEnum } from "~/lib/enums";
 
 /**
  * Helper to block criteria modifications during rating or completed phases
@@ -78,7 +79,7 @@ export const criteriaRouter = createTRPCRouter({
 
       const criteria = await ctx.db.query.ratingCriteria.findMany({
         where: (rc, { eq: eqFn }) => eqFn(rc.categoryId, input.categoryId),
-        orderBy: (rc) => [asc(rc.sortOrder)],
+        orderBy: (rc) => [asc(rc.panel), asc(rc.sortOrder)],
       });
 
       const canEdit =
@@ -110,8 +111,10 @@ export const criteriaRouter = createTRPCRouter({
       const category = await requireCategoryWithCup(ctx, input.categoryId);
       assertCriteriaEditable(category.cup.status);
 
+      // L'ordre se compte dans la grille du jury visé.
       const existingCriteria = await ctx.db.query.ratingCriteria.findMany({
-        where: (rc, { eq: eqFn }) => eqFn(rc.categoryId, input.categoryId),
+        where: (rc, { eq: eqFn, and: andFn }) =>
+          andFn(eqFn(rc.categoryId, input.categoryId), eqFn(rc.panel, input.panel)),
       });
 
       const maxOrder = Math.max(
@@ -125,6 +128,7 @@ export const criteriaRouter = createTRPCRouter({
         .values({
           id: criterionId,
           categoryId: input.categoryId,
+          panel: input.panel,
           name: input.name,
           description: input.description ?? null,
           coefficient: input.coefficient,
@@ -154,6 +158,15 @@ export const criteriaRouter = createTRPCRouter({
       if (input.name !== undefined) updateData.name = input.name;
       if (input.description !== undefined) updateData.description = input.description;
       if (input.coefficient !== undefined) updateData.coefficient = input.coefficient;
+      if (input.panel !== undefined && input.panel !== criterion.panel) {
+        // Changement de jury : le critère passe en fin de l'autre grille.
+        const target = await ctx.db.query.ratingCriteria.findMany({
+          where: (rc, { eq: eqFn, and: andFn }) =>
+            andFn(eqFn(rc.categoryId, criterion.categoryId), eqFn(rc.panel, input.panel!)),
+        });
+        updateData.panel = input.panel;
+        updateData.sortOrder = Math.max(...target.map((c) => c.sortOrder), -1) + 1;
+      }
 
       const [updated] = await ctx.db
         .update(schema.ratingCriteria)
@@ -193,7 +206,8 @@ export const criteriaRouter = createTRPCRouter({
       assertCriteriaEditable(category.cup.status);
 
       const existingCriteria = await ctx.db.query.ratingCriteria.findMany({
-        where: (rc, { eq: eqFn }) => eqFn(rc.categoryId, input.categoryId),
+        where: (rc, { eq: eqFn, and: andFn }) =>
+          andFn(eqFn(rc.categoryId, input.categoryId), eqFn(rc.panel, input.panel)),
       });
 
       const existingIds = new Set(existingCriteria.map((c) => c.id));
@@ -204,14 +218,14 @@ export const criteriaRouter = createTRPCRouter({
       if (!allBelongToCategory) {
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message: "Certains critères n'appartiennent pas à cette catégorie",
+          message: "Certains critères n'appartiennent pas à cette catégorie ou à ce jury",
         });
       }
 
       if (input.criterionIds.length !== existingCriteria.length) {
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message: "Tous les critères de la catégorie doivent être inclus",
+          message: "Tous les critères de ce jury doivent être inclus",
         });
       }
 
@@ -263,21 +277,28 @@ export const criteriaRouter = createTRPCRouter({
         return { duplicated: 0 };
       }
 
-      const existingCount = await ctx.db
-        .select({ count: count() })
+      // Chaque critère garde son jury et s'ajoute à la fin de la grille de ce
+      // jury dans la catégorie cible.
+      const targetCounts = await ctx.db
+        .select({ panel: schema.ratingCriteria.panel, count: count() })
         .from(schema.ratingCriteria)
-        .where(eq(schema.ratingCriteria.categoryId, input.targetCategoryId));
+        .where(eq(schema.ratingCriteria.categoryId, input.targetCategoryId))
+        .groupBy(schema.ratingCriteria.panel);
+      const nextOrder = new Map(targetCounts.map((r) => [r.panel, r.count]));
 
-      const baseOrder = existingCount[0]?.count ?? 0;
-
-      const criteriaToCopy = sourceCriteria.map((criterion, index) => ({
-        id: nanoid(),
-        categoryId: input.targetCategoryId,
-        name: criterion.name,
-        description: criterion.description,
-        coefficient: criterion.coefficient,
-        sortOrder: baseOrder + index,
-      }));
+      const criteriaToCopy = sourceCriteria.map((criterion) => {
+        const order = nextOrder.get(criterion.panel) ?? 0;
+        nextOrder.set(criterion.panel, order + 1);
+        return {
+          id: nanoid(),
+          categoryId: input.targetCategoryId,
+          panel: criterion.panel,
+          name: criterion.name,
+          description: criterion.description,
+          coefficient: criterion.coefficient,
+          sortOrder: order,
+        };
+      });
 
       await ctx.db.insert(schema.ratingCriteria).values(criteriaToCopy);
 
@@ -297,18 +318,26 @@ export const criteriaRouter = createTRPCRouter({
         where: (rc, { eq: eqFn }) => eqFn(rc.categoryId, input.categoryId),
       });
 
-      if (existingCriteria.length > 0) {
+      // Seuls les jurys encore sans critère reçoivent la grille par défaut.
+      const panels = (input.panel ? [input.panel] : [...juryPanelEnum]).filter(
+        (panel) => !existingCriteria.some((c) => c.panel === panel)
+      );
+
+      if (panels.length === 0) {
         return { created: 0, message: "Critères déjà configurés" };
       }
 
-      const criteriaToInsert = DEFAULT_CRITERIA.map((criterion, index) => ({
-        id: nanoid(),
-        categoryId: input.categoryId,
-        name: criterion.name,
-        description: criterion.description,
-        coefficient: criterion.coefficient,
-        sortOrder: index,
-      }));
+      const criteriaToInsert = panels.flatMap((panel) =>
+        DEFAULT_CRITERIA.map((criterion, index) => ({
+          id: nanoid(),
+          categoryId: input.categoryId,
+          panel,
+          name: criterion.name,
+          description: criterion.description,
+          coefficient: criterion.coefficient,
+          sortOrder: index,
+        }))
+      );
 
       await ctx.db.insert(schema.ratingCriteria).values(criteriaToInsert);
 
@@ -351,14 +380,19 @@ export const criteriaRouter = createTRPCRouter({
       const categoriesWithCounts = await Promise.all(
         otherCategories.map(async (cat) => {
           const result = await ctx.db
-            .select({ count: count() })
+            .select({ panel: schema.ratingCriteria.panel, count: count() })
             .from(schema.ratingCriteria)
-            .where(eq(schema.ratingCriteria.categoryId, cat.id));
+            .where(eq(schema.ratingCriteria.categoryId, cat.id))
+            .groupBy(schema.ratingCriteria.panel);
+          const proCount = result.find((r) => r.panel === "pro")?.count ?? 0;
+          const publicCount = result.find((r) => r.panel === "public")?.count ?? 0;
 
           return {
             id: cat.id,
             name: cat.name,
-            criteriaCount: result[0]?.count ?? 0,
+            criteriaCount: proCount + publicCount,
+            proCount,
+            publicCount,
           };
         })
       );
@@ -399,6 +433,7 @@ export const criteriaRouter = createTRPCRouter({
                 name: category.name,
                 criteria: criteria.map((c) => ({
                   id: c.id,
+                  panel: c.panel,
                   name: c.name,
                   description: c.description,
                   coefficient: c.coefficient,
@@ -455,13 +490,19 @@ export const criteriaRouter = createTRPCRouter({
       const existingCount = await ctx.db
         .select({ count: count() })
         .from(schema.ratingCriteria)
-        .where(eq(schema.ratingCriteria.categoryId, input.targetCategoryId));
+        .where(
+          and(
+            eq(schema.ratingCriteria.categoryId, input.targetCategoryId),
+            eq(schema.ratingCriteria.panel, input.panel)
+          )
+        );
 
       const baseOrder = existingCount[0]?.count ?? 0;
 
       const criteriaToCopy = criteriaToImport.map((criterion, index) => ({
         id: nanoid(),
         categoryId: input.targetCategoryId,
+        panel: input.panel,
         name: criterion.name,
         description: criterion.description,
         coefficient: criterion.coefficient,

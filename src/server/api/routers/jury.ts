@@ -1756,7 +1756,9 @@ export const juryRouter = createTRPCRouter({
         with: {
           category: {
             with: {
+              // Chaque jury a sa grille : le juré ne voit que la sienne.
               criteria: {
+                where: (criteria, { eq: eqFn }) => eqFn(criteria.panel, juryMembership.panel),
                 orderBy: (criteria, { asc }) => [asc(criteria.sortOrder)],
               },
             },
@@ -2017,7 +2019,10 @@ export const juryRouter = createTRPCRouter({
           },
           category: {
             with: {
-              criteria: true,
+              // Seuls les critères du jury du juré sont attendus (et admis).
+              criteria: {
+                where: (criteria, { eq: eqFn }) => eqFn(criteria.panel, juryMembership.panel),
+              },
             },
           },
         },
@@ -3263,7 +3268,10 @@ export const juryRouter = createTRPCRouter({
 
       // Get criteria for assigned categories
       const criteria = await ctx.db.query.ratingCriteria.findMany({
-        where: inArray(schema.ratingCriteria.categoryId, assignedCategoryIds),
+        where: and(
+          inArray(schema.ratingCriteria.categoryId, assignedCategoryIds),
+          eq(schema.ratingCriteria.panel, cupJury.panel)
+        ),
       });
 
       // Get criterion scores for jury's ratings
@@ -3510,7 +3518,10 @@ export const juryRouter = createTRPCRouter({
 
       // Get criteria for this category ordered by sortOrder
       const criteria = await ctx.db.query.ratingCriteria.findMany({
-        where: eq(schema.ratingCriteria.categoryId, product.categoryId),
+        where: and(
+          eq(schema.ratingCriteria.categoryId, product.categoryId),
+          eq(schema.ratingCriteria.panel, cupJury.panel)
+        ),
         orderBy: (t, { asc }) => [asc(t.sortOrder)],
       });
 

@@ -1,10 +1,15 @@
 import { z } from "zod";
+import { juryPanelEnum } from "~/lib/enums";
+
+/** Jury qui note un critère : chaque jury a sa propre grille. */
+export const criterionPanelSchema = z.enum(juryPanelEnum);
 
 /**
  * Schema for creating a new rating criterion
  */
 export const createCriterionSchema = z.object({
   categoryId: z.string().min(1, "Category ID requis"),
+  panel: criterionPanelSchema,
   name: z.string().min(1, "Nom du critère requis").max(100, "Nom trop long (max 100 caractères)"),
   description: z.string().max(500, "Description trop longue (max 500 caractères)").optional(),
   coefficient: z
@@ -21,6 +26,8 @@ export const createCriterionSchema = z.object({
 export const updateCriterionSchema = z
   .object({
     criterionId: z.string().min(1, "Criterion ID requis"),
+    /** Déplacer le critère vers l'autre jury (avant la notation uniquement). */
+    panel: criterionPanelSchema.optional(),
     name: z.string().min(1, "Nom du critère requis").max(100, "Nom trop long (max 100 caractères)").optional(),
     description: z.string().max(500, "Description trop longue (max 500 caractères)").nullish(),
     coefficient: z
@@ -36,6 +43,8 @@ export const updateCriterionSchema = z
  */
 export const reorderCriteriaSchema = z.object({
   categoryId: z.string().min(1, "Category ID requis"),
+  /** L'ordre se règle jury par jury. */
+  panel: criterionPanelSchema,
   criterionIds: z.array(z.string()).min(1, "Au moins un critère requis"),
 });
 
@@ -52,6 +61,8 @@ export const duplicateCriteriaSchema = z.object({
  */
 export const initializeDefaultCriteriaSchema = z.object({
   categoryId: z.string().min(1, "Category ID requis"),
+  /** Jury à initialiser ; sans précision, les deux jurys sans critère. */
+  panel: criterionPanelSchema.optional(),
 });
 
 /**
@@ -59,6 +70,8 @@ export const initializeDefaultCriteriaSchema = z.object({
  */
 export const importCriteriaFromCupSchema = z.object({
   targetCategoryId: z.string().min(1, "Target category ID requis"),
+  /** Jury de destination des critères importés. */
+  panel: criterionPanelSchema,
   criteriaIds: z.array(z.string()).min(1, "Au moins un critère à importer"),
 });
 

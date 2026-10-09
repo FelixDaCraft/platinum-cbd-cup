@@ -52,13 +52,30 @@ export async function canPublishCup(
   if (categories.length > 0) {
     const categoryIds = categories.map((c) => c.id);
 
-    const criteria = await db.query.ratingCriteria.findFirst({
+    const criteria = await db.query.ratingCriteria.findMany({
       where: (ratingCriteria, { inArray }) =>
         inArray(ratingCriteria.categoryId, categoryIds),
+      columns: { categoryId: true, panel: true },
     });
 
-    if (!criteria) {
+    if (criteria.length === 0) {
       errors.push("Au moins un critère de notation est requis");
+    } else {
+      // Chaque jury a sa grille : une catégorie sans critère pour l'un des
+      // deux jurys laisserait ses jurés sans rien à noter.
+      for (const [panel, label] of [
+        ["pro", "jury pro"],
+        ["public", "jury public"],
+      ] as const) {
+        const missing = categories.filter(
+          (c) => !criteria.some((cr) => cr.categoryId === c.id && cr.panel === panel)
+        );
+        if (missing.length > 0) {
+          errors.push(
+            `Aucun critère pour le ${label} dans : ${missing.map((c) => c.name).join(", ")}`
+          );
+        }
+      }
     }
   }
 
