@@ -34,6 +34,8 @@ interface CriterionFormDialogProps {
   }) => void;
   isSubmitting: boolean;
   mode: "create" | "edit";
+  /** Jury dont la grille reçoit / contient le critère (ex. « Jury public »). */
+  panelLabel?: string;
 }
 
 export function CriterionFormDialog({
@@ -43,6 +45,7 @@ export function CriterionFormDialog({
   onSave,
   isSubmitting,
   mode,
+  panelLabel,
 }: CriterionFormDialogProps) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -106,8 +109,12 @@ export function CriterionFormDialog({
           </DialogTitle>
           <DialogDescription>
             {mode === "create"
-              ? "Créez un nouveau critère d'évaluation pour cette catégorie."
-              : "Modifiez les propriétés du critère."}
+              ? panelLabel
+                ? `Nouveau critère dans la grille du ${panelLabel.toLowerCase()}.`
+                : "Créez un nouveau critère d'évaluation pour cette catégorie."
+              : panelLabel
+                ? `Critère de la grille du ${panelLabel.toLowerCase()}.`
+                : "Modifiez les propriétés du critère."}
           </DialogDescription>
         </DialogHeader>
 

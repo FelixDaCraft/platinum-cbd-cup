@@ -26,9 +26,15 @@ export function CategoryCard({ category, cupId, onEdit, onDelete }: CategoryCard
     isDragging,
   } = useSortable({ id: category.id });
 
-  const { data: criteriaCount = 0 } = api.criteria.count.useQuery({
+  // Une grille par jury : on compte les critères pro et public séparément.
+  // Même requête que la page des critères, donc invalidée avec elle.
+  const { data: criteriaData } = api.criteria.getCategoryCriteria.useQuery({
     categoryId: category.id,
   });
+  const proCount = criteriaData?.criteria.filter((c) => c.panel === "pro").length ?? 0;
+  const publicCount = criteriaData?.criteria.filter((c) => c.panel === "public").length ?? 0;
+  // Publier exige au moins un critère par jury.
+  const criteriaComplete = proCount > 0 && publicCount > 0;
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -60,8 +66,9 @@ export function CategoryCard({ category, cupId, onEdit, onDelete }: CategoryCard
           href={`/dashboard/cups/${cupId}/config/categories/${category.id}/criteria`}
           className="flex-1 min-w-0"
         >
-          <div className="flex items-center gap-3">
-            <div className="flex-1 min-w-0">
+          {/* Sur mobile, les badges passent sous le nom pour lui laisser la largeur. */}
+          <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:gap-3">
+            <div className="w-full flex-1 min-w-0">
               <h3
                 className="n-font-body font-medium truncate"
                 style={{ color: "var(--n-text-primary)" }}
@@ -111,9 +118,14 @@ export function CategoryCard({ category, cupId, onEdit, onDelete }: CategoryCard
                   ` · ${category.maxProductsPerProducer}/prod.`}
               </span>
             )}
-            {/* Criteria count badge */}
+            {/* Criteria count badge (pro · public) */}
             <span
               className="shrink-0"
+              title={
+                criteriaComplete
+                  ? undefined
+                  : "Chaque jury doit avoir au moins un critère pour publier la cup"
+              }
               style={{
                 display: "inline-flex",
                 alignItems: "center",
@@ -122,13 +134,21 @@ export function CategoryCard({ category, cupId, onEdit, onDelete }: CategoryCard
                 borderRadius: "6px",
                 fontSize: "12px",
                 fontFamily: "'Space Mono', monospace",
-                ...(criteriaCount > 0
+                whiteSpace: "nowrap",
+                ...(criteriaComplete
                   ? { background: "var(--n-surface-raised)", color: "var(--n-text-secondary)", border: "1px solid var(--n-border-visible)" }
                   : { background: "rgba(212,168,67,0.1)", color: "var(--n-warning)", border: "1px solid rgba(212,168,67,0.3)" })
               }}
             >
               <ListChecks className="h-3 w-3" />
-              {criteriaCount} critère{criteriaCount !== 1 ? "s" : ""}
+              {/* Libellé court sur mobile, complet au-delà. */}
+              <span className="sm:hidden">
+                {proCount} pro · {publicCount} public
+              </span>
+              <span className="hidden sm:inline">
+                {proCount} critère{proCount > 1 ? "s" : ""} pro · {publicCount} public
+                {publicCount > 1 ? "s" : ""}
+              </span>
             </span>
           </div>
         </Link>

@@ -22,6 +22,7 @@ import {
 } from "~/components/ui/select";
 import { formatCoefficient } from "~/lib/validations/criteria";
 import { api } from "~/trpc/react";
+import { CRITERIA_PANELS, CRITERIA_PANEL_ORDER } from "./panel-meta";
 
 interface DuplicateCriteriaDialogProps {
   categoryId: string;
@@ -71,7 +72,9 @@ export function DuplicateCriteriaDialog({
         <DialogHeader>
           <DialogTitle>Dupliquer les critères</DialogTitle>
           <DialogDescription>
-            Copiez les critères d'une autre catégorie de cette cup.
+            Copiez les grilles des deux jurys d&apos;une autre catégorie de
+            cette cup. Chaque critère rejoint la grille de son jury, à la suite
+            des critères existants.
           </DialogDescription>
         </DialogHeader>
 
@@ -99,9 +102,21 @@ export function DuplicateCriteriaDialog({
                     <SelectItem key={category.id} value={category.id}>
                       <div className="flex items-center gap-2">
                         <span>{category.name}</span>
-                        <span style={{ display: "inline-flex", alignItems: "center", padding: "1px 6px", borderRadius: "6px", fontSize: "11px", fontFamily: "'Space Mono', monospace", background: "var(--n-surface-raised)", color: "var(--n-text-secondary)", border: "1px solid var(--n-border)" }}>
-                          {category.criteriaCount} critère
-                          {category.criteriaCount > 1 ? "s" : ""}
+                        <span
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            padding: "1px 6px",
+                            borderRadius: "6px",
+                            fontSize: "11px",
+                            fontFamily: "'Space Mono', monospace",
+                            background: "var(--n-surface-raised)",
+                            color: "var(--n-text-secondary)",
+                            border: "1px solid var(--n-border)",
+                          }}
+                        >
+                          {category.proCount} pro · {category.publicCount}{" "}
+                          public
                         </span>
                       </div>
                     </SelectItem>
@@ -138,26 +153,66 @@ export function DuplicateCriteriaDialog({
                     borderRadius: "8px",
                   }}
                 >
-                  {previewData.criteria.map((criterion) => (
-                    <div
-                      key={criterion.id}
-                      className="flex items-center gap-2 py-1"
-                    >
-                      <Check
-                        className="h-4 w-4 flex-shrink-0"
-                        style={{ color: "var(--n-success)" }}
-                      />
-                      <span
-                        className="text-sm flex-1 truncate"
-                        style={{ color: "var(--n-text-primary)" }}
-                      >
-                        {criterion.name}
-                      </span>
-                      <span style={{ display: "inline-flex", alignItems: "center", padding: "1px 6px", borderRadius: "6px", fontSize: "11px", fontFamily: "'Space Mono', monospace", color: "var(--n-text-secondary)", border: "1px solid var(--n-border-visible)" }}>
-                        {formatCoefficient(criterion.coefficient)}
-                      </span>
-                    </div>
-                  ))}
+                  {CRITERIA_PANEL_ORDER.map((panel) => {
+                    const items = previewData.criteria.filter(
+                      (c) => c.panel === panel
+                    );
+                    const meta = CRITERIA_PANELS[panel];
+                    return (
+                      <div key={panel} className="pb-1">
+                        <p
+                          className="pt-1 pb-0.5 uppercase"
+                          style={{
+                            color: meta.accent,
+                            fontFamily: "'Space Mono', monospace",
+                            fontSize: "11px",
+                            letterSpacing: "0.08em",
+                          }}
+                        >
+                          {meta.label} · {items.length}
+                        </p>
+                        {items.length === 0 && (
+                          <p
+                            className="text-sm py-1"
+                            style={{ color: "var(--n-text-disabled)" }}
+                          >
+                            Aucun critère
+                          </p>
+                        )}
+                        {items.map((criterion) => (
+                          <div
+                            key={criterion.id}
+                            className="flex items-center gap-2 py-1"
+                          >
+                            <Check
+                              className="h-4 w-4 flex-shrink-0"
+                              style={{ color: "var(--n-success)" }}
+                            />
+                            <span
+                              className="text-sm flex-1 truncate"
+                              style={{ color: "var(--n-text-primary)" }}
+                            >
+                              {criterion.name}
+                            </span>
+                            <span
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                padding: "1px 6px",
+                                borderRadius: "6px",
+                                fontSize: "11px",
+                                fontFamily: "'Space Mono', monospace",
+                                color: "var(--n-text-secondary)",
+                                border: "1px solid var(--n-border-visible)",
+                              }}
+                            >
+                              {formatCoefficient(criterion.coefficient)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })}
                 </div>
               ) : (
                 <p

@@ -791,8 +791,9 @@ describe("Criteria Router", () => {
         { id: "cri-2", panel: "pro", name: "Goût", description: null, coefficient: 3, sortOrder: 1 },
         { id: "cri-3", panel: "public", name: "Plaisir", description: null, coefficient: 1, sortOrder: 0 },
       ] as never);
-      // La catégorie cible a déjà 2 critères pro et aucun critère public.
-      selectResults.push([{ panel: "pro", count: 2 }]);
+      // La catégorie cible a déjà des critères pro (rang max 1) et aucun
+      // critère public.
+      selectResults.push([{ panel: "pro", maxOrder: 1 }]);
 
       const caller = await createCaller();
       const result = await caller.duplicateFromCategory({
@@ -810,6 +811,29 @@ describe("Criteria Router", () => {
         ["public", 0],
       ]);
       expect(copied.every((c) => c.categoryId === "cat-2")).toBe(true);
+    });
+
+    it("repart du plus grand rang de la cible, même avec des trous", async () => {
+      await asOrganizer();
+      const { db } = await import("~/server/db");
+      vi.mocked(db.query.categories.findFirst)
+        .mockResolvedValueOnce(categoryWithCup("draft", { id: "cat-1" }) as never)
+        .mockResolvedValueOnce(categoryWithCup("draft", { id: "cat-2" }) as never);
+      vi.mocked(db.query.ratingCriteria.findMany).mockResolvedValue([
+        { id: "cri-1", panel: "pro", name: "Arôme", description: null, coefficient: 2, sortOrder: 0 },
+      ] as never);
+      // Deux critères pro aux rangs 1 et 2 (le rang 0 a été supprimé) :
+      // le suivant doit prendre le rang 3, pas 2.
+      selectResults.push([{ panel: "pro", maxOrder: 2 }]);
+
+      const caller = await createCaller();
+      await caller.duplicateFromCategory({
+        sourceCategoryId: "cat-1",
+        targetCategoryId: "cat-2",
+      });
+
+      const copied = inserted[0] as { sortOrder: number; panel: string }[];
+      expect(copied.map((c) => [c.panel, c.sortOrder])).toEqual([["pro", 3]]);
     });
 
     it("ne duplique rien quand la catégorie source est vide", async () => {

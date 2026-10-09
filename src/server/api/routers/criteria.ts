@@ -1,7 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { nanoid } from "nanoid";
-import { and, eq, asc, count, inArray } from "drizzle-orm";
+import { and, eq, asc, count, inArray, max } from "drizzle-orm";
 
 import { createTRPCRouter, organizerProcedure } from "~/server/api/trpc";
 import { Errors } from "~/lib/errors";
@@ -278,13 +278,20 @@ export const criteriaRouter = createTRPCRouter({
       }
 
       // Chaque critère garde son jury et s'ajoute à la fin de la grille de ce
-      // jury dans la catégorie cible.
-      const targetCounts = await ctx.db
-        .select({ panel: schema.ratingCriteria.panel, count: count() })
+      // jury dans la catégorie cible. On part du plus grand sortOrder (et non
+      // du nombre de critères) : après une suppression la grille a des trous,
+      // et compter ferait réutiliser un rang déjà pris.
+      const targetMax = await ctx.db
+        .select({
+          panel: schema.ratingCriteria.panel,
+          maxOrder: max(schema.ratingCriteria.sortOrder),
+        })
         .from(schema.ratingCriteria)
         .where(eq(schema.ratingCriteria.categoryId, input.targetCategoryId))
         .groupBy(schema.ratingCriteria.panel);
-      const nextOrder = new Map(targetCounts.map((r) => [r.panel, r.count]));
+      const nextOrder = new Map(
+        targetMax.map((r) => [r.panel, (r.maxOrder ?? -1) + 1])
+      );
 
       const criteriaToCopy = sourceCriteria.map((criterion) => {
         const order = nextOrder.get(criterion.panel) ?? 0;
@@ -487,8 +494,10 @@ export const criteriaRouter = createTRPCRouter({
         });
       }
 
-      const existingCount = await ctx.db
-        .select({ count: count() })
+      // Suite de la grille : plus grand sortOrder + 1 (la grille peut avoir
+      // des trous après une suppression).
+      const existingMax = await ctx.db
+        .select({ maxOrder: max(schema.ratingCriteria.sortOrder) })
         .from(schema.ratingCriteria)
         .where(
           and(
@@ -497,7 +506,7 @@ export const criteriaRouter = createTRPCRouter({
           )
         );
 
-      const baseOrder = existingCount[0]?.count ?? 0;
+      const baseOrder = (existingMax[0]?.maxOrder ?? -1) + 1;
 
       const criteriaToCopy = criteriaToImport.map((criterion, index) => ({
         id: nanoid(),

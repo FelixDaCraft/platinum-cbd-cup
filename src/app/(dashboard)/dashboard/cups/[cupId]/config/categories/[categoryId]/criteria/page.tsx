@@ -22,7 +22,10 @@ import {
   CriterionFormDialog,
   DuplicateCriteriaDialog,
   ImportCriteriaFromCupDialog,
+  CRITERIA_PANELS,
+  CRITERIA_PANEL_ORDER,
 } from "~/components/features/criteria";
+import type { JuryPanel } from "~/lib/enums";
 import { ratingScaleLabels, type RatingScale } from "~/lib/validations/cup";
 import { api } from "~/trpc/react";
 
@@ -33,16 +36,48 @@ interface CriterionData {
   coefficient: number;
 }
 
+interface CriterionRow extends CriterionData {
+  id: string;
+  panel: JuryPanel;
+  sortOrder: number;
+}
+
+const headingStyle: React.CSSProperties = {
+  fontFamily: "'Doto', 'Space Mono', monospace",
+  fontSize: "20px",
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
+  fontWeight: 700,
+};
+
+const sectionTitleStyle: React.CSSProperties = {
+  fontFamily: "'Doto', 'Space Mono', monospace",
+  fontSize: "14px",
+  letterSpacing: "0.08em",
+  textTransform: "uppercase",
+  color: "var(--n-text-display)",
+  fontWeight: 700,
+};
+
+const plural = (n: number, word: string) => `${n} ${word}${n > 1 ? "s" : ""}`;
+
 export default function CriteriaPage() {
   const params = useParams();
   const cupId = params.cupId as string;
   const categoryId = params.categoryId as string;
 
-  const [editingCriterion, setEditingCriterion] = useState<CriterionData | null>(null);
-  const [isCreateMode, setIsCreateMode] = useState(false);
+  /** Critère en cours d'édition (avec son jury). */
+  const [editingCriterion, setEditingCriterion] = useState<CriterionRow | null>(null);
+  /** Jury dans lequel on crée un critère (null = pas de création en cours). */
+  const [createPanel, setCreatePanel] = useState<JuryPanel | null>(null);
   const [isDuplicateOpen, setIsDuplicateOpen] = useState(false);
-  const [isImportFromCupOpen, setIsImportFromCupOpen] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
+  /** Jury de destination proposé à l'ouverture de l'import (null = fermé). */
+  const [importPanel, setImportPanel] = useState<JuryPanel | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    id: string;
+    name: string;
+    panel: JuryPanel;
+  } | null>(null);
 
   const utils = api.useUtils();
 
@@ -51,11 +86,16 @@ export default function CriteriaPage() {
     { enabled: !!categoryId }
   );
 
+  const invalidate = () => {
+    void utils.criteria.getCategoryCriteria.invalidate({ categoryId });
+    void utils.criteria.count.invalidate({ categoryId });
+  };
+
   const initializeCriteria = api.criteria.initializeDefaultCriteria.useMutation({
     onSuccess: (result) => {
-      void utils.criteria.getCategoryCriteria.invalidate({ categoryId });
+      invalidate();
       if (result.created > 0) {
-        toast.success(`${result.created} critères par défaut créés`);
+        toast.success(`${plural(result.created, "critère")} par défaut créé${result.created > 1 ? "s" : ""}`);
       } else {
         toast.info(result.message ?? "Critères déjà configurés");
       }
@@ -67,10 +107,8 @@ export default function CriteriaPage() {
 
   const createCriterion = api.criteria.create.useMutation({
     onSuccess: () => {
-      void utils.criteria.getCategoryCriteria.invalidate({ categoryId });
-      void utils.criteria.count.invalidate({ categoryId });
-      setEditingCriterion(null);
-      setIsCreateMode(false);
+      invalidate();
+      setCreatePanel(null);
       toast.success("Critère créé");
     },
     onError: (error) => {
@@ -80,7 +118,7 @@ export default function CriteriaPage() {
 
   const updateCriterion = api.criteria.update.useMutation({
     onSuccess: () => {
-      void utils.criteria.getCategoryCriteria.invalidate({ categoryId });
+      invalidate();
       setEditingCriterion(null);
       toast.success("Critère modifié");
     },
@@ -89,10 +127,21 @@ export default function CriteriaPage() {
     },
   });
 
+  const moveCriterion = api.criteria.update.useMutation({
+    onSuccess: (updated) => {
+      invalidate();
+      if (updated) {
+        toast.success(`Critère déplacé vers le ${CRITERIA_PANELS[updated.panel].label.toLowerCase()}`);
+      }
+    },
+    onError: (error) => {
+      toast.error(error.message);
+    },
+  });
+
   const deleteCriterion = api.criteria.delete.useMutation({
     onSuccess: () => {
-      void utils.criteria.getCategoryCriteria.invalidate({ categoryId });
-      void utils.criteria.count.invalidate({ categoryId });
+      invalidate();
       toast.success("Critère supprimé");
     },
     onError: (error) => {
@@ -111,11 +160,10 @@ export default function CriteriaPage() {
 
   const duplicateCriteria = api.criteria.duplicateFromCategory.useMutation({
     onSuccess: (result) => {
-      void utils.criteria.getCategoryCriteria.invalidate({ categoryId });
-      void utils.criteria.count.invalidate({ categoryId });
+      invalidate();
       setIsDuplicateOpen(false);
       if (result.duplicated > 0) {
-        toast.success(`${result.duplicated} critères dupliqués`);
+        toast.success(`${plural(result.duplicated, "critère")} dupliqué${result.duplicated > 1 ? "s" : ""}`);
       } else {
         toast.info("Aucun critère à dupliquer");
       }
@@ -126,12 +174,13 @@ export default function CriteriaPage() {
   });
 
   const importFromCup = api.criteria.importCriteriaFromOtherCup.useMutation({
-    onSuccess: (result) => {
-      void utils.criteria.getCategoryCriteria.invalidate({ categoryId });
-      void utils.criteria.count.invalidate({ categoryId });
-      setIsImportFromCupOpen(false);
+    onSuccess: (result, variables) => {
+      invalidate();
+      setImportPanel(null);
       if (result.imported > 0) {
-        toast.success(`${result.imported} critères importés`);
+        toast.success(
+          `${plural(result.imported, "critère")} importé${result.imported > 1 ? "s" : ""} dans le ${CRITERIA_PANELS[variables.panel].label.toLowerCase()}`
+        );
       } else {
         toast.info("Aucun critère importé");
       }
@@ -141,24 +190,16 @@ export default function CriteriaPage() {
     },
   });
 
-  const handleInitializeCriteria = () => {
-    initializeCriteria.mutate({ categoryId });
-  };
-
-  const handleOpenCreate = () => {
-    setEditingCriterion(null);
-    setIsCreateMode(true);
-  };
-
-  const handleEdit = (criterion: CriterionData) => {
-    setEditingCriterion(criterion);
-    setIsCreateMode(false);
-  };
+  const allCriteria: CriterionRow[] = data?.criteria ?? [];
+  const criteriaOf = (panel: JuryPanel) =>
+    allCriteria
+      .filter((c) => c.panel === panel)
+      .sort((a, b) => a.sortOrder - b.sortOrder);
 
   const handleDelete = (criterionId: string) => {
-    const criterion = data?.criteria.find((c) => c.id === criterionId);
+    const criterion = allCriteria.find((c) => c.id === criterionId);
     if (criterion) {
-      setDeleteConfirm({ id: criterionId, name: criterion.name });
+      setDeleteConfirm({ id: criterionId, name: criterion.name, panel: criterion.panel });
     }
   };
 
@@ -169,24 +210,27 @@ export default function CriteriaPage() {
     }
   };
 
-  const handleMoveUp = (criterionId: string) => {
-    if (!data?.criteria) return;
-    const criteria = [...data.criteria];
-    const index = criteria.findIndex((c) => c.id === criterionId);
-    if (index <= 0) return;
-    [criteria[index - 1], criteria[index]] = [criteria[index]!, criteria[index - 1]!];
-    const newOrder = criteria.map((c) => c.id);
-    reorderCriteria.mutate({ categoryId, criterionIds: newOrder });
+  /** Déplace un critère d'un cran dans la grille de son jury. */
+  const handleMove = (panel: JuryPanel, criterionId: string, delta: -1 | 1) => {
+    const list = criteriaOf(panel);
+    const index = list.findIndex((c) => c.id === criterionId);
+    const target = index + delta;
+    if (index < 0 || target < 0 || target >= list.length) return;
+    [list[index], list[target]] = [list[target]!, list[index]!];
+    reorderCriteria.mutate({
+      categoryId,
+      panel,
+      criterionIds: list.map((c) => c.id),
+    });
   };
 
-  const handleMoveDown = (criterionId: string) => {
-    if (!data?.criteria) return;
-    const criteria = [...data.criteria];
-    const index = criteria.findIndex((c) => c.id === criterionId);
-    if (index < 0 || index >= criteria.length - 1) return;
-    [criteria[index], criteria[index + 1]] = [criteria[index + 1]!, criteria[index]!];
-    const newOrder = criteria.map((c) => c.id);
-    reorderCriteria.mutate({ categoryId, criterionIds: newOrder });
+  const handleMovePanel = (criterionId: string) => {
+    const criterion = allCriteria.find((c) => c.id === criterionId);
+    if (!criterion) return;
+    moveCriterion.mutate({
+      criterionId,
+      panel: CRITERIA_PANELS[criterion.panel].other,
+    });
   };
 
   const handleSaveCriterion = (criterionData: {
@@ -195,9 +239,10 @@ export default function CriteriaPage() {
     description: string | null;
     coefficient: number;
   }) => {
-    if (isCreateMode) {
+    if (createPanel) {
       createCriterion.mutate({
         categoryId,
+        panel: createPanel,
         name: criterionData.name,
         description: criterionData.description ?? undefined,
         coefficient: criterionData.coefficient,
@@ -219,9 +264,10 @@ export default function CriteriaPage() {
     });
   };
 
-  const handleImportFromCup = (criteriaIds: string[]) => {
+  const handleImportFromCup = (criteriaIds: string[], panel: JuryPanel) => {
     importFromCup.mutate({
       targetCategoryId: categoryId,
+      panel,
       criteriaIds,
     });
   };
@@ -243,7 +289,7 @@ export default function CriteriaPage() {
               <ArrowLeft className="h-4 w-4" />
             </Link>
           </Button>
-          <h1 style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: "20px", textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: 700, color: "var(--n-accent)" }}>
+          <h1 style={{ ...headingStyle, color: "var(--n-accent)" }}>
             Catégorie non trouvée
           </h1>
         </div>
@@ -254,40 +300,36 @@ export default function CriteriaPage() {
     );
   }
 
-  const { criteria, canEdit, ratingScale, cupRatingScale, category } = data;
+  const { canEdit, ratingScale, cupRatingScale, category } = data;
+  const isBusy =
+    reorderCriteria.isPending || moveCriterion.isPending || deleteCriterion.isPending;
+  const formPanel = createPanel ?? editingCriterion?.panel ?? null;
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 min-w-0">
           <Button asChild variant="ghost" size="icon">
-            <Link href={`/dashboard/cups/${cupId}/config/categories`}>
+            <Link
+              href={`/dashboard/cups/${cupId}/config/categories`}
+              aria-label="Retour aux catégories"
+            >
               <ArrowLeft className="h-4 w-4" />
             </Link>
           </Button>
-          <div>
-            <h1 style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: "20px", textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: 700, color: "var(--n-text-display)" }}>
+          <div className="min-w-0">
+            <h1 style={{ ...headingStyle, color: "var(--n-text-display)" }}>
               Critères de notation
             </h1>
-            <p className="n-label mt-1">{category.name}</p>
+            <p className="n-label mt-1 truncate">{category.name}</p>
           </div>
         </div>
-        {criteria.length > 0 && canEdit && (
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setIsImportFromCupOpen(true)}>
-              <Download className="mr-2 h-4 w-4" />
-              Importer
-            </Button>
-            <Button variant="outline" onClick={() => setIsDuplicateOpen(true)}>
-              <Copy className="mr-2 h-4 w-4" />
-              Dupliquer
-            </Button>
-            <Button onClick={handleOpenCreate}>
-              <Plus className="mr-2 h-4 w-4" />
-              Ajouter
-            </Button>
-          </div>
+        {canEdit && (
+          <Button variant="outline" onClick={() => setIsDuplicateOpen(true)}>
+            <Copy className="mr-2 h-4 w-4" />
+            Dupliquer depuis une catégorie
+          </Button>
         )}
       </div>
 
@@ -306,121 +348,176 @@ export default function CriteriaPage() {
         </div>
       )}
 
-      {/* Empty state */}
-      {criteria.length === 0 && (
-        <div className="n-card">
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <ClipboardList className="h-10 w-10 mb-4" style={{ color: "var(--n-text-disabled)" }} />
-            <h3 style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: "14px", textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: 700, color: "var(--n-text-primary)", marginBottom: "8px" }}>
-              Aucun critère configuré
-            </h3>
-            <p className="text-sm mb-6 max-w-md" style={{ color: "var(--n-text-secondary)" }}>
-              Les critères définissent sur quoi les jurys évaluent les produits de cette catégorie.
-            </p>
-            {canEdit && (
-              <div className="flex flex-col sm:flex-row gap-3 flex-wrap justify-center">
-                <Button
-                  onClick={handleInitializeCriteria}
-                  disabled={initializeCriteria.isPending}
-                >
-                  {initializeCriteria.isPending ? "[...]" : "Initialiser les critères par défaut"}
-                </Button>
-                <Button variant="outline" onClick={handleOpenCreate}>
-                  Créer un critère personnalisé
-                </Button>
-                <Button variant="outline" onClick={() => setIsDuplicateOpen(true)}>
-                  <Copy className="mr-2 h-4 w-4" />
-                  Dupliquer depuis une catégorie
-                </Button>
-                <Button variant="outline" onClick={() => setIsImportFromCupOpen(true)}>
-                  <Download className="mr-2 h-4 w-4" />
-                  Importer depuis une autre Cup
-                </Button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Criteria configuration */}
-      {criteria.length > 0 && (
-        <>
-          {/* Rating scale info */}
-          <div className="n-card" style={{ padding: "16px" }}>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Info className="h-4 w-4" style={{ color: "var(--n-text-secondary)" }} />
-                <div>
-                  <p style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: "12px", letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--n-text-display)", fontWeight: 700 }}>
-                    Échelle de notation
-                  </p>
-                  <p className="n-label mt-0.5">
-                    {ratingScaleLabels[cupRatingScale as RatingScale]} — notes de {ratingScale.min} à {ratingScale.max}
-                  </p>
-                </div>
-              </div>
-              <Button asChild variant="ghost" size="sm">
-                <Link href={`/dashboard/cups/${cupId}`}>
-                  Modifier dans la cup
-                </Link>
-              </Button>
-            </div>
-          </div>
-
-          {/* Criteria list */}
-          <div className="n-card" style={{ padding: "0" }}>
-            <div
-              className="flex items-center justify-between px-6 py-4"
-              style={{ borderBottom: "1px solid var(--n-border)" }}
-            >
-              <div className="flex items-center gap-2">
-                <ClipboardList className="h-4 w-4" style={{ color: "var(--n-text-secondary)" }} />
-                <span style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: "12px", letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--n-text-display)", fontWeight: 700 }}>
-                  Critères d&apos;évaluation
-                </span>
-              </div>
-              <span className="n-tag">
-                {criteria.length} critère{criteria.length > 1 ? "s" : ""}
-              </span>
-            </div>
-            <div className="p-6">
-              <CriteriaList
-                criteria={criteria}
-                canEdit={canEdit}
-                onEdit={handleEdit}
-                onDelete={handleDelete}
-                onMoveUp={handleMoveUp}
-                onMoveDown={handleMoveDown}
-              />
-            </div>
-          </div>
-
-          {/* Coefficient info */}
-          <div className="n-card" style={{ padding: "16px" }}>
-            <div className="flex items-center gap-3">
-              <Info className="h-4 w-4" style={{ color: "var(--n-text-secondary)" }} />
-              <p className="text-sm" style={{ color: "var(--n-text-secondary)" }}>
-                Le coefficient multiplie l&apos;impact du critère sur le score final.
-                Score = Σ(note × coefficient) / Σ(coefficients)
+      {/* Rating scale + principle */}
+      <div className="n-card" style={{ padding: "16px" }}>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <Info className="h-4 w-4 mt-0.5 shrink-0" style={{ color: "var(--n-text-secondary)" }} />
+            <div>
+              <p style={{ ...sectionTitleStyle, fontSize: "12px" }}>
+                Échelle de notation
+              </p>
+              <p className="n-label mt-0.5">
+                {ratingScaleLabels[cupRatingScale as RatingScale]} — notes de {ratingScale.min} à {ratingScale.max}
+              </p>
+              <p className="text-sm mt-2" style={{ color: "var(--n-text-secondary)" }}>
+                Le jury professionnel et le jury public notent chacun sur leur propre grille.
+                Chaque jury doit avoir au moins un critère pour publier la cup.
               </p>
             </div>
           </div>
-        </>
-      )}
+          <Button asChild variant="ghost" size="sm" className="self-start sm:self-center">
+            <Link href={`/dashboard/cups/${cupId}`}>
+              Modifier dans la cup
+            </Link>
+          </Button>
+        </div>
+      </div>
+
+      {/* One section per jury */}
+      {CRITERIA_PANEL_ORDER.map((panel) => {
+        const meta = CRITERIA_PANELS[panel];
+        const other = CRITERIA_PANELS[meta.other];
+        const list = criteriaOf(panel);
+        const totalCoefficient = list.reduce((sum, c) => sum + c.coefficient, 0);
+        const isInitializing =
+          initializeCriteria.isPending && initializeCriteria.variables?.panel === panel;
+
+        return (
+          <section
+            key={panel}
+            aria-labelledby={`criteria-${panel}-title`}
+            className="n-card"
+            style={{ padding: 0, overflow: "hidden", borderTop: `3px solid ${meta.accent}` }}
+          >
+            {/* Section header */}
+            <div
+              className="flex flex-col gap-3 px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between"
+              style={{ borderBottom: "1px solid var(--n-border)" }}
+            >
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                <span
+                  className="n-tag"
+                  style={{ borderColor: meta.accent, color: meta.accent }}
+                >
+                  {meta.short}
+                </span>
+                <h2 id={`criteria-${panel}-title`} style={sectionTitleStyle}>
+                  {meta.label}
+                </h2>
+                <span className="n-label">
+                  {plural(list.length, "critère")} · Σ coef. {totalCoefficient}
+                </span>
+              </div>
+              {canEdit && list.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    aria-label={`Importer des critères dans le ${meta.label.toLowerCase()}`}
+                    onClick={() => setImportPanel(panel)}
+                  >
+                    <Download className="mr-2 h-4 w-4" />
+                    Importer
+                  </Button>
+                  <Button
+                    size="sm"
+                    aria-label={`Ajouter un critère au ${meta.label.toLowerCase()}`}
+                    onClick={() => {
+                      setEditingCriterion(null);
+                      setCreatePanel(panel);
+                    }}
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Ajouter
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {/* Section body */}
+            <div className="p-4 sm:p-6">
+              {list.length > 0 ? (
+                <CriteriaList
+                  criteria={list}
+                  canEdit={canEdit}
+                  isBusy={isBusy}
+                  onEdit={(c) => {
+                    setCreatePanel(null);
+                    setEditingCriterion({ ...c, panel });
+                  }}
+                  onDelete={handleDelete}
+                  onMoveUp={(id) => handleMove(panel, id, -1)}
+                  onMoveDown={(id) => handleMove(panel, id, 1)}
+                  onMovePanel={handleMovePanel}
+                  otherPanelShort={other.short}
+                  otherPanelLabel={other.label}
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <ClipboardList className="h-8 w-8 mb-3" style={{ color: "var(--n-text-disabled)" }} />
+                  <p style={{ ...sectionTitleStyle, fontSize: "12px", color: "var(--n-text-primary)" }}>
+                    Aucun critère pour le {meta.label.toLowerCase()}
+                  </p>
+                  <p className="text-sm mt-2 mb-5 max-w-md" style={{ color: "var(--n-warning)" }}>
+                    Ce jury ne pourra pas noter tant que sa grille est vide.
+                  </p>
+                  {canEdit && (
+                    <div className="flex flex-col sm:flex-row gap-2 flex-wrap justify-center w-full sm:w-auto">
+                      <Button
+                        onClick={() => initializeCriteria.mutate({ categoryId, panel })}
+                        disabled={initializeCriteria.isPending}
+                      >
+                        {isInitializing ? "[...]" : "Initialiser les critères par défaut"}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setEditingCriterion(null);
+                          setCreatePanel(panel);
+                        }}
+                      >
+                        <Plus className="mr-2 h-4 w-4" />
+                        Créer un critère
+                      </Button>
+                      <Button variant="outline" onClick={() => setImportPanel(panel)}>
+                        <Download className="mr-2 h-4 w-4" />
+                        Importer depuis une autre Cup
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </section>
+        );
+      })}
+
+      {/* Coefficient info */}
+      <div className="n-card" style={{ padding: "16px" }}>
+        <div className="flex items-center gap-3">
+          <Info className="h-4 w-4 shrink-0" style={{ color: "var(--n-text-secondary)" }} />
+          <p className="text-sm" style={{ color: "var(--n-text-secondary)" }}>
+            Le coefficient multiplie l&apos;impact du critère sur le score final de son jury.
+            Score = Σ(note × coefficient) / Σ(coefficients)
+          </p>
+        </div>
+      </div>
 
       {/* Create/Edit Dialog */}
       <CriterionFormDialog
         criterion={editingCriterion}
-        open={isCreateMode || !!editingCriterion}
+        open={!!createPanel || !!editingCriterion}
         onOpenChange={(open) => {
           if (!open) {
             setEditingCriterion(null);
-            setIsCreateMode(false);
+            setCreatePanel(null);
           }
         }}
         onSave={handleSaveCriterion}
         isSubmitting={createCriterion.isPending || updateCriterion.isPending}
-        mode={isCreateMode ? "create" : "edit"}
+        mode={createPanel ? "create" : "edit"}
+        panelLabel={formPanel ? CRITERIA_PANELS[formPanel].label : undefined}
       />
 
       {/* Duplicate Dialog */}
@@ -436,8 +533,11 @@ export default function CriteriaPage() {
       <ImportCriteriaFromCupDialog
         cupId={cupId}
         categoryId={categoryId}
-        open={isImportFromCupOpen}
-        onOpenChange={setIsImportFromCupOpen}
+        open={!!importPanel}
+        initialPanel={importPanel ?? "pro"}
+        onOpenChange={(open) => {
+          if (!open) setImportPanel(null);
+        }}
         onImport={handleImportFromCup}
         isSubmitting={importFromCup.isPending}
       />
@@ -448,7 +548,8 @@ export default function CriteriaPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Supprimer ce critère ?</AlertDialogTitle>
             <AlertDialogDescription>
-              Êtes-vous sûr de vouloir supprimer le critère &quot;{deleteConfirm?.name}&quot; ?
+              Êtes-vous sûr de vouloir supprimer le critère &quot;{deleteConfirm?.name}&quot;
+              {deleteConfirm ? ` du ${CRITERIA_PANELS[deleteConfirm.panel].label.toLowerCase()}` : ""} ?
               Cette action est irréversible.
             </AlertDialogDescription>
           </AlertDialogHeader>

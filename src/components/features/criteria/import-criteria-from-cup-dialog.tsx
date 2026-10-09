@@ -18,9 +18,12 @@ import { ScrollArea } from "~/components/ui/scroll-area";
 import { formatCoefficient } from "~/lib/validations/criteria";
 import { api } from "~/trpc/react";
 import { cn } from "~/lib/utils";
+import type { JuryPanel } from "~/lib/enums";
+import { CRITERIA_PANELS, CRITERIA_PANEL_ORDER } from "./panel-meta";
 
 interface CriterionOption {
   id: string;
+  panel: JuryPanel;
   name: string;
   description: string | null;
   coefficient: number;
@@ -42,9 +45,31 @@ interface ImportCriteriaFromCupDialogProps {
   cupId: string;
   categoryId: string;
   open: boolean;
+  /** Jury de destination proposé à l'ouverture (modifiable dans le dialogue). */
+  initialPanel: JuryPanel;
   onOpenChange: (open: boolean) => void;
-  onImport: (criteriaIds: string[]) => void;
+  onImport: (criteriaIds: string[], panel: JuryPanel) => void;
   isSubmitting: boolean;
+}
+
+const countBadgeStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  padding: "1px 6px",
+  borderRadius: "6px",
+  fontSize: "11px",
+  fontFamily: "'Space Mono', monospace",
+  background: "var(--n-surface-raised)",
+  color: "var(--n-text-secondary)",
+  border: "1px solid var(--n-border)",
+  whiteSpace: "nowrap",
+};
+
+/** « X pro · Y public » pour une liste de critères. */
+function panelCounts(criteria: { panel: JuryPanel }[]): string {
+  const pro = criteria.filter((c) => c.panel === "pro").length;
+  const pub = criteria.length - pro;
+  return `${pro} pro · ${pub} public`;
 }
 
 type Step = "cup" | "category" | "criteria";
@@ -53,6 +78,7 @@ export function ImportCriteriaFromCupDialog({
   cupId,
   categoryId,
   open,
+  initialPanel,
   onOpenChange,
   onImport,
   isSubmitting,
@@ -63,6 +89,7 @@ export function ImportCriteriaFromCupDialog({
   const [selectedCriteriaIds, setSelectedCriteriaIds] = useState<Set<string>>(
     new Set()
   );
+  const [targetPanel, setTargetPanel] = useState<JuryPanel>(initialPanel);
 
   const { data: cups, isLoading: isLoadingCups } =
     api.criteria.getImportableCupsWithCategories.useQuery(
@@ -77,8 +104,9 @@ export function ImportCriteriaFromCupDialog({
       setSelectedCupId("");
       setSelectedCategoryId("");
       setSelectedCriteriaIds(new Set());
+      setTargetPanel(initialPanel);
     }
-  }, [open]);
+  }, [open, initialPanel]);
 
   const selectedCup = cups?.find((c) => c.id === selectedCupId);
   const selectedCategory = selectedCup?.categories.find(
@@ -96,7 +124,10 @@ export function ImportCriteriaFromCupDialog({
     setSelectedCategoryId(id);
     const category = selectedCup?.categories.find((c) => c.id === id);
     if (category) {
-      setSelectedCriteriaIds(new Set(category.criteria.map((c) => c.id)));
+      // Présélectionne la grille du même jury que la destination, sinon tout.
+      const samePanel = category.criteria.filter((c) => c.panel === targetPanel);
+      const preselected = samePanel.length > 0 ? samePanel : category.criteria;
+      setSelectedCriteriaIds(new Set(preselected.map((c) => c.id)));
     }
     setStep("criteria");
   };
@@ -135,7 +166,7 @@ export function ImportCriteriaFromCupDialog({
 
   const handleImport = () => {
     if (selectedCriteriaIds.size > 0) {
-      onImport(Array.from(selectedCriteriaIds));
+      onImport(Array.from(selectedCriteriaIds), targetPanel);
     }
   };
 
@@ -198,6 +229,43 @@ export function ImportCriteriaFromCupDialog({
         </DialogHeader>
 
         <div className="py-4 min-w-0">
+          {/* Target jury */}
+          <div className="mb-5 space-y-2">
+            <Label className="n-label">Importer dans la grille du</Label>
+            <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Jury de destination">
+              {CRITERIA_PANEL_ORDER.map((panel) => {
+                const meta = CRITERIA_PANELS[panel];
+                const active = targetPanel === panel;
+                return (
+                  <button
+                    key={panel}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() => setTargetPanel(panel)}
+                    disabled={isSubmitting}
+                    style={{
+                      padding: "10px 12px",
+                      borderRadius: "8px",
+                      fontFamily: "'Space Mono', monospace",
+                      fontSize: "12px",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.06em",
+                      cursor: "pointer",
+                      background: active ? "rgba(255,255,255,0.06)" : "transparent",
+                      color: active ? meta.accent : "#999999",
+                      border: `1px solid ${active ? meta.accent : "rgba(255,255,255,0.12)"}`,
+                      transition: "border-color 150ms ease, color 150ms ease",
+                    }}
+                  >
+                    {active ? "● " : ""}
+                    {meta.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {/* Step indicator */}
           <div className="flex items-center justify-center gap-2 mb-6">
             <div style={stepDotStyle(step === "cup", false)}>1</div>
@@ -258,8 +326,8 @@ export function ImportCriteriaFromCupDialog({
                             </p>
                           </div>
                           <div className="flex items-center gap-2">
-                            <span style={{ display: "inline-flex", alignItems: "center", padding: "1px 6px", borderRadius: "6px", fontSize: "11px", fontFamily: "'Space Mono', monospace", background: "var(--n-surface-raised)", color: "var(--n-text-secondary)", border: "1px solid var(--n-border)" }}>
-                              {totalCriteria} critère{totalCriteria > 1 ? "s" : ""}
+                            <span style={countBadgeStyle} title={`${totalCriteria} critère${totalCriteria > 1 ? "s" : ""}`}>
+                              {panelCounts(cup.categories.flatMap((cat) => cat.criteria))}
                             </span>
                             <ChevronRight
                               className="h-4 w-4"
@@ -325,9 +393,8 @@ export function ImportCriteriaFromCupDialog({
                         {category.name}
                       </p>
                       <div className="flex items-center gap-2">
-                        <span style={{ display: "inline-flex", alignItems: "center", padding: "1px 6px", borderRadius: "6px", fontSize: "11px", fontFamily: "'Space Mono', monospace", background: "var(--n-surface-raised)", color: "var(--n-text-secondary)", border: "1px solid var(--n-border)" }}>
-                          {category.criteria.length} critère
-                          {category.criteria.length > 1 ? "s" : ""}
+                        <span style={countBadgeStyle}>
+                          {panelCounts(category.criteria)}
                         </span>
                         <ChevronRight
                           className="h-4 w-4"
@@ -407,7 +474,13 @@ export function ImportCriteriaFromCupDialog({
                           </p>
                         )}
                       </div>
-                      <span style={{ display: "inline-flex", alignItems: "center", padding: "1px 6px", borderRadius: "6px", fontSize: "11px", fontFamily: "'Space Mono', monospace", color: "var(--n-text-secondary)", border: "1px solid var(--n-border-visible)", flexShrink: 0, marginLeft: "auto" }}>
+                      <span
+                        title={`Source : ${CRITERIA_PANELS[criterion.panel].label.toLowerCase()}`}
+                        style={{ ...countBadgeStyle, background: "transparent", color: CRITERIA_PANELS[criterion.panel].accent, borderColor: CRITERIA_PANELS[criterion.panel].accent, textTransform: "uppercase", flexShrink: 0, marginLeft: "auto" }}
+                      >
+                        {CRITERIA_PANELS[criterion.panel].short}
+                      </span>
+                      <span style={{ display: "inline-flex", alignItems: "center", padding: "1px 6px", borderRadius: "6px", fontSize: "11px", fontFamily: "'Space Mono', monospace", color: "var(--n-text-secondary)", border: "1px solid var(--n-border-visible)", flexShrink: 0 }}>
                         {formatCoefficient(criterion.coefficient)}
                       </span>
                     </label>
@@ -418,7 +491,12 @@ export function ImportCriteriaFromCupDialog({
                 {selectedCriteriaIds.size} critère
                 {selectedCriteriaIds.size > 1 ? "s" : ""} sélectionné
                 {selectedCriteriaIds.size > 1 ? "s" : ""} sur{" "}
-                {selectedCategory.criteria.length}
+                {selectedCategory.criteria.length} —{" "}
+                {selectedCriteriaIds.size > 1 ? "ils rejoindront" : "il rejoindra"} la grille du{" "}
+                <span style={{ color: CRITERIA_PANELS[targetPanel].accent }}>
+                  {CRITERIA_PANELS[targetPanel].label.toLowerCase()}
+                </span>
+                .
               </p>
             </div>
           )}
