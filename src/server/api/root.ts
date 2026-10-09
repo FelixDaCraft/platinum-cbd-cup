@@ -18,6 +18,7 @@ import { widgetRouter } from "~/server/api/routers/widget";
 import { contactMessagesRouter } from "~/server/api/routers/contact-messages";
 import { cupImportRouter } from "~/server/api/routers/cup-import";
 import { scoringRouter } from "~/server/api/routers/scoring";
+import { legalDocumentRouter } from "~/server/api/routers/legal-document";
 import { activityRouter } from "~/server/api/routers/activity";
 import { juryCodesRouter } from "~/server/api/routers/jury-codes";
 import { pressRouter } from "~/server/api/routers/press";
@@ -38,6 +39,7 @@ export const appRouter = createTRPCRouter({
   criteria: criteriaRouter,
   pricing: pricingRouter,
   phaseAutomation: phaseAutomationRouter,
+  legalDocument: legalDocumentRouter,
   producer: producerRouter,
   registration: registrationRouter,
   product: productRouter,

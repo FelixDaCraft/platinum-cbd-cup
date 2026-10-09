@@ -61,3 +61,4 @@ export * from "./historical-imports";
 
 // Lab analyses
 export * from "./lab-analyses";
+export * from "./legal-documents";

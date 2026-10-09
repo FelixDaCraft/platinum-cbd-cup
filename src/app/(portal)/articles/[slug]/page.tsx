@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 import { db } from "~/server/db";
 import * as schema from "~/server/db/schema";
 import { baseUrl, imagePartage } from "../../_lib/seo";
+import { TipTapContent } from "../../_components/tiptap-content";
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -79,102 +80,6 @@ function categoryLabel(category: string): string {
   return lower.charAt(0).toLocaleUpperCase("fr-FR") + lower.slice(1);
 }
 
-/**
- * Renders TipTap JSON content as plain HTML-ish nodes.
- * Best-effort: covers paragraphs, headings, lists, marks (bold/italic/link),
- * images, code blocks. Anything unknown is rendered as text.
- */
-function RenderTipTap({ content }: { content: unknown }): React.ReactNode {
-  const node = content as {
-    type?: string;
-    content?: unknown[];
-    text?: string;
-    marks?: { type: string; attrs?: Record<string, string> }[];
-    attrs?: Record<string, string>;
-  };
-  if (!node) return null;
-
-  if (node.type === "doc" || !node.type) {
-    return (
-      <>
-        {(node.content ?? []).map((c, i) => (
-          <RenderTipTap key={i} content={c} />
-        ))}
-      </>
-    );
-  }
-
-  if (node.type === "text") {
-    let el: React.ReactNode = node.text ?? "";
-    for (const m of node.marks ?? []) {
-      if (m.type === "bold") el = <strong>{el}</strong>;
-      else if (m.type === "italic") el = <em>{el}</em>;
-      else if (m.type === "underline") el = <u>{el}</u>;
-      else if (m.type === "link" && m.attrs?.href) {
-        el = (
-          <a href={m.attrs.href} target="_blank" rel="noreferrer">
-            {el}
-          </a>
-        );
-      }
-    }
-    return el;
-  }
-
-  const children = (node.content ?? []).map((c, i) => (
-    <RenderTipTap key={i} content={c} />
-  ));
-
-  switch (node.type) {
-    case "paragraph":
-      return <p>{children}</p>;
-    case "heading": {
-      // Le titre de l'article occupe le h1 : les intertitres commencent à h2.
-      const level = Number(node.attrs?.level ?? 2);
-      return level <= 2 ? <h2>{children}</h2> : <h3>{children}</h3>;
-    }
-    case "bulletList":
-      return <ul>{children}</ul>;
-    case "orderedList":
-      return <ol>{children}</ol>;
-    case "listItem":
-      return <li>{children}</li>;
-    case "blockquote":
-      return <blockquote>{children}</blockquote>;
-    case "horizontalRule":
-      return <hr className="hr" />;
-    case "image":
-      if (node.attrs?.src) {
-        // Une illustration en cours d'article s'affichait à hauteur nulle
-        // puis poussait d'un coup tout le texte qui la suit : le lecteur
-        // perdait sa ligne en plein paragraphe. Quand l'éditeur a enregistré
-        // les dimensions, on les repasse au navigateur — avec height:auto il
-        // en déduit le rapport et réserve la hauteur avant le chargement.
-        const largeur = Number(node.attrs.width);
-        const hauteur = Number(node.attrs.height);
-        const dimensions =
-          Number.isFinite(largeur) && largeur > 0 &&
-          Number.isFinite(hauteur) && hauteur > 0
-            ? { width: largeur, height: hauteur }
-            : {};
-        return (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={node.attrs.src}
-            alt={node.attrs.alt ?? ""}
-            {...dimensions}
-            loading="lazy"
-            decoding="async"
-            style={{ width: "100%", height: "auto" }}
-          />
-        );
-      }
-      return null;
-    default:
-      return <>{children}</>;
-  }
-}
-
 export default async function ArticleDetailPage({ params }: Props) {
   const { slug } = await params;
 
@@ -223,7 +128,7 @@ export default async function ArticleDetailPage({ params }: Props) {
       )}
 
       <div className="prose">
-        <RenderTipTap content={article.content} />
+        <TipTapContent content={article.content} />
       </div>
     </article>
   );

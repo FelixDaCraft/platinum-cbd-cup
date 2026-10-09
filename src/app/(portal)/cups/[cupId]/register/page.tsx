@@ -840,7 +840,12 @@ export default function RegisterPage() {
                   onClick={() => set("accept", !data.accept)}
                 />
                 <span style={{ fontSize: 16, lineHeight: 1.5, color: "var(--fg-2)" }}>
-                  J&apos;accepte le règlement de la Platinum CBD Cup et je
+                  {/* Nouvel onglet : le producteur ne perd pas son panier. */}
+                  J&apos;accepte le{" "}
+                  <a href="/reglement" target="_blank" rel="noreferrer" style={{ color: "var(--accent-hi)" }}>
+                    règlement de la Platinum CBD Cup
+                  </a>{" "}
+                  et je
                   certifie que chacun des produits inscrits respecte la
                   réglementation européenne en vigueur (Δ9-THC ≤ {MAX_THC_LABEL}).
                 </span>

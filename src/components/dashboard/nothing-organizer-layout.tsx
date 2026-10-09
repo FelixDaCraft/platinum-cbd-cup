@@ -22,6 +22,7 @@ import {
   LogOut,
   X,
   type LucideIcon,
+  ScrollText,
 } from "lucide-react";
 
 import { cn } from "~/lib/utils";
@@ -277,6 +278,7 @@ function NothingOrgSidebar() {
     id: "contenu", label: "CONTENU", icon: FileText,
     items: [
       { href: buildPath("/settings/portal/about"), label: "À PROPOS", icon: Info },
+      { href: buildPath("/settings/portal/reglement"), label: "RÈGLEMENT", icon: ScrollText },
       { href: buildPath("/articles"), label: "ACTUALITÉS", icon: Newspaper },
       { href: buildPath("/settings/portal/press"), label: "PRESSE", icon: Megaphone },
     ],

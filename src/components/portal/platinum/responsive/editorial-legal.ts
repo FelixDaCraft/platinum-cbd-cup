@@ -36,6 +36,8 @@ export const responsiveCSS = `
   font-size: 15px; line-height: 1.5;
 }
 .legal-toc-list li{ break-inside: avoid; padding: 4px 0; }
+/* Règlement édité dans le back-office : l'intertitre ouvre sa section. */
+.legal-section > h2:first-child{ margin-top: 0; text-wrap: balance; }
 .legal-toc-list a{
   color: var(--fg-2);
   text-decoration-color: var(--line-strong);
