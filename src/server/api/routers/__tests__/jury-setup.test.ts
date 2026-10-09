@@ -9,6 +9,17 @@ import {
 } from "~/lib/validations/jury-setup";
 import { updateCategorySchema, createCategorySchema } from "~/lib/validations/category";
 
+// Le routeur charge le client e-mail, qui valide l'environnement au chargement :
+// sans ce mock, le test échoue en CI (pas de SKIP_ENV_VALIDATION).
+vi.mock("~/env", () => ({
+  env: {
+    RESEND_API_KEY: "test-key",
+    EMAIL_FROM: "test@platinumcbdcup.eu",
+    BETTER_AUTH_URL: "https://test.platinumcbdcup.eu",
+    NODE_ENV: "test",
+  },
+}));
+
 vi.mock("nanoid", () => ({ nanoid: () => "new-id" }));
 
 vi.mock("~/lib/auth", () => ({
