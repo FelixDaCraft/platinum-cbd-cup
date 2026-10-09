@@ -393,7 +393,7 @@ export function RichTextEditor({
 
         /* Blockquote */
         .ProseMirror blockquote {
-          border-left: 3px solid hsl(var(--primary));
+          border-left: 3px solid var(--primary);
           padding-left: 1rem;
           margin-left: 0;
           margin-right: 0;
@@ -414,12 +414,12 @@ export function RichTextEditor({
            Tailwind text-primary posée par l'extension Link, si bien que les
            liens insérés restaient ambre malgré elle. */
         .ProseMirror a {
-          color: hsl(var(--primary));
+          color: var(--primary);
           text-decoration: underline;
           cursor: pointer;
         }
         .ProseMirror a:hover {
-          color: hsl(var(--primary) / 0.8);
+          color: color-mix(in srgb, var(--primary) 80%, transparent);
         }
 
         /* Text alignment */
@@ -458,7 +458,7 @@ export function RichTextEditor({
 
         /* Selection */
         .ProseMirror ::selection {
-          background-color: hsl(var(--primary) / 0.3);
+          background-color: color-mix(in srgb, var(--primary) 30%, transparent);
         }
       `}</style>
       <Toolbar editor={editor} />

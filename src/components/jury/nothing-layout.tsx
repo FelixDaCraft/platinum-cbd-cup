@@ -22,6 +22,7 @@ import { useOrganization, usePortalTheme } from "~/lib/portal/context";
 import { authClient } from "~/lib/auth-client";
 import { api } from "~/trpc/react";
 import { PWAWrapper } from "~/components/pwa/pwa-wrapper";
+import { withPortalScope } from "~/lib/ui/nothing-scope";
 
 // ─── Nothing Design CSS ────────────────────────────────────────────────────
 
@@ -625,7 +626,7 @@ interface NothingJuryLayoutProps {
 export function NothingJuryLayout({ children }: NothingJuryLayoutProps) {
   return (
     <PWAWrapper>
-      <style dangerouslySetInnerHTML={{ __html: nothingCss }} />
+      <style dangerouslySetInnerHTML={{ __html: withPortalScope(nothingCss, "nothing-jury") }} />
       <div className="nothing-jury min-h-screen">
         {/* Premier élément focusable : permet de sauter la barre latérale,
             répétée à l'identique sur chaque écran. */}

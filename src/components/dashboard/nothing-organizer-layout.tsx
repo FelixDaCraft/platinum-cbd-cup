@@ -29,6 +29,7 @@ import { cn } from "~/lib/utils";
 import { useOrganization } from "~/lib/portal/context";
 import { authClient, useSession } from "~/lib/auth-client";
 import { PWAWrapper } from "~/components/pwa/pwa-wrapper";
+import { withPortalScope } from "~/lib/ui/nothing-scope";
 
 // ─── Nothing Design CSS (shared with jury) ─────────────────────────────────
 
@@ -61,25 +62,25 @@ const nothingCss = `
   -webkit-font-smoothing: antialiased;
 
   /* Override shadcn/dashboard variables for Nothing look */
-  --background: 0 0% 0% !important;
-  --foreground: 0 0% 91% !important;
-  --card: 0 0% 6.7% !important;
-  --card-foreground: 0 0% 91% !important;
-  --popover: 0 0% 6.7% !important;
-  --popover-foreground: 0 0% 91% !important;
-  --primary: 0 0% 100% !important;
-  --primary-foreground: 0 0% 0% !important;
-  --secondary: 0 0% 10.2% !important;
-  --secondary-foreground: 0 0% 91% !important;
-  --muted: 0 0% 10.2% !important;
-  --muted-foreground: 0 0% 60% !important;
-  --accent: 0 0% 13.3% !important;
-  --accent-foreground: 0 0% 91% !important;
-  --destructive: 357 80% 47% !important;
-  --destructive-foreground: 0 0% 100% !important;
-  --border: 0 0% 13.3% !important;
-  --input: 0 0% 13.3% !important;
-  --ring: 0 0% 40% !important;
+  --background: hsl(0 0% 0%) !important;
+  --foreground: hsl(0 0% 91%) !important;
+  --card: hsl(0 0% 6.7%) !important;
+  --card-foreground: hsl(0 0% 91%) !important;
+  --popover: hsl(0 0% 6.7%) !important;
+  --popover-foreground: hsl(0 0% 91%) !important;
+  --primary: hsl(0 0% 100%) !important;
+  --primary-foreground: hsl(0 0% 0%) !important;
+  --secondary: hsl(0 0% 10.2%) !important;
+  --secondary-foreground: hsl(0 0% 91%) !important;
+  --muted: hsl(0 0% 10.2%) !important;
+  --muted-foreground: hsl(0 0% 60%) !important;
+  --accent: hsl(0 0% 13.3%) !important;
+  --accent-foreground: hsl(0 0% 91%) !important;
+  --destructive: hsl(357 80% 47%) !important;
+  --destructive-foreground: hsl(0 0% 100%) !important;
+  --border: hsl(0 0% 13.3%) !important;
+  --input: hsl(0 0% 13.3%) !important;
+  --ring: hsl(0 0% 40%) !important;
   --radius: 0.5rem !important;
 
   /* Portal variable overrides */
@@ -586,7 +587,7 @@ export function NothingOrganizerLayout({ children }: NothingOrganizerLayoutProps
 
   return (
     <PWAWrapper>
-      <style dangerouslySetInnerHTML={{ __html: nothingCss }} />
+      <style dangerouslySetInnerHTML={{ __html: withPortalScope(nothingCss, "nothing-org") }} />
       <div className="nothing-org min-h-screen" style={{ backgroundColor: "var(--n-black)" }}>
         {/* Premier élément focusable de la page : permet de sauter la barre
             latérale, qui compte une trentaine de liens répétés à chaque écran. */}

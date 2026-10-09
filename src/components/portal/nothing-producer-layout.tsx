@@ -23,6 +23,7 @@ import { useOrganization, usePortalTheme } from "~/lib/portal/context";
 import { authClient } from "~/lib/auth-client";
 import { api } from "~/trpc/react";
 import { PWAWrapper } from "~/components/pwa/pwa-wrapper";
+import { withPortalScope } from "~/lib/ui/nothing-scope";
 
 // ─── Nothing CSS ────────────────────────────────────────────────────────────
 
@@ -345,7 +346,7 @@ function NothingProdBottomNav() {
 export function NothingProducerLayout({ children }: { children: React.ReactNode }) {
   return (
     <PWAWrapper>
-      <style dangerouslySetInnerHTML={{ __html: nothingCss }} />
+      <style dangerouslySetInnerHTML={{ __html: withPortalScope(nothingCss, "nothing-producer") }} />
       <div className="nothing-producer min-h-screen">
         {/* Premier élément focusable : permet de sauter la barre latérale,
             répétée à l'identique sur chaque écran. */}
