@@ -99,6 +99,13 @@
       "when": 1791558505677,
       "tag": "0013_jurys_affectation",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1791563386935,
+      "tag": "0014_inscription_entreprise",
+      "breakpoints": true
     }
   ]
 }

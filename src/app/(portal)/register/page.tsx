@@ -57,6 +57,8 @@ function RegisterInner() {
       password: "",
       confirmPassword: "",
       name: "",
+      companyName: "",
+      brandName: "",
     },
   });
 
@@ -88,6 +90,9 @@ function RegisterInner() {
           email: data.email,
           password: data.password,
           name: data.name,
+          // Vides : non transmis (la colonne reste nulle).
+          pendingCompanyName: data.companyName?.trim() || undefined,
+          pendingBrandName: data.brandName?.trim() || undefined,
         });
 
         if (result.error) {
@@ -188,6 +193,55 @@ function RegisterInner() {
                 {errors.name.message}
               </p>
             )}
+          </div>
+
+          {/* Facultatifs : ils pré-remplissent « Compléter mon profil » après la
+              confirmation de l'e-mail (gardés sur le compte, donc valables
+              même si le lien est ouvert sur un autre appareil). */}
+          <div className="form-row">
+            <div className="field">
+              <label htmlFor="companyName" className="field-label">
+                Entreprise <span style={{ color: "var(--fg-3)", fontWeight: 400 }}>(facultatif)</span>
+              </label>
+              <input
+                id="companyName"
+                type="text"
+                className="field-input"
+                placeholder="Ferme du Val"
+                autoComplete="organization"
+                maxLength={100}
+                aria-invalid={!!errors.companyName}
+                aria-describedby={errors.companyName ? "companyName-error" : undefined}
+                style={errors.companyName ? errorBorder : undefined}
+                {...register("companyName")}
+              />
+              {errors.companyName && (
+                <p id="companyName-error" className="field-error" style={{ margin: 0 }}>
+                  {errors.companyName.message}
+                </p>
+              )}
+            </div>
+            <div className="field">
+              <label htmlFor="brandName" className="field-label">
+                Marque <span style={{ color: "var(--fg-3)", fontWeight: 400 }}>(facultatif)</span>
+              </label>
+              <input
+                id="brandName"
+                type="text"
+                className="field-input"
+                placeholder="Val Green"
+                maxLength={100}
+                aria-invalid={!!errors.brandName}
+                aria-describedby={errors.brandName ? "brandName-error" : undefined}
+                style={errors.brandName ? errorBorder : undefined}
+                {...register("brandName")}
+              />
+              {errors.brandName && (
+                <p id="brandName-error" className="field-error" style={{ margin: 0 }}>
+                  {errors.brandName.message}
+                </p>
+              )}
+            </div>
           </div>
 
           <div className="field">

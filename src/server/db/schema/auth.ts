@@ -29,6 +29,11 @@ export const users = pgTable(
     role: text("role").$type<UserRole>().notNull().default("producer"),
     // Kept for super-admin flag (the organizer running the competition).
     isAdmin: boolean("is_admin").notNull().default(false),
+    // Entreprise et marque saisies à l'inscription producteur, en attendant
+    // la création du profil (après confirmation de l'e-mail) : elles
+    // pré-remplissent « Compléter mon profil », sur n'importe quel appareil.
+    pendingCompanyName: text("pending_company_name"),
+    pendingBrandName: text("pending_brand_name"),
     // GDPR: Account deletion request
     deletionRequestedAt: timestamp("deletion_requested_at", { withTimezone: true }),
     deletionScheduledFor: timestamp("deletion_scheduled_for", { withTimezone: true }),

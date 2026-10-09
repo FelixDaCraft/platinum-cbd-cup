@@ -203,6 +203,12 @@ export const producerRouter = createTRPCRouter({
         })
         .returning();
 
+      // Les valeurs saisies à l'inscription ont servi : on les efface du compte.
+      await ctx.db
+        .update(schema.users)
+        .set({ pendingCompanyName: null, pendingBrandName: null })
+        .where(eq(schema.users.id, ctx.userId));
+
       return producer;
     }),
 

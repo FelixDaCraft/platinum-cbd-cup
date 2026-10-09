@@ -1,8 +1,13 @@
 import { createAuthClient } from "better-auth/react";
+import { inferAdditionalFields } from "better-auth/client/plugins";
+import type { auth } from "./auth";
 
 // Use empty baseURL to make requests relative to current origin
 export const authClient = createAuthClient({
   baseURL: "",
+  // Types des champs utilisateur ajoutés côté serveur (role, champs
+  // d'inscription producteur…), pour signUp.email et useSession.
+  plugins: [inferAdditionalFields<typeof auth>()],
 });
 
 export const { signIn, signOut, signUp, useSession } = authClient;

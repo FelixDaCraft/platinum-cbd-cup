@@ -8,17 +8,18 @@ import { toast } from "sonner";
 import { z } from "zod";
 
 import { Input } from "~/components/ui/input";
+import { useSession } from "~/lib/auth-client";
 import { api } from "~/trpc/react";
 
 const completeProfileSchema = z.object({
   companyName: z
     .string()
     .min(1, "Le nom de l'entreprise est requis")
-    .max(100, "Le nom de l'entreprise ne peut pas depasser 100 caracteres"),
+    .max(100, "Le nom de l'entreprise ne peut pas dépasser 100 caractères"),
   brandName: z
     .string()
     .min(1, "Le nom de la marque est requis")
-    .max(100, "Le nom de la marque ne peut pas depasser 100 caracteres"),
+    .max(100, "Le nom de la marque ne peut pas dépasser 100 caractères"),
 });
 
 type CompleteProfileInput = z.infer<typeof completeProfileSchema>;
@@ -33,16 +34,13 @@ export default function CompleteProfilePage() {
   const utils = api.useUtils();
   const createProfile = api.producer.createProfile.useMutation({
     onSuccess: () => {
-      if (typeof window !== "undefined") {
-        localStorage.removeItem("producer_pending_profile");
-      }
       void utils.producer.hasProfile.invalidate();
-      toast.success("Profil producteur cree avec succes !");
+      toast.success("Profil producteur créé !");
       router.push("/producer/dashboard");
     },
     onError: (error) => {
       if (error.message.includes("existe deja")) {
-        toast.error("Vous avez deja un profil producteur");
+        toast.error("Vous avez déjà un profil producteur");
         router.push("/producer/dashboard");
         return;
       }
@@ -51,7 +49,7 @@ export default function CompleteProfilePage() {
         router.push("/cups");
         return;
       }
-      toast.error(error.message || "Erreur lors de la creation du profil");
+      toast.error(error.message || "Erreur lors de la création du profil");
     },
   });
 
@@ -68,33 +66,21 @@ export default function CompleteProfilePage() {
     },
   });
 
+  // Pré-remplissage : entreprise et marque saisies à l'inscription, gardées
+  // sur le compte (pendingCompanyName / pendingBrandName) jusqu'à la création
+  // du profil — donc retrouvées même si le lien de confirmation a été ouvert
+  // sur un autre appareil. Rien de saisi : le formulaire part vide.
+  const { data: session } = useSession();
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("producer_pending_profile");
-      if (stored) {
-        try {
-          const parsed = JSON.parse(stored) as {
-            companyName: string;
-            brandName: string;
-          };
-
-          setPendingProfile(parsed);
-          setValue("companyName", parsed.companyName);
-          setValue("brandName", parsed.brandName);
-        } catch {
-          // ignore
-        }
-      }
-      // Pas de renvoi vers l'accueil quand la clé est absente : ce stockage ne
-      // sert qu'à pré-remplir les deux champs saisis à l'inscription, et le
-      // formulaire fonctionne très bien sans (il a son propre texte pour ce
-      // cas). Or le layout producteur envoie ICI tout producteur sans profil,
-      // depuis n'importe quelle route /producer/** : la page le rejetait donc
-      // aussitôt vers l'accueil public dès qu'il changeait d'appareil, vidait
-      // son navigateur ou suivait un lien reçu par email — sans aucun moyen de
-      // créer son profil, donc sans aucun moyen d'accéder à son espace.
-    }
-  }, [setValue]);
+    const user = session?.user;
+    if (!user) return;
+    const companyName = user.pendingCompanyName?.trim() ?? "";
+    const brandName = user.pendingBrandName?.trim() ?? "";
+    if (!companyName && !brandName) return;
+    setPendingProfile({ companyName, brandName });
+    if (companyName) setValue("companyName", companyName);
+    if (brandName) setValue("brandName", brandName);
+  }, [session?.user, setValue]);
 
   const onSubmit = (data: CompleteProfileInput) => {
     createProfile.mutate(data);
@@ -112,11 +98,11 @@ export default function CompleteProfilePage() {
             className="n-font-data text-xl font-bold"
             style={{ color: "var(--n-text-display)" }}
           >
-            COMPLETEZ VOTRE PROFIL
+            COMPLÉTEZ VOTRE PROFIL
           </h1>
           <p className="text-sm mt-2" style={{ color: "var(--n-text-secondary)" }}>
             {pendingProfile
-              ? "Verifiez et confirmez vos informations d'entreprise"
+              ? "Vérifiez et confirmez les informations saisies à l'inscription"
               : "Renseignez les informations de votre entreprise pour finaliser votre inscription"}
           </p>
         </div>
@@ -134,7 +120,7 @@ export default function CompleteProfilePage() {
             <Input
               id="companyName"
               type="text"
-              placeholder="Ma Societe SARL"
+              placeholder="Ma Société SARL"
               className="n-font-data"
               aria-invalid={!!errors.companyName}
               {...register("companyName")}

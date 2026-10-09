@@ -172,6 +172,17 @@ export const auth = betterAuth({
         defaultValue: false,
         input: false,
       },
+      // Saisis à l'inscription producteur, relus par « Compléter mon profil ».
+      pendingCompanyName: {
+        type: "string",
+        required: false,
+        input: true,
+      },
+      pendingBrandName: {
+        type: "string",
+        required: false,
+        input: true,
+      },
     },
     changeEmail: {
       enabled: true,
