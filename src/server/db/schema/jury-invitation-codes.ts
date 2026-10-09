@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, index, unique, check } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean, index, unique, check } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 import { generateId } from "./id";
 import { cups } from "./cups";
@@ -40,6 +40,11 @@ export type JuryCodeStatus = (typeof juryCodeStatusEnum)[number];
  * 'pending/activated/revoked/expired' de l'autre). C'est une table large à
  * colonnes optionnelles, pas une consolidation — et les deux parcours jurés
  * sont parmi les plus sensibles de l'application.
+ *
+ * Depuis la refonte « mise en place des jurys », les codes sont le SEUL
+ * mécanisme public : les jetons ne sont plus générés (option
+ * `samples_included` à la place), les jetons déjà imprimés restent
+ * réclamables. Les tables restent séparées, sans migration de données.
  */
 export const juryInvitationCodes = pgTable(
   "jury_invitation_codes",
@@ -56,6 +61,9 @@ export const juryInvitationCodes = pgTable(
     status: text("status").notNull().$type<JuryCodeStatus>().default("pending"),
     // Destination/store where this code pack was sent (for tracking)
     destination: text("destination"),
+    // « Échantillons inclus » : le QR est glissé dans la boîte d'échantillons,
+    // la réception est donc acquise dès l'activation (samplesReceivedAt posé).
+    samplesIncluded: boolean("samples_included").notNull().default(false),
     // User who activated this code (becomes jury)
     activatedByUserId: text("activated_by_user_id").references(() => users.id, {
       onDelete: "set null",

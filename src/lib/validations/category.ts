@@ -11,6 +11,14 @@ const quotaSchema = z
   .max(10000)
   .nullable();
 
+// Objectif de jurés par panel : entier strictement positif, ou null (aucun).
+const jurorTargetSchema = z
+  .number()
+  .int("Nombre entier attendu")
+  .positive("Doit être supérieur à 0")
+  .max(1000)
+  .nullable();
+
 // Champ de formulaire : vide = illimité.
 const quotaFieldSchema = z.preprocess(
   (val) => (val === "" || val === null || val === undefined || Number.isNaN(val) ? null : Number(val)),
@@ -26,6 +34,8 @@ export const createCategorySchema = z.object({
   description: z.string().max(500, "La description ne peut pas dépasser 500 caractères").optional(),
   maxProducts: quotaSchema.optional(),
   maxProductsPerProducer: quotaSchema.optional(),
+  targetProJurors: jurorTargetSchema.optional(),
+  targetPublicJurors: jurorTargetSchema.optional(),
 });
 
 export const updateCategorySchema = z.object({
@@ -34,6 +44,8 @@ export const updateCategorySchema = z.object({
   description: z.string().max(500).optional().nullable(),
   maxProducts: quotaSchema.optional(),
   maxProductsPerProducer: quotaSchema.optional(),
+  targetProJurors: jurorTargetSchema.optional(),
+  targetPublicJurors: jurorTargetSchema.optional(),
 });
 
 export const reorderCategoriesSchema = z.object({

@@ -42,6 +42,8 @@ export const categoryRouter = createTRPCRouter({
           description: input.description ?? null,
           maxProducts: input.maxProducts ?? null,
           maxProductsPerProducer: input.maxProductsPerProducer ?? null,
+          targetProJurors: input.targetProJurors ?? null,
+          targetPublicJurors: input.targetPublicJurors ?? null,
           sortOrder: nextOrder,
         })
         .returning();
@@ -106,6 +108,15 @@ export const categoryRouter = createTRPCRouter({
 
       if (input.maxProductsPerProducer !== undefined) {
         updateData.maxProductsPerProducer = input.maxProductsPerProducer;
+      }
+
+      // Objectifs de jurés : indicatifs, ils ne bloquent aucune affectation.
+      if (input.targetProJurors !== undefined) {
+        updateData.targetProJurors = input.targetProJurors;
+      }
+
+      if (input.targetPublicJurors !== undefined) {
+        updateData.targetPublicJurors = input.targetPublicJurors;
       }
 
       const [updated] = await ctx.db

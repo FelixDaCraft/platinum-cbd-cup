@@ -29,6 +29,10 @@ export const categories = pgTable(
     maxProducts: integer("max_products"),
     // Nombre de produits qu'un même producteur peut inscrire dans la catégorie.
     maxProductsPerProducer: integer("max_products_per_producer"),
+    // Objectifs de jurés par panel (null = pas d'objectif). Indicatifs : ils
+    // ne bloquent rien, ils alimentent l'état « incomplet » de la couverture.
+    targetProJurors: integer("target_pro_jurors"),
+    targetPublicJurors: integer("target_public_jurors"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -39,6 +43,14 @@ export const categories = pgTable(
     check(
       "categories_max_products_per_producer_check",
       sql`${table.maxProductsPerProducer} is null or ${table.maxProductsPerProducer} > 0`
+    ),
+    check(
+      "categories_target_pro_jurors_check",
+      sql`${table.targetProJurors} is null or ${table.targetProJurors} > 0`
+    ),
+    check(
+      "categories_target_public_jurors_check",
+      sql`${table.targetPublicJurors} is null or ${table.targetPublicJurors} > 0`
     ),
   ]
 );

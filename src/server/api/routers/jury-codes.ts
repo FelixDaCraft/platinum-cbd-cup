@@ -17,7 +17,7 @@ import {
   rateLimitMiddleware,
 } from "~/server/api/trpc";
 import * as schema from "~/server/db/schema";
-import { assertMayJoinPanel } from "~/server/api/helpers/jury";
+import { alignUserRoleToJury, assertMayJoinPanel } from "~/server/api/helpers/jury";
 
 /**
  * Generate a short readable code like "FLR-7X9-KM2"
@@ -37,42 +37,6 @@ function generateShortCode(): string {
   return segments.join("-");
 }
 
-/** Client de base compatible avec `ctx.db` comme avec une transaction. */
-type DbClient =
-  | typeof import("~/server/db").db
-  | Parameters<Parameters<typeof import("~/server/db").db.transaction>[0]>[0];
-
-/**
- * Aligne `users.role` sur "jury" au moment ou le compte devient jure.
- *
- * Sans cette ecriture la colonne reste sur son defaut "producer" et
- * `user.getRedirectPath` renvoie le jure vers /producer/dashboard. Meme regle
- * que dans jury.ts (duplique volontairement : les deux routeurs sont les seuls
- * a creer des jures, et un import croise entre routeurs serait pire).
- * Ni organisateur ni producteur deja identifie n'est degrade.
- */
-async function alignUserRoleToJury(db: DbClient, userId: string) {
-  const user = await db.query.users.findFirst({
-    where: eq(schema.users.id, userId),
-    columns: { role: true, isAdmin: true },
-  });
-
-  if (!user || user.isAdmin || user.role === "organizer" || user.role === "jury") {
-    return;
-  }
-
-  const producerProfile = await db.query.producers.findFirst({
-    where: eq(schema.producers.userId, userId),
-    columns: { id: true },
-  });
-
-  if (producerProfile) return;
-
-  await db
-    .update(schema.users)
-    .set({ role: "jury", updatedAt: new Date() })
-    .where(eq(schema.users.id, userId));
-}
 
 const normalizeCode = (code: string) =>
   code
@@ -92,6 +56,8 @@ export const juryCodesRouter = createTRPCRouter({
         categoryIds: z.array(z.string()).min(1, "Au moins une catégorie requise"),
         count: z.number().min(1).max(200, "Maximum 200 codes par génération"),
         destination: z.string().optional(),
+        // QR glissé dans la boîte d'échantillons : réception acquise à l'activation.
+        samplesIncluded: z.boolean().default(false),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -153,6 +119,7 @@ export const juryCodesRouter = createTRPCRouter({
           code: c.code,
           status: "pending" as const,
           destination: input.destination?.trim() || null,
+          samplesIncluded: input.samplesIncluded,
           expiresAt: cup.ratingEndAt,
         }))
       );
@@ -171,6 +138,7 @@ export const juryCodesRouter = createTRPCRouter({
         success: true,
         count: codes.length,
         codes: codes.map((c) => c.code),
+        samplesIncluded: input.samplesIncluded,
       };
     }),
 
@@ -232,6 +200,7 @@ export const juryCodesRouter = createTRPCRouter({
         code: code.code,
         status: code.status,
         destination: code.destination,
+        samplesIncluded: code.samplesIncluded,
         categories: code.categories.map((cc) => ({
           id: cc.category.id,
           name: cc.category.name,
@@ -314,6 +283,7 @@ export const juryCodesRouter = createTRPCRouter({
           name: cc.category.name,
         })),
         expiresAt: code.expiresAt,
+        samplesIncluded: code.samplesIncluded,
       };
     }),
 
@@ -419,7 +389,17 @@ export const juryCodesRouter = createTRPCRouter({
         }
 
         // 3. Handle cup jury and category assignments
+        const now = new Date();
         if (existingCupJury) {
+          // Échantillons inclus : la réception est acquise, sans écraser une
+          // date déjà posée.
+          if (invitationCode.samplesIncluded && !existingCupJury.samplesReceivedAt) {
+            await tx
+              .update(schema.cupJuries)
+              .set({ samplesReceivedAt: now, updatedAt: now })
+              .where(eq(schema.cupJuries.id, existingCupJury.id));
+          }
+
           const categoryIds = invitationCode.categories.map((c) => c.categoryId);
 
           const existingAssignments = await tx.query.juryCategoryAssignments.findMany({
@@ -450,6 +430,8 @@ export const juryCodesRouter = createTRPCRouter({
             juryProfileId: juryProfileId,
             panel: "public",
             isActive: true,
+            // Échantillons dans la boîte du QR : rien à confirmer ensuite.
+            samplesReceivedAt: invitationCode.samplesIncluded ? now : null,
           });
 
           const assignments = invitationCode.categories.map((c) => ({
@@ -470,6 +452,7 @@ export const juryCodesRouter = createTRPCRouter({
         success: true,
         cupId: invitationCode.cupId,
         categoriesCount: invitationCode.categories.length,
+        samplesIncluded: invitationCode.samplesIncluded,
       };
     }),
 

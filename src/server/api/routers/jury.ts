@@ -16,7 +16,7 @@ import {
   juryProcedure,
 } from "~/server/api/trpc";
 import { getCupOrThrow } from "~/server/api/helpers/cup";
-import { assertMayJoinPanel } from "~/server/api/helpers/jury";
+import { alignUserRoleToJury, assertMayJoinPanel } from "~/server/api/helpers/jury";
 import { codeFor, panelColumns } from "~/server/db/panel-columns";
 import * as schema from "~/server/db/schema";
 import { generateId } from "~/server/db/schema/id";
@@ -36,6 +36,7 @@ import { calculateWeightedScore } from "~/lib/validations/criteria";
 import { weightedAverageOrNull } from "~/server/services/weighted-score";
 import { formatPhaseDate } from "~/lib/validations/phases";
 import { ORGANIZATION_NAME } from "~/lib/organization";
+import { jurySetupProcedures } from "./jury-setup";
 import type { RatingScale } from "~/server/db/schema/cups";
 
 /**
@@ -89,42 +90,6 @@ function assertRatingWindowOpen(cup: {
   }
 }
 
-/** Client de base compatible avec `ctx.db` comme avec une transaction. */
-type DbClient =
-  | typeof import("~/server/db").db
-  | Parameters<Parameters<typeof import("~/server/db").db.transaction>[0]>[0];
-
-/**
- * Aligne `users.role` sur "jury" au moment ou le compte devient jure.
- *
- * Sans cette ecriture la colonne reste sur son defaut "producer" et
- * `user.getRedirectPath` renvoie le jure vers /producer/dashboard, d'ou une
- * double redirection a chaque connexion. On ne degrade jamais un organisateur
- * ni un producteur deja identifie : leur role principal reste le leur, les
- * casquettes secondaires se lisent via les profils.
- */
-async function alignUserRoleToJury(db: DbClient, userId: string) {
-  const user = await db.query.users.findFirst({
-    where: eq(schema.users.id, userId),
-    columns: { role: true, isAdmin: true },
-  });
-
-  if (!user || user.isAdmin || user.role === "organizer" || user.role === "jury") {
-    return;
-  }
-
-  const producerProfile = await db.query.producers.findFirst({
-    where: eq(schema.producers.userId, userId),
-    columns: { id: true },
-  });
-
-  if (producerProfile) return;
-
-  await db
-    .update(schema.users)
-    .set({ role: "jury", updatedAt: new Date() })
-    .where(eq(schema.users.id, userId));
-}
 
 /**
  * Conflit d'interets : un producteur inscrit a la cup ne peut pas en devenir
@@ -133,6 +98,10 @@ async function alignUserRoleToJury(db: DbClient, userId: string) {
  */
 
 export const juryRouter = createTRPCRouter({
+  // Mise en place des jurys : listDirectory, addExistingJurors, setPanel,
+  // setSamplesReceived, getCoverage (voir jury-setup.ts).
+  ...jurySetupProcedures,
+
   /**
    * List all jury profiles for the current user's organization
    * Used in the dashboard global juries page
@@ -233,7 +202,8 @@ export const juryRouter = createTRPCRouter({
 
       if (!result.success) {
         throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
+          // Invitation déjà acceptée ou refusée : conflit métier, pas une panne.
+          code: result.alreadyInvited ? "CONFLICT" : "INTERNAL_SERVER_ERROR",
           message: result.error ?? "Erreur lors de l'envoi de l'invitation",
         });
       }
@@ -241,7 +211,9 @@ export const juryRouter = createTRPCRouter({
       return {
         success: true,
         invitationId: result.invitationId,
-        alreadyInvited: result.alreadyInvited,
+        alreadyInvited: result.alreadyInvited ?? false,
+        // Invitation expirée rouverte avec un nouveau lien.
+        reinvited: result.reinvited ?? false,
       };
     }),
 
@@ -304,7 +276,17 @@ export const juryRouter = createTRPCRouter({
         });
       }
 
-      // Resend invitation
+      // En attente : simple relance. Expirée : rouverte (nouveau lien).
+      if (invitation.status !== "pending" && invitation.status !== "expired") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            invitation.status === "accepted"
+              ? "Cette invitation a deja ete acceptee"
+              : "Cette invitation a ete refusee",
+        });
+      }
+
       const result = await resendInvitation(input.invitationId);
 
       if (!result.success) {
@@ -314,7 +296,7 @@ export const juryRouter = createTRPCRouter({
         });
       }
 
-      return { success: true };
+      return { success: true, reinvited: result.reinvited ?? false };
     }),
 
   /**
@@ -2382,8 +2364,9 @@ export const juryRouter = createTRPCRouter({
   // =====================================================
 
   /**
-   * Generate public jury tokens for a cup
-   * Only the cup owner can generate tokens
+   * @deprecated Jetons remplacés par les codes d'invitation (option
+   * « échantillons inclus ») : plus de nouvelle génération. Les jetons déjà
+   * imprimés restent réclamables (claimPublicJuryToken).
    */
   generatePublicJuryTokens: organizerProcedure
     .input(
@@ -2394,55 +2377,19 @@ export const juryRouter = createTRPCRouter({
         expiresInDays: z.number().int().min(1).max(365).default(90),
       })
     )
-    .mutation(async ({ ctx, input }) => {
-      const cup = await getCupOrThrow(ctx.db, input.cupId);
-
-      // Verify category belongs to cup
-      const category = await ctx.db.query.categories.findFirst({
-        where: and(
-          eq(schema.categories.id, input.categoryId),
-          eq(schema.categories.cupId, input.cupId)
-        ),
+    // Type de retour d'origine conservé tant que l'écran des jetons existe.
+    .mutation(async (): Promise<{
+      success: boolean;
+      batchId: string;
+      tokensGenerated: number;
+      tokens: Array<{ id: string; token: string }>;
+      expiresAt: Date;
+    }> => {
+      throw new TRPCError({
+        code: "PRECONDITION_FAILED",
+        message:
+          "Les jetons ne sont plus générés : utilisez les codes d'invitation, avec l'option « échantillons inclus » si le QR accompagne les échantillons.",
       });
-
-      if (!category) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "Cette categorie n'appartient pas a cette cup",
-        });
-      }
-
-      // Generate tokens
-      const batchId = nanoid();
-      const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + input.expiresInDays);
-
-      // Un seul insert pour tout le lot : jusqu'a 500 aller-retours SQL
-      // auparavant, et une coupure au milieu laissait un lot partiel dont les
-      // planches de QR codes deja imprimees ne correspondaient plus.
-      const tokens = Array.from({ length: input.quantity }, () => ({
-        id: nanoid(),
-        token: nanoid(16), // Shorter token for QR codes
-      }));
-
-      await ctx.db.insert(schema.publicJuryTokens).values(
-        tokens.map((t) => ({
-          id: t.id,
-          cupId: input.cupId,
-          categoryId: input.categoryId,
-          token: t.token,
-          batchId,
-          expiresAt,
-        }))
-      );
-
-      return {
-        success: true,
-        batchId,
-        tokensGenerated: tokens.length,
-        tokens,
-        expiresAt,
-      };
     }),
 
   /**

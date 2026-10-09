@@ -41,12 +41,27 @@ export async function assertProducerMayJudge(
   // Jury professionnel : composition maîtrisée par l'organisation.
   if (panel !== "public") return;
 
+  if (await isCompetingProducer(db, userId, cupId)) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message:
+        "Vous concourez à cette édition en tant que producteur : le jury public est réservé aux consommateurs.",
+    });
+  }
+}
+
+/** Vrai si l'utilisateur a une inscription (donc concourt) dans la cup. */
+export async function isCompetingProducer(
+  db: DB,
+  userId: string,
+  cupId: string
+): Promise<boolean> {
   const producer = await db.query.producers.findFirst({
     where: eq(schema.producers.userId, userId),
     columns: { id: true },
   });
 
-  if (!producer) return;
+  if (!producer) return false;
 
   const registration = await db.query.registrations.findFirst({
     where: and(
@@ -56,13 +71,7 @@ export async function assertProducerMayJudge(
     columns: { id: true },
   });
 
-  if (registration) {
-    throw new TRPCError({
-      code: "FORBIDDEN",
-      message:
-        "Vous concourez à cette édition en tant que producteur : le jury public est réservé aux consommateurs.",
-    });
-  }
+  return Boolean(registration);
 }
 
 /**
@@ -105,4 +114,60 @@ export async function assertMayJoinPanel(
 ): Promise<void> {
   await assertSamePanel(db, userId, cupId, panel);
   await assertProducerMayJudge(db, userId, cupId, panel);
+}
+
+/**
+ * Même règle que `assertProducerMayJudge`, formulée pour l'organisation
+ * quand c'est elle qui place un juré dans le panel public.
+ */
+export async function assertOrganizerMayPlaceInPanel(
+  db: DB,
+  userId: string,
+  cupId: string,
+  panel: JuryPanel
+): Promise<void> {
+  if (panel !== "public") return;
+
+  if (await isCompetingProducer(db, userId, cupId)) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message:
+        "Ce juré concourt à cette édition en tant que producteur : il ne peut pas faire partie du jury public.",
+    });
+  }
+}
+
+/** Client de base compatible avec `db` comme avec une transaction. */
+export type DbClient = DB | Parameters<Parameters<DB["transaction"]>[0]>[0];
+
+/**
+ * Aligne `users.role` sur "jury" au moment ou le compte devient jure.
+ *
+ * Sans cette ecriture la colonne reste sur son defaut "producer" et
+ * `user.getRedirectPath` renvoie le jure vers /producer/dashboard, d'ou une
+ * double redirection a chaque connexion. On ne degrade jamais un organisateur
+ * ni un producteur deja identifie : leur role principal reste le leur, les
+ * casquettes secondaires se lisent via les profils.
+ */
+export async function alignUserRoleToJury(db: DbClient, userId: string) {
+  const user = await db.query.users.findFirst({
+    where: eq(schema.users.id, userId),
+    columns: { role: true, isAdmin: true },
+  });
+
+  if (!user || user.isAdmin || user.role === "organizer" || user.role === "jury") {
+    return;
+  }
+
+  const producerProfile = await db.query.producers.findFirst({
+    where: eq(schema.producers.userId, userId),
+    columns: { id: true },
+  });
+
+  if (producerProfile) return;
+
+  await db
+    .update(schema.users)
+    .set({ role: "jury", updatedAt: new Date() })
+    .where(eq(schema.users.id, userId));
 }

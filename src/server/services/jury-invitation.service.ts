@@ -43,6 +43,141 @@ interface SendInvitationResult {
   invitationId?: string;
   error?: string;
   alreadyInvited?: boolean;
+  /** Invitation expirée rouverte : nouveau lien, nouvelle échéance. */
+  reinvited?: boolean;
+}
+
+/** Échéance d'une invitation envoyée maintenant. */
+function invitationExpiry(): Date {
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + INVITATION_EXPIRY_DAYS);
+  return expiresAt;
+}
+
+/** Nom affiché dans l'email : prénom (et nom) saisis, sinon « Jury ». */
+function formatJuryName(firstName?: string | null, lastName?: string | null): string {
+  return firstName ? `${firstName}${lastName ? ` ${lastName}` : ""}` : "Jury";
+}
+
+/** Envoie l'email d'invitation initial (premier envoi ou invitation rouverte). */
+async function sendInitialInvitationEmail(params: {
+  invitationId: string;
+  email: string;
+  token: string;
+  cupName: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  customMessage?: string | null;
+  expiresAt: Date;
+}): Promise<SendInvitationResult> {
+  const invitationUrl = `${getPortalBaseUrl()}/jury-invite/${params.token}`;
+
+  if (env.NODE_ENV === "development") {
+    console.log("\n" + "=".repeat(60));
+    console.log("INVITATION JURY (DEV MODE)");
+    console.log("=".repeat(60));
+    console.log("To:", params.email);
+    console.log("Cup:", params.cupName);
+    console.log("URL:", invitationUrl);
+    console.log("Token:", params.token);
+    console.log("Expires:", params.expiresAt.toISOString());
+    console.log("=".repeat(60) + "\n");
+  }
+
+  const result = await sendEmail({
+    scope: "Jury Invitation",
+    ref: `invitation ${params.invitationId}`,
+    to: params.email,
+    subject: `Invitation jury - ${params.cupName}`,
+    html: buildInvitationEmailHtml({
+      juryName: formatJuryName(params.firstName, params.lastName),
+      cupName: params.cupName,
+      organizerName: ORGANIZER_NAME,
+      customMessage: params.customMessage ?? undefined,
+      invitationUrl,
+      expiresAt: params.expiresAt,
+    }),
+  });
+
+  if (!result.success) {
+    return { success: false, error: result.error };
+  }
+
+  return { success: true, invitationId: params.invitationId };
+}
+
+/**
+ * Rouvre une invitation expirée : nouveau jeton (l'ancien lien reste mort),
+ * nouvelle échéance, statut « pending », puis renvoi de l'email initial.
+ *
+ * La ligne est réutilisée plutôt que recréée : l'unicité (cup, email) de
+ * `jury_invitations` faisait échouer toute nouvelle invitation à l'adresse.
+ */
+async function reopenExpiredInvitation(
+  invitationId: string,
+  overrides: { firstName?: string; lastName?: string; customMessage?: string } = {}
+): Promise<SendInvitationResult> {
+  const invitation = await db.query.juryInvitations.findFirst({
+    where: eq(schema.juryInvitations.id, invitationId),
+    with: { cup: true },
+  });
+
+  if (!invitation) {
+    return { success: false, error: "Invitation non trouvee" };
+  }
+
+  const existingUser = await db.query.users.findFirst({
+    where: eq(schema.users.email, invitation.email.toLowerCase()),
+    columns: { id: true },
+  });
+
+  const token = nanoid(32);
+  const expiresAt = invitationExpiry();
+  const now = new Date();
+  const firstName = overrides.firstName ?? invitation.firstName;
+  const lastName = overrides.lastName ?? invitation.lastName;
+  const customMessage = overrides.customMessage ?? invitation.customMessage;
+
+  // Le filtre sur « expired » évite de rouvrir deux fois en parallèle.
+  const reopened = await db
+    .update(schema.juryInvitations)
+    .set({
+      token,
+      status: "pending",
+      expiresAt,
+      sentAt: now,
+      lastReminderAt: null,
+      reminderCount: 0,
+      firstName,
+      lastName,
+      customMessage,
+      userId: existingUser?.id ?? invitation.userId,
+      updatedAt: now,
+    })
+    .where(
+      and(
+        eq(schema.juryInvitations.id, invitationId),
+        eq(schema.juryInvitations.status, "expired")
+      )
+    )
+    .returning({ id: schema.juryInvitations.id });
+
+  if (reopened.length === 0) {
+    return { success: false, error: "Cette invitation n'est plus expiree" };
+  }
+
+  const result = await sendInitialInvitationEmail({
+    invitationId,
+    email: invitation.email,
+    token,
+    cupName: invitation.cup.name,
+    firstName,
+    lastName,
+    customMessage,
+    expiresAt,
+  });
+
+  return result.success ? { ...result, reinvited: true } : result;
 }
 
 /**
@@ -78,13 +213,18 @@ export async function sendJuryInvitation(
         await resendInvitation(existingInvitation.id);
         return { success: true, invitationId: existingInvitation.id, alreadyInvited: true };
       }
-      // If accepted, declined, or expired - return error
       if (existingInvitation.status === "accepted") {
         return { success: false, error: "Ce jury a deja accepte l'invitation", alreadyInvited: true };
       }
       if (existingInvitation.status === "declined") {
         return { success: false, error: "Ce jury a refuse l'invitation precedente", alreadyInvited: true };
       }
+      // Expirée : on rouvre la même ligne (contrainte unique cup + email).
+      return await reopenExpiredInvitation(existingInvitation.id, {
+        firstName,
+        lastName,
+        customMessage,
+      });
     }
 
     // Check if user already exists in the system
@@ -92,12 +232,8 @@ export async function sendJuryInvitation(
       where: eq(schema.users.email, email.toLowerCase()),
     });
 
-    // Generate unique token
     const token = nanoid(32);
-
-    // Calculate expiry date
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + INVITATION_EXPIRY_DAYS);
+    const expiresAt = invitationExpiry();
 
     // Create invitation record
     const invitationId = nanoid();
@@ -114,49 +250,16 @@ export async function sendJuryInvitation(
       sentAt: new Date(),
     });
 
-    // Build invitation URL
-    const portalBaseUrl = getPortalBaseUrl();
-    const invitationUrl = `${portalBaseUrl}/jury-invite/${token}`;
-
-    // Format name for email
-    const juryName = firstName
-      ? `${firstName}${lastName ? ` ${lastName}` : ""}`
-      : "Jury";
-
-    // Log in dev mode
-    if (env.NODE_ENV === "development") {
-      console.log("\n" + "=".repeat(60));
-      console.log("INVITATION JURY (DEV MODE)");
-      console.log("=".repeat(60));
-      console.log("To:", email);
-      console.log("Cup:", cup.name);
-      console.log("URL:", invitationUrl);
-      console.log("Token:", token);
-      console.log("Expires:", expiresAt.toISOString());
-      console.log("=".repeat(60) + "\n");
-    }
-
-    // Send invitation email
-    const result = await sendEmail({
-      scope: "Jury Invitation",
-      ref: `invitation ${invitationId}`,
-      to: email,
-      subject: `Invitation jury - ${cup.name}`,
-      html: buildInvitationEmailHtml({
-        juryName,
-        cupName: cup.name,
-        organizerName: ORGANIZER_NAME,
-        customMessage,
-        invitationUrl,
-        expiresAt,
-      }),
+    return await sendInitialInvitationEmail({
+      invitationId,
+      email,
+      token,
+      cupName: cup.name,
+      firstName,
+      lastName,
+      customMessage,
+      expiresAt,
     });
-
-    if (!result.success) {
-      return { success: false, error: result.error };
-    }
-
-    return { success: true, invitationId };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
     console.error("[Jury Invitation] Error:", errorMessage);
@@ -180,6 +283,11 @@ export async function resendInvitation(invitationId: string): Promise<SendInvita
       return { success: false, error: "Invitation not found" };
     }
 
+    // Une invitation expirée se relance aussi : elle est rouverte.
+    if (invitation.status === "expired") {
+      return await reopenExpiredInvitation(invitationId);
+    }
+
     if (invitation.status !== "pending") {
       return { success: false, error: "Cette invitation n'est plus en attente" };
     }
@@ -187,8 +295,7 @@ export async function resendInvitation(invitationId: string): Promise<SendInvita
     const cup = invitation.cup;
 
     // Extend expiry date
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + INVITATION_EXPIRY_DAYS);
+    const expiresAt = invitationExpiry();
 
     // Update invitation
     const reminderCount = (invitation.reminderCount ?? 0) + 1;
@@ -207,10 +314,7 @@ export async function resendInvitation(invitationId: string): Promise<SendInvita
     const portalBaseUrl = getPortalBaseUrl();
     const invitationUrl = `${portalBaseUrl}/jury-invite/${invitation.token}`;
 
-    // Format name
-    const juryName = invitation.firstName
-      ? `${invitation.firstName}${invitation.lastName ? ` ${invitation.lastName}` : ""}`
-      : "Jury";
+    const juryName = formatJuryName(invitation.firstName, invitation.lastName);
 
     // Log in dev mode
     if (env.NODE_ENV === "development") {
@@ -929,5 +1033,100 @@ function buildJuryWelcomeEmailHtml(params: JuryWelcomeEmailParams): string {
       <p style="color: #9ca3af; font-size: 14px; line-height: 1.5; margin-top: 32px;">
         Conservez cet email, il contient le lien vers votre espace jury.
       </p>`,
+  });
+}
+
+/**
+ * Juré existant ajouté directement à une cup par l'organisation (sans
+ * invitation) : courte notification avec le lien vers son espace jury.
+ */
+export interface SendJuryAddedToCupEmailParams {
+  userId: string;
+  cupId: string;
+  panel: "pro" | "public";
+  categoryNames: string[];
+}
+
+export async function sendJuryAddedToCupEmail(
+  params: SendJuryAddedToCupEmailParams
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const user = await db.query.users.findFirst({
+      where: eq(schema.users.id, params.userId),
+      columns: { id: true, name: true, email: true },
+    });
+    if (!user) {
+      return { success: false, error: "Utilisateur non trouve" };
+    }
+
+    const cup = await db.query.cups.findFirst({
+      where: eq(schema.cups.id, params.cupId),
+      columns: { id: true, name: true },
+    });
+    if (!cup) {
+      return { success: false, error: "Cup non trouvee" };
+    }
+
+    const dashboardUrl = `${getPortalBaseUrl()}/jury/dashboard`;
+
+    if (env.NODE_ENV === "development") {
+      console.log("\n" + "=".repeat(60));
+      console.log("AJOUT JURY A UNE CUP (DEV MODE)");
+      console.log("=".repeat(60));
+      console.log("To:", user.email);
+      console.log("Cup:", cup.name, `(${params.panel})`);
+      console.log("Dashboard URL:", dashboardUrl);
+      console.log("=".repeat(60) + "\n");
+    }
+
+    const result = await sendEmail({
+      scope: "Jury Added To Cup",
+      ref: `user ${user.id} cup ${cup.id}`,
+      to: user.email,
+      subject: `Vous faites partie du jury - ${cup.name}`,
+      html: buildJuryAddedToCupEmailHtml({
+        juryName: user.name,
+        cupName: cup.name,
+        panel: params.panel,
+        categoryNames: params.categoryNames,
+        dashboardUrl,
+      }),
+    });
+
+    return result.success ? { success: true } : { success: false, error: result.error };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    console.error("[Jury Added To Cup] Error:", errorMessage);
+    return { success: false, error: errorMessage };
+  }
+}
+
+export function buildJuryAddedToCupEmailHtml(params: {
+  juryName: string;
+  cupName: string;
+  panel: "pro" | "public";
+  categoryNames: string[];
+  dashboardUrl: string;
+}): string {
+  const cupName = escapeHtml(params.cupName);
+  const panelLabel = params.panel === "pro" ? "professionnel" : "public";
+  const categories =
+    params.categoryNames.length > 0
+      ? renderParagraph(
+          `Catégorie${params.categoryNames.length > 1 ? "s" : ""} à noter : <strong>${params.categoryNames
+            .map(escapeHtml)
+            .join(", ")}</strong>.`
+        )
+      : "";
+
+  return renderEmailLayout({
+    title: "Vous faites partie du jury",
+    body: `
+      ${renderGreeting(params.juryName)}
+      ${renderParagraph(`Vous avez été ajouté au jury <strong>${panelLabel}</strong>
+        de la cup <strong>${cupName}</strong>.`)}
+      ${categories}
+      ${renderButton(params.dashboardUrl, "Accéder à mon espace jury")}
+      ${renderFallbackLink(params.dashboardUrl)}`,
   });
 }
