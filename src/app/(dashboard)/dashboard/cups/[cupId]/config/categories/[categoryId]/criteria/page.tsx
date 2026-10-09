@@ -52,7 +52,7 @@ const headingStyle: React.CSSProperties = {
 
 const sectionTitleStyle: React.CSSProperties = {
   fontFamily: "'Doto', 'Space Mono', monospace",
-  fontSize: "14px",
+  fontSize: "12px",
   letterSpacing: "0.08em",
   textTransform: "uppercase",
   color: "var(--n-text-display)",
@@ -388,26 +388,24 @@ export default function CriteriaPage() {
             key={panel}
             aria-labelledby={`criteria-${panel}-title`}
             className="n-card"
-            style={{ padding: 0, overflow: "hidden", borderTop: `3px solid ${meta.accent}` }}
+            style={{ padding: 0, overflow: "hidden" }}
           >
             {/* Section header */}
             <div
               className="flex flex-col gap-3 px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between"
               style={{ borderBottom: "1px solid var(--n-border)" }}
             >
+              {/* Même en-tête que les autres cartes du dashboard : icône, titre
+                  Doto, compteur en n-tag — le titre suffit à nommer le jury. */}
               <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                <span
-                  className="n-tag"
-                  style={{ borderColor: meta.accent, color: meta.accent }}
-                >
-                  {meta.short}
-                </span>
+                <ClipboardList className="h-4 w-4" style={{ color: "var(--n-text-secondary)" }} />
                 <h2 id={`criteria-${panel}-title`} style={sectionTitleStyle}>
                   {meta.label}
                 </h2>
-                <span className="n-label">
-                  {plural(list.length, "critère")} · Σ coef. {totalCoefficient}
-                </span>
+                <span className="n-tag">{plural(list.length, "critère")}</span>
+                {list.length > 0 && (
+                  <span className="n-label">Σ coef. {totalCoefficient}</span>
+                )}
               </div>
               {canEdit && list.length > 0 && (
                 <div className="flex flex-wrap gap-2">
