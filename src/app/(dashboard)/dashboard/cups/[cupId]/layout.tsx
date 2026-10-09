@@ -110,12 +110,12 @@ export default function CupLayout({ children }: { children: React.ReactNode }) {
       items: [
         {
           href: `/dashboard/cups/${cupId}/scoring/juries`,
-          label: "Jurys & Assignations",
+          label: "Jurys & affectation",
           icon: UserCheck,
         },
         {
           href: `/dashboard/cups/${cupId}/scoring/invitation-codes`,
-          label: "Codes d'invitation",
+          label: "QR codes · jury public",
           icon: QrCode,
         },
       ],

@@ -348,8 +348,11 @@ const escapeLike = (value: string) => value.replace(/[\\%_]/g, (c) => `\\${c}`);
 
 export async function listJuryDirectory(
   db: DB,
-  input: { search?: string; cupId?: string; limit: number; offset: number }
+  input: { search?: string; cupId?: string; userIds?: string[]; limit: number; offset: number }
 ): Promise<JuryDirectoryPage> {
+  if (input.userIds && input.userIds.length === 0) {
+    return { items: [], total: 0, limit: input.limit, offset: input.offset };
+  }
   const search = input.search?.trim();
   const pattern = search ? `%${escapeLike(search)}%` : null;
 
@@ -374,12 +377,21 @@ export async function listJuryDirectory(
           ? sql`AND (u.name ILIKE ${pattern} OR u.email ILIKE ${pattern} OR jp.expertise ILIKE ${pattern})`
           : sql``
       }
+      ${
+        input.userIds
+          ? sql`AND u.id IN (${sql.join(input.userIds.map((id) => sql`${id}`), sql`, `)})`
+          : sql``
+      }
     ORDER BY lower(u.name), u.id
     LIMIT ${input.limit} OFFSET ${input.offset}
   `);
 
   const rows = page.rows;
-  const total = rows[0] ? Number(rows[0].total) : await countDirectory(db, pattern);
+  const total = rows[0]
+    ? Number(rows[0].total)
+    : input.userIds
+      ? 0
+      : await countDirectory(db, pattern);
 
   if (rows.length === 0) {
     return { items: [], total, limit: input.limit, offset: input.offset };

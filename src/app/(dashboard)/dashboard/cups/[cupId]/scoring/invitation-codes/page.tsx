@@ -1,876 +1,331 @@
 "use client";
 
-import { useState, useRef, useMemo } from "react";
-import { useParams } from "next/navigation";
-import Link from "next/link";
-import {
-  QrCode,
-  Plus,
-  MoreHorizontal,
-  Trash2,
-  Ban,
-  Copy,
-  Printer,
-  Layers,
-  Filter,
-  Link2,
-} from "lucide-react";
-import { toast } from "sonner";
-import { QRCodeSVG } from "qrcode.react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
+import { CalendarClock, Package, QrCode, ShieldOff, User } from "lucide-react";
 
-import { Button } from "~/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "~/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "~/components/ui/dropdown-menu";
-import { Input } from "~/components/ui/input";
-import { Label } from "~/components/ui/label";
-import { Checkbox } from "~/components/ui/checkbox";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "~/components/ui/table";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "~/components/ui/alert-dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "~/components/ui/select";
 import { api } from "~/trpc/react";
+import { CategoryQrCard } from "./_components/category-qr-card";
+import { GenerateQrDialog } from "./_components/generate-qr-dialog";
+import { PrintQrDialog } from "./_components/print-qr-dialog";
+import { QrCodesList } from "./_components/qr-codes-list";
+import { effectiveCodeStatus } from "~/lib/jury-coverage";
+import { formatDate, plural, type PrintableCode } from "./_components/shared";
 
-export default function InvitationCodesPage() {
+/**
+ * QR codes du jury public. Le QR EST le code d'invitation : il encode
+ * /activate?code=…, ouvre une place de juré public dans une ou plusieurs
+ * catégories et ne sert qu'une fois. Remplace aussi les anciens « jetons ».
+ *
+ * Paramètres : ?category=<id> (catégorie présélectionnée / filtrée),
+ * ?generate=1 (ouvre le dialogue de génération).
+ */
+function PublicJuryQrPage() {
   const params = useParams();
   const cupId = params.cupId as string;
-  const printRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const listRef = useRef<HTMLElement>(null);
 
-  // Dialog states
-  const [isGenerateDialogOpen, setIsGenerateDialogOpen] = useState(false);
-  const [isPrintDialogOpen, setIsPrintDialogOpen] = useState(false);
-  const [codeCount, setCodeCount] = useState(10);
-  const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
-  const [destination, setDestination] = useState("");
+  const [generateOpen, setGenerateOpen] = useState(false);
+  const [generateCategoryIds, setGenerateCategoryIds] = useState<string[]>([]);
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [printJob, setPrintJob] = useState<{ codes: PrintableCode[]; scopeLabel: string } | null>(null);
 
-  // Filter states
-  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "activated" | "revoked" | "expired">("all");
-  const [categoryFilter, setCategoryFilter] = useState<string>("all");
-  const [destinationFilter, setDestinationFilter] = useState<string>("all");
+  const cupQuery = api.cup.getById.useQuery({ id: cupId });
+  const coverageQuery = api.jury.getCoverage.useQuery({ cupId });
+  const codesQuery = api.juryCodes.list.useQuery({ cupId });
+  // Anciens jetons imprimés : seulement pour signaler ceux encore réclamables.
+  const legacyTokensQuery = api.jury.listPublicJuryTokens.useQuery(
+    { cupId, status: "available" },
+    { retry: false }
+  );
 
-  // Action states
-  const [revokeCodeId, setRevokeCodeId] = useState<string | null>(null);
-  const [deleteCodeId, setDeleteCodeId] = useState<string | null>(null);
+  const categories = useMemo(
+    () => (coverageQuery.data?.categories ?? []).map((c) => ({ id: c.categoryId, name: c.name })),
+    [coverageQuery.data]
+  );
 
-  // Bulk selection
-  const [selectedCodeIds, setSelectedCodeIds] = useState<string[]>([]);
-
-  const utils = api.useUtils();
-
-  // Queries
-  const {
-    data: cup,
-    isLoading: cupLoading,
-    isError: cupError,
-    refetch: refetchCup,
-  } = api.cup.getById.useQuery({ id: cupId });
-  const {
-    data: allCodes,
-    isLoading: codesLoading,
-    isError: codesError,
-    refetch: refetchCodes,
-  } = api.juryCodes.list.useQuery({ cupId });
-  const { data: stats } = api.juryCodes.getStats.useQuery({ cupId });
-  const { data: categories } = api.category.list.useQuery({ cupId });
-
-  // Client-side filtering
-  const filteredCodes = useMemo(() => {
-    if (!allCodes) return [];
-    return allCodes.filter((code) => {
-      if (statusFilter !== "all" && code.status !== statusFilter) return false;
-      if (categoryFilter !== "all") {
-        const hasCategory = code.categories.some((cat) => cat.id === categoryFilter);
-        if (!hasCategory) return false;
+  // Lieux de distribution, par catégorie et au total.
+  const { destinationsByCategory, allDestinations } = useMemo(() => {
+    const byCategory = new Map<string, Set<string>>();
+    const all = new Set<string>();
+    for (const code of codesQuery.data ?? []) {
+      const dest = code.destination?.trim();
+      if (!dest) continue;
+      all.add(dest);
+      for (const cat of code.categories) {
+        const set = byCategory.get(cat.id) ?? new Set<string>();
+        set.add(dest);
+        byCategory.set(cat.id, set);
       }
-      if (destinationFilter !== "all" && code.destination !== destinationFilter) return false;
-      return true;
-    });
-  }, [allCodes, statusFilter, categoryFilter, destinationFilter]);
-
-  const destinations = useMemo(() => {
-    if (!allCodes) return [];
-    const uniqueDestinations = [...new Set(
-      allCodes
-        .map((c) => c.destination)
-        .filter((d): d is string => d !== null && d !== undefined && d.trim() !== "")
-    )];
-    return uniqueDestinations.sort();
-  }, [allCodes]);
-
-  const codes = filteredCodes;
-
-  // Mutations
-  const generateMutation = api.juryCodes.generate.useMutation({
-    onSuccess: (data) => {
-      toast.success(`${data.count} code${data.count !== 1 ? "s" : ""} genere${data.count !== 1 ? "s" : ""}`);
-      setIsGenerateDialogOpen(false);
-      setCodeCount(10);
-      setSelectedCategoryIds([]);
-      setDestination("");
-      void utils.juryCodes.list.invalidate({ cupId });
-      void utils.juryCodes.getStats.invalidate({ cupId });
-    },
-    onError: (error) => {
-      toast.error(error.message);
-    },
-  });
-
-  const revokeMutation = api.juryCodes.revoke.useMutation({
-    onSuccess: () => {
-      toast.success("Code revoque");
-      setRevokeCodeId(null);
-      void utils.juryCodes.list.invalidate({ cupId });
-      void utils.juryCodes.getStats.invalidate({ cupId });
-    },
-    onError: (error) => {
-      toast.error(error.message);
-    },
-  });
-
-  const deleteMutation = api.juryCodes.delete.useMutation({
-    onSuccess: () => {
-      toast.success("Code supprime");
-      setDeleteCodeId(null);
-      void utils.juryCodes.list.invalidate({ cupId });
-      void utils.juryCodes.getStats.invalidate({ cupId });
-    },
-    onError: (error) => {
-      toast.error(error.message);
-    },
-  });
-
-  const deleteBulkMutation = api.juryCodes.deleteBulk.useMutation({
-    onSuccess: (data) => {
-      toast.success(`${data.deletedCount} code${data.deletedCount !== 1 ? "s" : ""} supprime${data.deletedCount !== 1 ? "s" : ""}`);
-      if (data.skippedCount > 0) {
-        toast.info(`${data.skippedCount} code${data.skippedCount !== 1 ? "s" : ""} ignore${data.skippedCount !== 1 ? "s" : ""} (deja actives)`);
-      }
-      setSelectedCodeIds([]);
-      void utils.juryCodes.list.invalidate({ cupId });
-      void utils.juryCodes.getStats.invalidate({ cupId });
-    },
-    onError: (error) => {
-      toast.error(error.message);
-    },
-  });
-
-  // Handlers
-  const toggleCategory = (categoryId: string) => {
-    setSelectedCategoryIds((prev) =>
-      prev.includes(categoryId)
-        ? prev.filter((id) => id !== categoryId)
-        : [...prev, categoryId]
-    );
-  };
-
-  const handleGenerate = () => {
-    if (selectedCategoryIds.length === 0) {
-      toast.error("Selectionnez au moins une categorie");
-      return;
     }
-    generateMutation.mutate({
-      cupId,
-      categoryIds: selectedCategoryIds,
-      count: codeCount,
-      destination: destination.trim() || undefined,
-    });
+    const sort = (s: Iterable<string>) => [...s].sort((a, b) => a.localeCompare(b, "fr"));
+    return {
+      destinationsByCategory: new Map([...byCategory].map(([k, v]) => [k, sort(v)])),
+      allDestinations: sort(all),
+    };
+  }, [codesQuery.data]);
+
+  const openGenerate = (categoryId?: string) => {
+    const fallback = categories[0]?.id;
+    const id = categoryId ?? fallback;
+    setGenerateCategoryIds(id ? [id] : []);
+    setGenerateOpen(true);
   };
 
-  const toggleCodeSelection = (codeId: string) => {
-    setSelectedCodeIds((prev) =>
-      prev.includes(codeId)
-        ? prev.filter((id) => id !== codeId)
-        : [...prev, codeId]
-    );
+  // Liens entrants : ?category=…&generate=1 (depuis « Jurys & affectation »).
+  const handledParams = useRef(false);
+  useEffect(() => {
+    if (handledParams.current || !coverageQuery.data) return;
+    handledParams.current = true;
+    const categoryParam = searchParams.get("category");
+    const validCategory = categories.some((c) => c.id === categoryParam) ? categoryParam! : undefined;
+    const wantsGenerate = searchParams.get("generate") === "1";
+    if (validCategory) setCategoryFilter(validCategory);
+    if (wantsGenerate) openGenerate(validCategory);
+    // Retire ?generate pour qu'un rafraîchissement ne rouvre pas le dialogue.
+    if (wantsGenerate || categoryParam) router.replace(pathname, { scroll: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coverageQuery.data]);
+
+  const printCategory = (categoryId: string, name: string) => {
+    const now = new Date();
+    const codes = (codesQuery.data ?? [])
+      .filter(
+        (c) =>
+          c.categories.some((cat) => cat.id === categoryId) &&
+          effectiveCodeStatus({ status: c.status, expiresAt: c.expiresAt ? new Date(c.expiresAt) : null }, now) ===
+            "pending"
+      )
+      .map((c) => ({ code: c.code, categories: c.categories.map((cat) => cat.name) }));
+    setPrintJob({ codes, scopeLabel: name });
   };
 
-  const toggleAllCodes = () => {
-    if (!codes) return;
-    const selectableCodes = codes.filter((c) => c.status !== "activated");
-    if (selectedCodeIds.length === selectableCodes.length) {
-      setSelectedCodeIds([]);
-    } else {
-      setSelectedCodeIds(selectableCodes.map((c) => c.id));
-    }
+  const showCategoryCodes = (categoryId: string) => {
+    setCategoryFilter(categoryId);
+    listRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
-  const copyCode = (code: string) => {
-    navigator.clipboard.writeText(code);
-    toast.success("Code copie");
-  };
-
-  const getActivationUrl = (code: string) => {
-    const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
-    return `${baseUrl}/activate?code=${code}`;
-  };
-
-  const handlePrint = () => {
-    const printContent = printRef.current;
-    if (!printContent) return;
-
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
-      toast.error("Impossible d'ouvrir la fenetre d'impression");
-      return;
-    }
-
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Codes d'invitation - ${cup?.name}</title>
-          <style>
-            * { margin: 0; padding: 0; box-sizing: border-box; }
-            body { font-family: system-ui, -apple-system, sans-serif; padding: 20px; }
-            h1 { text-align: center; margin-bottom: 20px; font-size: 24px; }
-            .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
-            .code-card {
-              border: 1px solid #ddd;
-              border-radius: 8px;
-              padding: 16px;
-              text-align: center;
-              page-break-inside: avoid;
-            }
-            .qr-container { margin-bottom: 8px; }
-            .code-text {
-              font-family: monospace;
-              font-size: 16px;
-              font-weight: bold;
-              letter-spacing: 1px;
-            }
-            .categories {
-              font-size: 10px;
-              color: #666;
-              margin-top: 4px;
-            }
-            @media print {
-              body { padding: 10px; }
-              .grid { gap: 10px; }
-            }
-          </style>
-        </head>
-        <body>
-          <h1>${cup?.name} - Codes d'invitation</h1>
-          ${printContent.innerHTML}
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
-    printWindow.print();
-  };
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "pending":
-        return (
-          <span className="n-label" style={{ display: "inline-block", padding: "2px 8px", borderRadius: "4px", border: "1px solid var(--n-warning)", color: "var(--n-warning)", fontSize: "11px", letterSpacing: "0.06em", textTransform: "uppercase" }}>
-            EN ATTENTE
-          </span>
-        );
-      case "activated":
-        return (
-          <span className="n-label" style={{ display: "inline-block", padding: "2px 8px", borderRadius: "4px", border: "1px solid var(--n-success)", color: "var(--n-success)", fontSize: "11px", letterSpacing: "0.06em", textTransform: "uppercase" }}>
-            ACTIVE
-          </span>
-        );
-      case "revoked":
-        return (
-          <span className="n-label" style={{ display: "inline-block", padding: "2px 8px", borderRadius: "4px", border: "1px solid var(--n-accent)", color: "var(--n-accent)", fontSize: "11px", letterSpacing: "0.06em", textTransform: "uppercase" }}>
-            REVOQUE
-          </span>
-        );
-      case "expired":
-        return (
-          <span className="n-label" style={{ display: "inline-block", padding: "2px 8px", borderRadius: "4px", border: "1px solid var(--n-text-disabled)", color: "var(--n-text-disabled)", fontSize: "11px", letterSpacing: "0.06em", textTransform: "uppercase" }}>
-            EXPIRE
-          </span>
-        );
-      default:
-        return (
-          <span className="n-label" style={{ display: "inline-block", padding: "2px 8px", borderRadius: "4px", border: "1px solid var(--n-border-visible)", color: "var(--n-text-secondary)", fontSize: "11px", letterSpacing: "0.06em", textTransform: "uppercase" }}>
-            {status}
-          </span>
-        );
-    }
-  };
-
-  const pendingCodes = codes?.filter((c) => c.status === "pending") ?? [];
-  const selectedPendingCodes = pendingCodes.filter((c) => selectedCodeIds.includes(c.id));
-  const codesToPrint = selectedPendingCodes.length > 0 ? selectedPendingCodes : pendingCodes;
-
-  if (cupLoading) {
+  if (cupQuery.isLoading || coverageQuery.isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <p className="n-font-body text-[var(--n-text-secondary)]">[LOADING...]</p>
+      <div className="flex min-h-[400px] items-center justify-center" role="status">
+        <p className="n-label" style={{ color: "var(--n-text-disabled)" }}>
+          [CHARGEMENT…]
+        </p>
       </div>
     );
   }
 
-  // Une requête en échec ne doit pas se confondre avec une page vide :
-  // un écran « aucune donnée » masquerait l'incident.
-  if (cupError || codesError) {
+  // Une requête en échec ne doit pas se confondre avec une page vide.
+  if (cupQuery.isError || coverageQuery.isError || codesQuery.isError || !cupQuery.data || !coverageQuery.data) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4 text-center">
+      <div className="flex min-h-[400px] flex-col items-center justify-center gap-4 text-center">
         <span role="alert" className="n-label" style={{ color: "var(--n-text-secondary)" }}>
-          [ERREUR] LES CODES D&apos;INVITATION N&apos;ONT PAS PU ÊTRE CHARGÉS
+          [ERREUR] LES QR CODES N&apos;ONT PAS PU ÊTRE CHARGÉS
         </span>
-        <button type="button" className="n-btn-secondary text-xs" onClick={() => { void refetchCup(); void refetchCodes(); }}>
+        <button
+          type="button"
+          className="n-btn-secondary text-xs"
+          onClick={() => {
+            void cupQuery.refetch();
+            void coverageQuery.refetch();
+            void codesQuery.refetch();
+          }}
+        >
           RÉESSAYER
         </button>
       </div>
     );
   }
 
-  if (!cup) {
-    return null;
-  }
+  const cup = cupQuery.data;
+  const coverage = coverageQuery.data;
+  const totals = coverage.totals;
+  const legacyAvailable = legacyTokensQuery.data?.stats.available ?? 0;
+
+  const tiles = [
+    { label: "QR générés", value: String(totals.codes.generated) },
+    { label: "En attente", value: String(totals.codes.pending) },
+    { label: "Activés", value: String(totals.codes.activated) },
+    { label: "Jurés publics actifs", value: String(totals.public.activeJurors) },
+    {
+      label: "Échantillons reçus",
+      value: `${totals.public.samplesReceived}`,
+      sub: `/ ${totals.public.activeJurors}`,
+    },
+  ];
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+      {/* En-tête */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="n-font-body text-2xl font-bold text-[var(--n-text-display)]">
-            Codes d&apos;invitation
+          <p className="n-label" style={{ color: "var(--n-text-disabled)" }}>
+            Notation · jury public
+          </p>
+          <h1
+            className="n-font-display mt-1"
+            style={{ fontSize: 24, fontWeight: 500, color: "var(--n-text-display)", lineHeight: 1.1 }}
+          >
+            QR codes · jury public
           </h1>
-          <p className="n-label text-[var(--n-text-secondary)] mt-1">
-            Generez des codes QR pour le jury public de votre cup
+          <p className="mt-2 text-sm" style={{ color: "var(--n-text-secondary)" }}>
+            Consommateurs qui notent chez eux · 1 QR code = 1 place de juré public.
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button asChild size="sm" variant="outline" className="n-label">
-            <Link href={`/dashboard/cups/${cupId}/scoring/public-tokens`}>
-              <Link2 className="mr-2 h-4 w-4" />
-              Jetons jury publics
-            </Link>
-          </Button>
-          <Dialog open={isGenerateDialogOpen} onOpenChange={setIsGenerateDialogOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm" className="n-label">
-                <Plus className="mr-2 h-4 w-4" />
-                Generer des codes
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-lg">
-              <DialogHeader>
-                <DialogTitle className="n-font-body font-bold text-[var(--n-text-display)]">
-                  Generer des codes d&apos;invitation
-                </DialogTitle>
-                <DialogDescription className="n-label text-[var(--n-text-secondary)]">
-                  Creez des codes QR que les jurys pourront scanner pour s&apos;inscrire
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 py-4">
-                {/* Number of codes */}
-                <div className="space-y-2">
-                  <Label htmlFor="count" className="n-label text-[var(--n-text-secondary)]">NOMBRE DE CODES</Label>
-                  <Input
-                    id="count"
-                    type="number"
-                    min={1}
-                    max={200}
-                    value={codeCount}
-                    onChange={(e) => setCodeCount(Math.min(200, Math.max(1, parseInt(e.target.value) || 1)))}
-                  />
-                  <p className="n-label text-[var(--n-text-disabled)]">
-                    Maximum 200 codes par generation
-                  </p>
-                </div>
-
-                {/* Category selection */}
-                <div className="space-y-2">
-                  <Label className="n-label text-[var(--n-text-secondary)]">CATEGORIES ASSIGNEES *</Label>
-                  <p className="n-label text-[var(--n-text-disabled)] mb-2">
-                    Les jurys ayant ce code pourront noter les produits de ces categories
-                  </p>
-                  {!categories || categories.length === 0 ? (
-                    <div className="text-center py-6 border border-[var(--n-border)] rounded">
-                      <Layers className="h-6 w-6 mx-auto mb-2 text-[var(--n-text-disabled)]" />
-                      <p className="n-label text-[var(--n-text-secondary)]">Aucune categorie configuree</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-2 max-h-48 overflow-y-auto">
-                      {categories.map((category) => (
-                        <div
-                          key={category.id}
-                          className="flex items-center space-x-3 rounded border border-[var(--n-border)] bg-[var(--n-surface)] p-3 hover:bg-[var(--n-surface-raised)] cursor-pointer transition-colors"
-                          onClick={() => toggleCategory(category.id)}
-                        >
-                          <Checkbox
-                            id={`category-${category.id}`}
-                            checked={selectedCategoryIds.includes(category.id)}
-                            onCheckedChange={() => toggleCategory(category.id)}
-                          />
-                          <div className="flex-1">
-                            <Label
-                              htmlFor={`category-${category.id}`}
-                              className="n-font-body font-medium cursor-pointer text-[var(--n-text-primary)]"
-                            >
-                              {category.name}
-                            </Label>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Destination / Store */}
-                <div className="space-y-2">
-                  <Label htmlFor="destination" className="n-label text-[var(--n-text-secondary)]">
-                    DESTINATION / MAGASIN (OPTIONNEL)
-                  </Label>
-                  <Input
-                    id="destination"
-                    placeholder="Ex: Carrefour Lyon, Cave du Coin..."
-                    value={destination}
-                    onChange={(e) => setDestination(e.target.value)}
-                  />
-                  <p className="n-label text-[var(--n-text-disabled)]">
-                    Permet de tracer ou sont envoyes les packs de QR codes
-                  </p>
-                </div>
-              </div>
-              <DialogFooter>
-                <Button
-                  variant="outline"
-                  className="n-label"
-                  onClick={() => {
-                    setIsGenerateDialogOpen(false);
-                    setSelectedCategoryIds([]);
-                    setDestination("");
-                  }}
-                >
-                  Annuler
-                </Button>
-                <Button
-                  onClick={handleGenerate}
-                  disabled={selectedCategoryIds.length === 0 || generateMutation.isPending}
-                  className="n-label"
-                >
-                  {generateMutation.isPending ? "[...]" : <Plus className="mr-2 h-4 w-4" />}
-                  Generer {codeCount} code{codeCount !== 1 ? "s" : ""}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </div>
+        <button
+          type="button"
+          className="n-btn-primary self-start sm:self-auto"
+          onClick={() => openGenerate()}
+          disabled={categories.length === 0}
+        >
+          <QrCode className="mr-2 h-4 w-4" aria-hidden="true" />
+          Générer des QR codes
+        </button>
       </div>
 
-      {/* Stats */}
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-5">
-        <div className="n-card p-4">
-          <p className="n-label text-[var(--n-text-secondary)] mb-1">TOTAL CODES</p>
-          <p className="n-font-data text-3xl font-bold text-[var(--n-text-display)]">
-            {stats?.total ?? 0}
+      {/* Mode d'emploi */}
+      <section className="n-card" style={{ padding: "16px 20px" }} aria-label="Fonctionnement des QR codes">
+        <ul className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2" style={{ color: "var(--n-text-secondary)" }}>
+          <li className="flex gap-3">
+            <User className="mt-0.5 h-4 w-4 shrink-0" style={{ color: "var(--n-text-primary)" }} aria-hidden="true" />
+            <span>
+              <strong style={{ color: "var(--n-text-primary)" }}>Une personne, un usage.</strong> Scanné, le QR
+              crée le compte juré public et ouvre la ou les catégories du code. Le code imprimé dessous sert si
+              la caméra ne lit pas le QR.
+            </span>
+          </li>
+          <li className="flex gap-3">
+            <ShieldOff className="mt-0.5 h-4 w-4 shrink-0" style={{ color: "var(--n-text-primary)" }} aria-hidden="true" />
+            <span>
+              <strong style={{ color: "var(--n-text-primary)" }}>Révocable avant usage.</strong> Un QR perdu ou
+              non distribué se révoque tant qu&apos;il n&apos;est pas activé.
+            </span>
+          </li>
+          <li className="flex gap-3">
+            <Package className="mt-0.5 h-4 w-4 shrink-0" style={{ color: "var(--n-text-primary)" }} aria-hidden="true" />
+            <span>
+              <strong style={{ color: "var(--n-text-primary)" }}>Échantillons inclus.</strong> QR glissé dans la
+              box : la réception est confirmée à l&apos;activation. Sinon, le juré la confirme lui-même.
+            </span>
+          </li>
+          <li className="flex gap-3">
+            <CalendarClock className="mt-0.5 h-4 w-4 shrink-0" style={{ color: "var(--n-text-primary)" }} aria-hidden="true" />
+            <span>
+              <strong style={{ color: "var(--n-text-primary)" }}>Validité.</strong>{" "}
+              {cup.ratingEndAt
+                ? `Jusqu'à la fin de la notation (${formatDate(cup.ratingEndAt, true)}), date figée à la génération.`
+                : "Aucune fin de notation fixée : les codes générés maintenant n'expirent pas."}
+            </span>
+          </li>
+        </ul>
+        {legacyAvailable > 0 && (
+          <p className="n-label mt-4 border-t pt-3" style={{ borderColor: "var(--n-border)", color: "var(--n-text-disabled)" }}>
+            {legacyAvailable} {plural(legacyAvailable, "ancien jeton imprimé reste utilisable", "anciens jetons imprimés restent utilisables")}{" "}
+            · les jetons ne se génèrent plus
           </p>
-        </div>
-        <div className="n-card p-4">
-          <p className="n-label text-[var(--n-warning)] mb-1">EN ATTENTE</p>
-          <p className="n-font-data text-3xl font-bold text-[var(--n-warning)]">
-            {stats?.pending ?? 0}
-          </p>
-        </div>
-        <div className="n-card p-4">
-          <p className="n-label text-[var(--n-success)] mb-1">ACTIVES</p>
-          <p className="n-font-data text-3xl font-bold text-[var(--n-success)]">
-            {stats?.activated ?? 0}
-          </p>
-        </div>
-        <div className="n-card p-4">
-          <p className="n-label mb-1" style={{ color: "var(--n-accent)" }}>REVOQUES</p>
-          <p className="n-font-data text-3xl font-bold" style={{ color: "var(--n-accent)" }}>
-            {stats?.revoked ?? 0}
-          </p>
-        </div>
-        <div className="n-card p-4 col-span-2 lg:col-span-1">
-          <p className="n-label text-[var(--n-text-secondary)] mb-1">EXPIRES</p>
-          <p className="n-font-data text-3xl font-bold text-[var(--n-text-disabled)]">
-            {stats?.expired ?? 0}
-          </p>
-        </div>
-      </div>
+        )}
+      </section>
 
-      {/* Filters & Bulk actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2">
-            <Filter className="h-4 w-4 text-[var(--n-text-secondary)]" />
-            <span className="n-label text-[var(--n-text-secondary)]">FILTRES:</span>
+      {/* Totaux */}
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
+        {tiles.map((tile, i) => (
+          <div
+            key={tile.label}
+            className={`n-card flex flex-col gap-1 ${i === tiles.length - 1 ? "col-span-2 md:col-span-1" : ""}`}
+            style={{ padding: "12px 16px" }}
+          >
+            <span className="n-label" style={{ color: "var(--n-text-disabled)" }}>
+              {tile.label}
+            </span>
+            <span className="n-font-display" style={{ fontSize: 28, color: "var(--n-text-display)", lineHeight: 1.1 }}>
+              {tile.value}
+              {tile.sub && (
+                <span className="n-font-data ml-1 text-sm" style={{ color: "var(--n-text-disabled)" }}>
+                  {tile.sub}
+                </span>
+              )}
+            </span>
           </div>
-
-          <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}>
-            <SelectTrigger className="w-[140px]">
-              <SelectValue placeholder="Statut" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Tous statuts</SelectItem>
-              <SelectItem value="pending">En attente</SelectItem>
-              <SelectItem value="activated">Actives</SelectItem>
-              <SelectItem value="revoked">Revoques</SelectItem>
-              <SelectItem value="expired">Expires</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-            <SelectTrigger className="w-[160px]">
-              <SelectValue placeholder="Categorie" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Toutes categories</SelectItem>
-              {categories?.map((cat) => (
-                <SelectItem key={cat.id} value={cat.id}>
-                  {cat.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          {destinations && destinations.length > 0 && (
-            <Select value={destinationFilter} onValueChange={setDestinationFilter}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Destination" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Toutes destinations</SelectItem>
-                {destinations.map((dest) => (
-                  <SelectItem key={dest} value={dest}>
-                    {dest}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-        </div>
-
-        <div className="flex items-center gap-2">
-          {pendingCodes.length > 0 && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setIsPrintDialogOpen(true)}
-              className="n-label"
-            >
-              <Printer className="mr-2 h-4 w-4" />
-              Imprimer{selectedPendingCodes.length > 0
-                ? ` (${selectedPendingCodes.length})`
-                : ` tout (${pendingCodes.length})`}
-            </Button>
-          )}
-          {selectedCodeIds.length > 0 && (
-            <>
-              <span className="n-label text-[var(--n-text-secondary)]">
-                {selectedCodeIds.length} selectionne{selectedCodeIds.length !== 1 ? "s" : ""}
-              </span>
-              <Button
-                size="sm"
-                variant="destructive"
-                onClick={() => deleteBulkMutation.mutate({ codeIds: selectedCodeIds })}
-                disabled={deleteBulkMutation.isPending}
-                className="n-label"
-              >
-                {deleteBulkMutation.isPending ? "[...]" : <Trash2 className="mr-2 h-4 w-4" />}
-                Supprimer
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setSelectedCodeIds([])}
-                className="n-label"
-              >
-                Annuler
-              </Button>
-            </>
-          )}
-        </div>
+        ))}
       </div>
 
-      {/* Codes Table */}
-      <div className="n-card overflow-hidden">
-        <div className="p-4 border-b border-[var(--n-border-visible)]">
-          <h2 className="n-font-body font-semibold text-[var(--n-text-primary)]">Codes generes</h2>
-          <p className="n-label text-[var(--n-text-secondary)]">
-            Liste de tous les codes d&apos;invitation
-          </p>
-        </div>
-        <div className="p-4">
-          {codesLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <p className="n-font-body text-[var(--n-text-secondary)]">[LOADING...]</p>
-            </div>
-          ) : !codes || codes.length === 0 ? (
-            <div className="text-center py-12">
-              <QrCode className="h-8 w-8 mx-auto mb-3 text-[var(--n-text-disabled)]" />
-              <p className="n-font-body font-medium text-[var(--n-text-secondary)]">Aucun code genere</p>
-              <p className="n-label text-[var(--n-text-disabled)]">
-                Cliquez sur &quot;Generer des codes&quot; pour commencer
-              </p>
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow className="border-b border-[var(--n-border-visible)]">
-                  <TableHead className="w-[50px]">
-                    <Checkbox
-                      checked={
-                        selectedCodeIds.length > 0 &&
-                        selectedCodeIds.length === codes.filter((c) => c.status !== "activated").length
-                      }
-                      onCheckedChange={toggleAllCodes}
-                    />
-                  </TableHead>
-                  <TableHead className="n-label text-[var(--n-text-secondary)]">CODE</TableHead>
-                  <TableHead className="n-label text-[var(--n-text-secondary)]">STATUT</TableHead>
-                  <TableHead className="n-label text-[var(--n-text-secondary)]">CATEGORIES</TableHead>
-                  <TableHead className="n-label text-[var(--n-text-secondary)]">DESTINATION</TableHead>
-                  <TableHead className="n-label text-[var(--n-text-secondary)]">ACTIVE PAR</TableHead>
-                  <TableHead className="n-label text-[var(--n-text-secondary)]">CREE LE</TableHead>
-                  <TableHead className="n-label text-[var(--n-text-secondary)]">EXPIRE LE</TableHead>
-                  <TableHead className="w-[50px]"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {codes.map((code) => (
-                  <TableRow
-                    key={code.id}
-                    className="border-b border-[var(--n-border)] hover:bg-[var(--n-surface-raised)]"
-                  >
-                    <TableCell>
-                      <Checkbox
-                        checked={selectedCodeIds.includes(code.id)}
-                        onCheckedChange={() => toggleCodeSelection(code.id)}
-                        disabled={code.status === "activated"}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <code className="n-font-data font-semibold text-sm bg-[var(--n-surface-raised)] px-2 py-1 rounded border border-[var(--n-border)]">
-                          {code.code}
-                        </code>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7"
-                          onClick={() => copyCode(code.code)}
-                        >
-                          <Copy className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                    <TableCell>{getStatusBadge(code.status)}</TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {code.categories.map((cat) => (
-                          <span key={cat.id} className="n-tag">
-                            {cat.name}
-                          </span>
-                        ))}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {code.destination ? (
-                        <span className="n-font-body text-[var(--n-text-secondary)]">
-                          {code.destination}
-                        </span>
-                      ) : (
-                        <span className="n-label text-[var(--n-text-disabled)]">-</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {code.activatedBy ? (
-                        <span className="n-font-body text-[var(--n-text-secondary)]">
-                          {code.activatedBy.name ?? code.activatedBy.email}
-                        </span>
-                      ) : (
-                        <span className="n-label text-[var(--n-text-disabled)]">-</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <span className="n-font-data text-xs text-[var(--n-text-secondary)]">
-                        {new Date(code.createdAt).toLocaleDateString("fr-FR")}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      {code.expiresAt ? (
-                        <span className="n-font-data text-xs text-[var(--n-text-secondary)]">
-                          {new Date(code.expiresAt).toLocaleDateString("fr-FR")}
-                        </span>
-                      ) : (
-                        <span className="n-label text-[var(--n-text-disabled)]">-</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {code.status === "pending" && (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => copyCode(getActivationUrl(code.code))}>
-                              <Copy className="mr-2 h-4 w-4" />
-                              Copier le lien
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              className="text-[var(--n-warning)]"
-                              onClick={() => setRevokeCodeId(code.id)}
-                            >
-                              <Ban className="mr-2 h-4 w-4" />
-                              Revoquer
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              style={{ color: "var(--n-accent)" }}
-                              onClick={() => setDeleteCodeId(code.id)}
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              Supprimer
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </div>
-      </div>
-
-      {/* Revoke Dialog */}
-      <AlertDialog open={!!revokeCodeId} onOpenChange={() => setRevokeCodeId(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="n-font-body font-bold text-[var(--n-text-display)]">
-              Revoquer ce code ?
-            </AlertDialogTitle>
-            <AlertDialogDescription className="n-label text-[var(--n-text-secondary)]">
-              Le code ne pourra plus etre utilise pour s&apos;inscrire comme jury.
-              Cette action peut etre annulee en supprimant le code.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel className="n-label">Annuler</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => revokeCodeId && revokeMutation.mutate({ codeId: revokeCodeId })}
-              className="n-label"
-            >
-              {revokeMutation.isPending && "[...]"}
-              Revoquer
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Delete Dialog */}
-      <AlertDialog open={!!deleteCodeId} onOpenChange={() => setDeleteCodeId(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="n-font-body font-bold text-[var(--n-text-display)]">
-              Supprimer ce code ?
-            </AlertDialogTitle>
-            <AlertDialogDescription className="n-label text-[var(--n-text-secondary)]">
-              Cette action est irreversible. Le code sera definitivement supprime.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel className="n-label">Annuler</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => deleteCodeId && deleteMutation.mutate({ codeId: deleteCodeId })}
-              className="n-label" style={{ background: "var(--n-accent)", color: "var(--n-black)" }}
-            >
-              {deleteMutation.isPending && "[...]"}
-              Supprimer
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Print Dialog */}
-      <Dialog open={isPrintDialogOpen} onOpenChange={setIsPrintDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="n-font-body font-bold text-[var(--n-text-display)]">
-              Imprimer les codes QR
-            </DialogTitle>
-            <DialogDescription className="n-label text-[var(--n-text-secondary)]">
-              {selectedPendingCodes.length > 0
-                ? `Apercu des ${codesToPrint.length} codes selectionnes`
-                : `Apercu des ${codesToPrint.length} codes en attente prets a imprimer`}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div ref={printRef} className="py-4">
-            <div className="grid grid-cols-3 gap-4">
-              {codesToPrint.map((code) => (
-                <div
-                  key={code.id}
-                  className="code-card border border-[var(--n-border)] rounded p-4 text-center bg-white"
-                >
-                  <div className="qr-container flex justify-center mb-2">
-                    <QRCodeSVG
-                      value={getActivationUrl(code.code)}
-                      size={100}
-                      level="M"
-                      includeMargin={false}
-                    />
-                  </div>
-                  <p className="code-text n-font-data text-lg font-bold text-black tracking-wider">
-                    {code.code}
-                  </p>
-                  <p className="categories n-label text-[var(--n-text-secondary)] mt-1">
-                    {code.categories.map((c) => c.name).join(", ")}
-                  </p>
-                </div>
-              ))}
-            </div>
+      {/* Cartes par catégorie */}
+      <section aria-labelledby="qr-categories-title" className="space-y-3">
+        <h2 id="qr-categories-title" className="n-label" style={{ color: "var(--n-text-secondary)" }}>
+          Par catégorie
+        </h2>
+        {coverage.categories.length === 0 ? (
+          <div className="n-card py-10 text-center">
+            <p className="text-sm" style={{ color: "var(--n-text-secondary)" }}>
+              Aucune catégorie : créez les catégories de la cup avant de générer des QR codes.
+            </p>
           </div>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {coverage.categories.map((category) => (
+              <CategoryQrCard
+                key={category.categoryId}
+                category={category}
+                destinations={destinationsByCategory.get(category.categoryId) ?? []}
+                onGenerate={() => openGenerate(category.categoryId)}
+                onPrint={() => printCategory(category.categoryId, category.name)}
+                onShowCodes={() => showCategoryCodes(category.categoryId)}
+              />
+            ))}
+          </div>
+        )}
+      </section>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsPrintDialogOpen(false)} className="n-label">
-              Fermer
-            </Button>
-            <Button onClick={handlePrint} className="n-label">
-              <Printer className="mr-2 h-4 w-4" />
-              Imprimer
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <QrCodesList
+        ref={listRef}
+        cupId={cupId}
+        codes={codesQuery.data}
+        isLoading={codesQuery.isLoading}
+        categories={categories}
+        categoryFilter={categoryFilter}
+        onCategoryFilterChange={setCategoryFilter}
+        onPrint={(codes, scopeLabel) => setPrintJob({ codes, scopeLabel })}
+      />
+
+      <GenerateQrDialog
+        open={generateOpen}
+        onOpenChange={setGenerateOpen}
+        cupId={cupId}
+        categories={categories}
+        initialCategoryIds={generateCategoryIds}
+        ratingEndAt={cup.ratingEndAt ?? null}
+        knownDestinations={allDestinations}
+        onGenerated={({ codes, scopeLabel, print }) => {
+          if (print) setPrintJob({ codes, scopeLabel });
+        }}
+      />
+
+      <PrintQrDialog
+        open={!!printJob}
+        onOpenChange={(open) => !open && setPrintJob(null)}
+        cupName={cup.name}
+        scopeLabel={printJob?.scopeLabel ?? ""}
+        codes={printJob?.codes ?? []}
+      />
     </div>
+  );
+}
+
+export default function InvitationCodesPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-[400px] items-center justify-center" role="status">
+          <p className="n-label" style={{ color: "var(--n-text-disabled)" }}>
+            [CHARGEMENT…]
+          </p>
+        </div>
+      }
+    >
+      <PublicJuryQrPage />
+    </Suspense>
   );
 }

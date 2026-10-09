@@ -13,6 +13,8 @@ export const listJuryDirectorySchema = z.object({
   search: z.string().trim().max(100, "Recherche trop longue (100 caractères maximum)").optional(),
   /** Si fourni, chaque entrée indique si le juré est déjà dans cette cup. */
   cupId: z.string().min(1).optional(),
+  /** Restreint la liste à ces comptes (ex. vérifier qui est déjà dans une cup). */
+  userIds: z.array(z.string().min(1)).max(100).optional(),
   limit: z.number().int().min(1).max(100).default(50),
   offset: z.number().int().min(0).default(0),
 });

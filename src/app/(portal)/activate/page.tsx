@@ -328,6 +328,13 @@ function ActivatePageContent() {
           </ul>
         </div>
 
+        {data.samplesIncluded && (
+          <div className="notice is-info">
+            Vos échantillons sont dans la box : leur réception sera confirmée
+            automatiquement.
+          </div>
+        )}
+
         {/* Connexion */}
         {!session?.user ? (
           <>
