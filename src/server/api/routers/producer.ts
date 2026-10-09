@@ -29,6 +29,7 @@ import {
 } from "~/server/services/results-pdf.service";
 import { getMaxScoreForScale } from "~/lib/validations/labels";
 import { calculateWeightedScore } from "~/lib/validations/criteria";
+import { criteriaOfPanel } from "~/lib/criteria-panels";
 
 const getProducerIdByUser = async (ctx: AuthedContext) => {
   const producer = await ctx.db.query.producers.findFirst({
@@ -1173,6 +1174,9 @@ export const producerRouter = createTRPCRouter({
         (panel) => scoreFor(product, panel) !== null
       );
       const panel = input.panel ?? availablePanels[0] ?? "public";
+      // Grille du panel affiché : le jury pro et le jury public ne notent pas
+      // les mêmes critères.
+      const panelCriteria = criteriaOfPanel(product.category.criteria, panel);
       const panelCols = panelColumns(panel);
 
       // Notes déposées sur ce produit par les jurés du panel affiché.
@@ -1238,7 +1242,7 @@ export const producerRouter = createTRPCRouter({
       }
 
       // Build criteria scores array
-      const criteriaScores = product.category.criteria.map((criterion) => {
+      const criteriaScores = panelCriteria.map((criterion) => {
         const productData = criteriaScoresMap.get(criterion.id);
         const categoryData = categoryAveragesMap.get(criterion.id);
 
@@ -1334,6 +1338,9 @@ export const producerRouter = createTRPCRouter({
         (panel) => scoreFor(product, panel) !== null
       );
       const panel = input.panel ?? availablePanels[0] ?? "public";
+      // Grille du panel affiché : le jury pro et le jury public ne notent pas
+      // les mêmes critères.
+      const panelCriteria = criteriaOfPanel(product.category.criteria, panel);
 
       // Notes déposées sur ce produit par les jurés du panel affiché.
       const ratings = (
@@ -1352,7 +1359,7 @@ export const producerRouter = createTRPCRouter({
 
       // Create anonymized jury identifiers (Jury #1, Jury #2, etc.)
       const juryScores = ratings.map((rating, index) => {
-        const criteriaData = product.category.criteria.map((criterion) => {
+        const criteriaData = panelCriteria.map((criterion) => {
           const score = rating.scores.find((cs) => cs.criterionId === criterion.id);
           return {
             criterionId: criterion.id,
@@ -1422,10 +1429,10 @@ export const producerRouter = createTRPCRouter({
       const isPublicPanel = panel === "public";
 
       // Calculate per-criterion averages for aggregated view
-      const criteriaAverages = product.category.criteria.map((criterion) => {
+      const criteriaAverages = panelCriteria.map((criterion) => {
         const scores = juryScores
           .map((j) => j.criteria.find((c) => c.criterionId === criterion.id)?.score)
-          .filter((s): s is number => s !== null);
+          .filter((s): s is number => s != null);
 
         return {
           criterionId: criterion.id,
@@ -1444,7 +1451,7 @@ export const producerRouter = createTRPCRouter({
         ratingScale: cup.ratingScale,
         panel,
         availablePanels,
-        criteria: product.category.criteria.map((c) => ({
+        criteria: panelCriteria.map((c) => ({
           id: c.id,
           name: c.name,
           coefficient: c.coefficient,

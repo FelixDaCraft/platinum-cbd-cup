@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { JURY_PANEL_LABELS } from "~/lib/enums";
 import {
   formatPrice,
   placesLine,
@@ -137,9 +138,14 @@ export function CategoryPrices({
             <li key={cat.id} className={places.tone === "full" ? "is-full" : undefined}>
               <span className="home-cat-name">
                 {cat.name}
-                {showCriteria && cat.criteria.length > 0 && (
-                  <span className="home-cat-criteria">{cat.criteria.join(" · ")}</span>
-                )}
+                {showCriteria &&
+                  cat.criteria.map((group) => (
+                    <span key={group.panel} className="home-cat-criteria">
+                      {/* Une seule grille (édition à un jury) : pas d'étiquette. */}
+                      {cat.criteria.length > 1 && `${JURY_PANEL_LABELS[group.panel]} : `}
+                      {group.names.join(" · ")}
+                    </span>
+                  ))}
               </span>
               <span className={`home-cat-places${places.tone === "low" ? " is-low" : ""}`}>
                 {places.text}

@@ -746,7 +746,11 @@ export async function generateJurySynthesisPdf(
 
   // Get criteria for categories
   const criteria = await db.query.ratingCriteria.findMany({
-    where: inArray(schema.ratingCriteria.categoryId, assignedCategoryIds),
+    // Grille du jury de ce juré : pro et public ne notent pas les mêmes critères.
+    where: and(
+      inArray(schema.ratingCriteria.categoryId, assignedCategoryIds),
+      eq(schema.ratingCriteria.panel, cupJury.panel)
+    ),
   });
 
   // Get criterion scores
@@ -1463,7 +1467,11 @@ export async function generateJuryProductDetailPdf(
 
   // Get criteria ordered by sortOrder
   const criteria = await db.query.ratingCriteria.findMany({
-    where: eq(schema.ratingCriteria.categoryId, productRow.categoryId),
+    // Grille du jury de ce juré : pro et public ne notent pas les mêmes critères.
+    where: and(
+      eq(schema.ratingCriteria.categoryId, productRow.categoryId),
+      eq(schema.ratingCriteria.panel, cupJury.panel)
+    ),
     orderBy: (t, { asc }) => [asc(t.sortOrder)],
   });
 
@@ -1678,7 +1686,11 @@ export async function generateJuryAllDetailsPdf(
 
   // Get all criteria for assigned categories
   const criteria = await db.query.ratingCriteria.findMany({
-    where: inArray(schema.ratingCriteria.categoryId, assignedCategoryIds),
+    // Grille du jury de ce juré : pro et public ne notent pas les mêmes critères.
+    where: and(
+      inArray(schema.ratingCriteria.categoryId, assignedCategoryIds),
+      eq(schema.ratingCriteria.panel, cupJury.panel)
+    ),
     orderBy: (t, { asc }) => [asc(t.sortOrder)],
   });
 

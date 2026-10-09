@@ -48,6 +48,7 @@ vi.mock("~/server/db", () => ({
       cups: { findFirst: vi.fn() },
       registrations: { findFirst: vi.fn(), findMany: vi.fn() },
       products: { findFirst: vi.fn(), findMany: vi.fn() },
+      productRatings: { findMany: vi.fn() },
     },
     update: () => ({
       set: (values: Record<string, unknown>) => {
@@ -636,6 +637,86 @@ describe("Producer Router", () => {
       expect(
         await codeOf(() => caller.getProductDetailedResults({ productId: "prod-1" }))
       ).toBe("FORBIDDEN");
+    });
+
+    // Le jury pro et le jury public notent sur des grilles différentes : la
+    // vue d'un panel ne doit lister que les critères de ce panel.
+    describe("grille de critères par jury", () => {
+      const criteria = [
+        { id: "c-pro-1", panel: "pro", name: "Arôme", coefficient: 2, sortOrder: 0 },
+        { id: "c-pub-1", panel: "public", name: "Plaisir", coefficient: 1, sortOrder: 0 },
+        { id: "c-pro-2", panel: "pro", name: "Texture", coefficient: 1, sortOrder: 1 },
+      ];
+
+      async function withRatedProduct() {
+        await asProducer();
+        await withProducerProfile({ id: "producer-123" });
+        const { db } = await import("~/server/db");
+        vi.mocked(db.query.products.findFirst).mockResolvedValue({
+          id: "prod-1",
+          name: "Produit",
+          categoryId: "cat-1",
+          finalScorePro: "15",
+          finalScorePublic: "17",
+          category: { name: "Fleurs", criteria },
+          registration: {
+            producerId: "producer-123",
+            cup: { id: "cup-1", resultsPublishedAt: new Date(), ratingScale: "0-10" },
+          },
+        } as never);
+        vi.mocked(db.query.products.findMany).mockResolvedValue([{ id: "prod-1" }] as never);
+        vi.mocked(db.query.productRatings.findMany).mockResolvedValue([
+          {
+            jury: { panel: "pro" },
+            submittedAt: new Date(),
+            comment: null,
+            scores: [
+              { criterionId: "c-pro-1", score: 8 },
+              { criterionId: "c-pro-2", score: 6 },
+            ],
+          },
+          {
+            jury: { panel: "public" },
+            submittedAt: new Date(),
+            comment: null,
+            scores: [{ criterionId: "c-pub-1", score: 9 }],
+          },
+        ] as never);
+      }
+
+      it("ne renvoie que les critères du panel demandé (scores par critère)", async () => {
+        await withRatedProduct();
+        const caller = await createCaller();
+
+        const pro = await caller.getMyProductCriteriaScores({ productId: "prod-1", panel: "pro" });
+        expect(pro.criteriaScores.map((c) => c.criterionId)).toEqual(["c-pro-1", "c-pro-2"]);
+        expect(pro.criteriaScores[0]?.productScore).toBe(8);
+
+        const pub = await caller.getMyProductCriteriaScores({
+          productId: "prod-1",
+          panel: "public",
+        });
+        expect(pub.criteriaScores.map((c) => c.criterionId)).toEqual(["c-pub-1"]);
+        expect(pub.criteriaScores[0]?.productScore).toBe(9);
+      });
+
+      it("ne renvoie que les critères du panel demandé (notes des jurés)", async () => {
+        await withRatedProduct();
+        const caller = await createCaller();
+
+        const pro = await caller.getMyProductJuryScores({ productId: "prod-1", panel: "pro" });
+        expect(pro.criteria.map((c) => c.id)).toEqual(["c-pro-1", "c-pro-2"]);
+        expect(pro.juryScores).toHaveLength(1);
+        expect(pro.juryScores[0]?.criteria.map((c) => c.criterionId)).toEqual([
+          "c-pro-1",
+          "c-pro-2",
+        ]);
+
+        const pub = await caller.getMyProductJuryScores({ productId: "prod-1", panel: "public" });
+        expect(pub.criteria.map((c) => c.id)).toEqual(["c-pub-1"]);
+        expect(pub.criteriaAverages.map((c) => c.criterionId)).toEqual(["c-pub-1"]);
+        expect(pub.criteriaAverages[0]?.averageScore).toBe(9);
+      });
     });
 
     it("refuse la synthèse d'une inscription appartenant à un autre producteur", async () => {

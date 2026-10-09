@@ -1409,7 +1409,11 @@ export async function getProductResultsForPdf(
     with: {
       category: {
         with: {
-          criteria: true,
+          // Grille du panel demandé : le jury pro et le jury public ne notent
+          // pas les mêmes critères.
+          criteria: {
+            where: (criteria, { eq: eqFn }) => eqFn(criteria.panel, panel),
+          },
         },
       },
       label: true,

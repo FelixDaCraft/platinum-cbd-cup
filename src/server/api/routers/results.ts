@@ -501,7 +501,10 @@ export const resultsRouter = createTRPCRouter({
           : eq(categories.cupId, cupId),
         orderBy: [asc(categories.sortOrder)],
         with: {
+          // Grille du panel demandé seulement : le jury pro et le jury public
+          // ne notent pas les mêmes critères.
           criteria: {
+            where: eq(ratingCriteria.panel, panel),
             orderBy: [asc(ratingCriteria.sortOrder)],
           },
         },
@@ -718,7 +721,9 @@ export const resultsRouter = createTRPCRouter({
         with: {
           category: {
             with: {
+              // Grille du panel demandé seulement.
               criteria: {
+                where: eq(ratingCriteria.panel, panel),
                 orderBy: [asc(ratingCriteria.sortOrder)],
               },
             },

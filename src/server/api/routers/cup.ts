@@ -604,10 +604,12 @@ export const cupRouter = createTRPCRouter({
         where: (cat, { eq: eqFn }) => eqFn(cat.cupId, input.cupId),
         orderBy: (cat) => [asc(cat.sortOrder)],
         with: {
+          // Chaque critère porte son jury : pro et public ont leur grille.
           criteria: {
             orderBy: (rc) => [asc(rc.sortOrder)],
             columns: {
               id: true,
+              panel: true,
               name: true,
               description: true,
               coefficient: true,

@@ -32,7 +32,7 @@ interface PageProps {
  */
 const getCachedEdition = unstable_cache(
   (cupId: string) => getEditionDetails(cupId),
-  ["portal-edition-details"],
+  ["portal-edition-details-v2"],
   { revalidate: PORTAL_REVALIDATE, tags: [PORTAL_CACHE_TAGS.cups] },
 );
 

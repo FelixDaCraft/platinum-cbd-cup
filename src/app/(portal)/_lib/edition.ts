@@ -9,6 +9,8 @@
  */
 
 import { db } from "~/server/db";
+import type { JuryPanel } from "~/lib/enums";
+import { groupCriteriaByPanel } from "~/lib/criteria-panels";
 import type { CupStatus } from "~/server/db/schema/cups";
 import { getCategoryOccupancy } from "~/server/services/category-quota.service";
 
@@ -77,7 +79,8 @@ export interface EditionCategory {
   priceCents: number | null;
   /** null = pas de limite de places. */
   remaining: number | null;
-  criteria: string[];
+  /** Noms des critères, grille par grille (jury pro puis jury public). */
+  criteria: { panel: JuryPanel; names: string[] }[];
 }
 
 export interface EditionDetails {
@@ -137,7 +140,10 @@ export async function getEditionDetails(cupId: string): Promise<EditionDetails |
         cat.maxProducts == null
           ? null
           : Math.max(0, cat.maxProducts - (occupancy.get(cat.id) ?? 0)),
-      criteria: cat.criteria.map((cr) => cr.name),
+      criteria: groupCriteriaByPanel(cat.criteria).map((group) => ({
+        panel: group.panel,
+        names: group.criteria.map((cr) => cr.name),
+      })),
     })),
     labels: cup.labels
       .filter((l) => l.isPublic)
