@@ -261,6 +261,7 @@ export const productRouter = createTRPCRouter({
               cup: {
                 columns: {
                   id: true,
+                  resultsPublishedAt: true,
                 },
               },
             },
@@ -303,7 +304,12 @@ export const productRouter = createTRPCRouter({
       return {
         productId: product.id,
         productName: product.name,
-        anonymousCode: labelCode(product, input.type, input.panel),
+        // Le producteur ne voit ses codes qu'une fois les résultats publiés :
+        // l'anonymat du jury en dépend.
+        anonymousCode:
+          isOrganizer || product.registration.cup.resultsPublishedAt
+            ? labelCode(product, input.type, input.panel)
+            : null,
         panel: input.panel,
         qrCodeDataUrl: dataUrl,
         qrCodeUrl: url,

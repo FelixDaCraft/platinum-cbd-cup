@@ -3118,11 +3118,12 @@ export const juryRouter = createTRPCRouter({
 
       const cup = cupJury.cup;
 
-      // Only allow when cup is completed
-      if (cup.status !== "completed") {
+      // Anonymat leve a la publication des resultats seulement : la cup est
+      // deja "completed" des le verrouillage des notes.
+      if (!cup.resultsPublishedAt) {
         throw new TRPCError({
           code: "PRECONDITION_FAILED",
-          message: "Les resultats ne sont disponibles qu'une fois la cup terminee",
+          message: "Les resultats ne sont disponibles qu'une fois publies",
         });
       }
 
@@ -3394,10 +3395,13 @@ export const juryRouter = createTRPCRouter({
         });
       }
 
-      if (cupJury.cup.status !== "completed") {
+      // La correspondance code / producteur / variete leve l'anonymat : elle
+      // attend la publication des resultats, pas la simple cloture de la
+      // notation (la cup passe en "completed" des le verrouillage des notes).
+      if (!cupJury.cup.resultsPublishedAt) {
         throw new TRPCError({
           code: "PRECONDITION_FAILED",
-          message: "Les resultats ne sont disponibles qu'une fois la cup terminee",
+          message: "Les resultats ne sont disponibles qu'une fois publies",
         });
       }
 

@@ -814,8 +814,23 @@ export const registrationRouter = createTRPCRouter({
       orderBy: (reg, { desc }) => [desc(reg.createdAt)],
     });
 
+    // Anonymat : avant la publication des résultats, le producteur ne doit
+    // connaître ni les codes de ses produits (il pourrait les souffler à un
+    // juré) ni leurs notes. Masquer à l'écran ne suffit pas : la réponse de
+    // l'API se lit dans le navigateur.
     return registrations.map((reg) => ({
       ...reg,
+      products: reg.cup.resultsPublishedAt
+        ? reg.products
+        : reg.products.map((p) => ({
+            ...p,
+            anonymousCodePro: null,
+            anonymousCodePublic: null,
+            finalScorePro: null,
+            finalScorePublic: null,
+            categoryRankPro: null,
+            categoryRankPublic: null,
+          })),
       productCount: reg.products.length,
     }));
   }),
