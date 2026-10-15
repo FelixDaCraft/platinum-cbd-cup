@@ -116,9 +116,10 @@ export const productRouter = createTRPCRouter({
     )
     .query(async ({ ctx, input }) => {
       const cup = await requireCup(ctx, input.cupId);
-      //4. Get all registrations with products for this cup
+      // Produits en lice seulement (inscription payée ou importée) : les
+      // paniers non aboutis se suivent sur la page Inscriptions.
       const registrations = await ctx.db.query.registrations.findMany({
-        where: (reg, { eq }) => eq(reg.cupId, input.cupId),
+        where: (reg, { eq, and }) => and(eq(reg.cupId, input.cupId), eq(reg.status, "confirmed")),
         with: {
           producer: {
             columns: {

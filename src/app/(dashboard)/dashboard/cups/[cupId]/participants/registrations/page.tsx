@@ -40,7 +40,29 @@ import {
   CheckoutBadge,
   type ProductCheckout,
 } from "~/components/features/products/checkout-badge";
-import { checkoutStateConfig } from "~/lib/registration-checkout";
+import {
+  checkoutStateConfig,
+  isCompeting,
+  isUnfinished,
+  type CheckoutState,
+} from "~/lib/registration-checkout";
+
+/** Filtre par parcours : groupes, puis chaque étape du parcours. */
+const parcoursFilters: { value: string; label: string }[] = [
+  { value: "all", label: "Tous les parcours" },
+  { value: "competing", label: "En lice" },
+  { value: "unfinished", label: "Non terminées" },
+  ...(["paid", "imported", "empty", "cart", "abandoned", "declined", "cancelled"] as const).map(
+    (state) => ({ value: state, label: checkoutStateConfig[state].label })
+  ),
+];
+
+function matchesParcours(state: CheckoutState, filter: string): boolean {
+  if (filter === "all") return true;
+  if (filter === "competing") return isCompeting(state);
+  if (filter === "unfinished") return isUnfinished(state);
+  return state === filter;
+}
 
 // Product status configuration
 const productStatusConfig = {
@@ -152,14 +174,13 @@ export default function CupRegistrationsPage() {
   );
 
   const {
-    data: registrations = [],
+    data: allRegistrations = [],
     isLoading: isRegistrationsLoading,
     isError: isRegistrationsError,
     refetch: refetchRegistrations,
   } = api.registration.listByCup.useQuery(
       {
         cupId,
-        status: statusFilter !== "all" ? (statusFilter as RegistrationStatus) : undefined,
         categoryId: categoryFilter !== "all" ? categoryFilter : undefined,
       },
       { enabled: !!cup }
@@ -218,9 +239,13 @@ export default function CupRegistrationsPage() {
     return null;
   }
 
-  const confirmedCount = registrations.filter((r) => r.status === "confirmed").length;
-  const pendingCount = registrations.filter((r) => r.status === "pending_payment").length;
-  const totalProducts = registrations.reduce((sum, r) => sum + r.productCount, 0);
+  const registrations = allRegistrations.filter((r) =>
+    matchesParcours(r.checkout.state, statusFilter)
+  );
+  const competing = allRegistrations.filter((r) => isCompeting(r.checkout.state));
+  const confirmedCount = competing.length;
+  const pendingCount = allRegistrations.filter((r) => isUnfinished(r.checkout.state)).length;
+  const totalProducts = competing.reduce((sum, r) => sum + r.productCount, 0);
 
   return (
     <div className="space-y-6">
@@ -237,15 +262,15 @@ export default function CupRegistrationsPage() {
       {/* Stats Cards */}
       <div className="grid gap-4 grid-cols-3">
         <div style={{ background: "var(--n-surface)", border: "1px solid var(--n-border)", borderRadius: "12px", padding: "16px" }}>
-          <p className="n-label" style={{ marginBottom: "4px" }}>CONFIRMÉES</p>
+          <p className="n-label" style={{ marginBottom: "4px" }}>EN LICE</p>
           <p style={{ fontFamily: "'Space Mono', monospace", fontSize: "30px", fontWeight: 700, color: "var(--n-success)" }}>{confirmedCount}</p>
         </div>
         <div style={{ background: "var(--n-surface)", border: "1px solid var(--n-border)", borderRadius: "12px", padding: "16px" }}>
-          <p className="n-label" style={{ marginBottom: "4px" }}>EN ATTENTE</p>
+          <p className="n-label" style={{ marginBottom: "4px" }}>NON TERMINÉES</p>
           <p style={{ fontFamily: "'Space Mono', monospace", fontSize: "30px", fontWeight: 700, color: "var(--n-warning)" }}>{pendingCount}</p>
         </div>
         <div style={{ background: "var(--n-surface)", border: "1px solid var(--n-border)", borderRadius: "12px", padding: "16px" }}>
-          <p className="n-label" style={{ marginBottom: "4px" }}>PRODUITS</p>
+          <p className="n-label" style={{ marginBottom: "4px" }}>PRODUITS EN LICE</p>
           <p style={{ fontFamily: "'Space Mono', monospace", fontSize: "30px", fontWeight: 700, color: "var(--n-text-display)" }}>{totalProducts}</p>
         </div>
       </div>
@@ -261,16 +286,17 @@ export default function CupRegistrationsPage() {
           )}
         </div>
         <div className="flex flex-wrap gap-4">
-          <div className="w-full sm:w-[180px]">
+          <div className="w-full sm:w-[210px]">
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="h-9">
-                <SelectValue placeholder="Statut" />
+                <SelectValue placeholder="Parcours" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Tous les statuts</SelectItem>
-                <SelectItem value="confirmed">Confirmé</SelectItem>
-                <SelectItem value="pending_payment">En attente</SelectItem>
-                <SelectItem value="cancelled">Annulé</SelectItem>
+                {parcoursFilters.map((f) => (
+                  <SelectItem key={f.value} value={f.value}>
+                    {f.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>

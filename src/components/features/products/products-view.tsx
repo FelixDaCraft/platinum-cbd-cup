@@ -1,8 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Grid2X2, List } from "lucide-react";
-import { isCompeting, isUnfinished } from "~/lib/registration-checkout";
 import {
   CategoryProductsSection,
   type CategoryProductsSectionProps,
@@ -25,27 +24,6 @@ export interface ProductsViewProps {
 
 type ViewMode = "list" | "cards";
 
-type ProductFilter = "competing" | "unfinished" | "all";
-
-type Product = CategoryProductsSectionProps["products"][number];
-
-const filterOptions: { value: ProductFilter; label: string; title: string }[] = [
-  { value: "competing", label: "En lice", title: "Inscriptions payées ou importées" },
-  {
-    value: "unfinished",
-    label: "Non terminées",
-    title: "Panier vide ou non validé, paiement abandonné ou refusé",
-  },
-  { value: "all", label: "Toutes", title: "Tous les produits, annulés compris" },
-];
-
-const filterMatches: Record<ProductFilter, (product: Product) => boolean> = {
-  // Sans parcours connu, le produit est compté en lice comme auparavant.
-  competing: (p) => !p.checkout || isCompeting(p.checkout.state),
-  unfinished: (p) => !!p.checkout && isUnfinished(p.checkout.state),
-  all: () => true,
-};
-
 export function ProductsView({
   cupName,
   totalProducts,
@@ -53,28 +31,6 @@ export function ProductsView({
   categories,
 }: ProductsViewProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("cards");
-  const [filter, setFilter] = useState<ProductFilter>("competing");
-
-  const allProducts = useMemo(() => categories.flatMap((c) => c.products), [categories]);
-  const counts = useMemo(
-    () =>
-      Object.fromEntries(
-        filterOptions.map((o) => [o.value, allProducts.filter(filterMatches[o.value]).length])
-      ) as Record<ProductFilter, number>,
-    [allProducts]
-  );
-
-  const visibleCategories = useMemo(
-    () =>
-      categories
-        .map((group) => {
-          const products = group.products.filter(filterMatches[filter]);
-          return { ...group, products, count: products.length };
-        })
-        .filter((group) => group.count > 0),
-    [categories, filter]
-  );
-  const visibleProducts = counts[filter];
 
   if (totalProducts === 0) {
     return (
@@ -105,41 +61,6 @@ export function ProductsView({
 
   return (
     <div className="space-y-6">
-      {/* Filtre par parcours d'inscription */}
-      <div
-        role="tablist"
-        aria-label="Filtrer les produits"
-        className="flex flex-wrap gap-2"
-      >
-        {filterOptions.map((option) => {
-          const active = filter === option.value;
-          return (
-            <button
-              key={option.value}
-              role="tab"
-              aria-selected={active}
-              title={option.title}
-              onClick={() => setFilter(option.value)}
-              style={{
-                fontFamily: "'Space Mono', monospace",
-                fontSize: "11px",
-                fontWeight: 700,
-                letterSpacing: "0.06em",
-                textTransform: "uppercase",
-                padding: "6px 12px",
-                borderRadius: "6px",
-                border: "1px solid var(--n-border)",
-                cursor: "pointer",
-                background: active ? "var(--n-text-display)" : "var(--n-surface)",
-                color: active ? "var(--n-black)" : "var(--n-text-secondary)",
-              }}
-            >
-              {option.label} · {counts[option.value]}
-            </button>
-          );
-        })}
-      </div>
-
       {/* Header with stats and view toggle */}
       <div className="flex items-center justify-between">
         <p className="n-label">
@@ -150,9 +71,9 @@ export function ProductsView({
               fontWeight: 700,
             }}
           >
-            {visibleProducts}
+            {totalProducts}
           </span>{" "}
-          produit{visibleProducts > 1 ? "s" : ""} dans{" "}
+          produit{totalProducts > 1 ? "s" : ""} dans{" "}
           <span
             style={{
               color: "var(--n-text-primary)",
@@ -160,9 +81,9 @@ export function ProductsView({
               fontWeight: 700,
             }}
           >
-            {visibleCategories.length}
+            {totalCategories}
           </span>{" "}
-          catégorie{visibleCategories.length > 1 ? "s" : ""}
+          catégorie{totalCategories > 1 ? "s" : ""}
         </p>
 
         {/* View mode toggle */}
@@ -220,12 +141,7 @@ export function ProductsView({
 
       {/* Categories with products */}
       <div className="space-y-6">
-        {visibleCategories.length === 0 && (
-          <p className="n-label" style={{ textAlign: "center", padding: "32px 0" }}>
-            Aucun produit dans ce filtre.
-          </p>
-        )}
-        {visibleCategories.map((categoryGroup) => (
+        {categories.map((categoryGroup) => (
           <CategoryProductsSection
             key={categoryGroup.category.id}
             category={categoryGroup.category}
