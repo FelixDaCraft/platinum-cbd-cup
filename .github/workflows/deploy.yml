@@ -50,6 +50,19 @@ jobs:
       - name: Build Docker image
         run: docker build -t platinum-cbd-cup:latest -f Dockerfile .
 
+      # Le conteneur tourne en `nextjs` (uid 1001) : le dossier des fichiers
+      # envoyés, monté depuis l'hôte, doit lui appartenir. Créé ou repris par
+      # le runner (uid 1002), il bloquait tout nouveau sous-dossier (EACCES sur
+      # producer-logos). Le runner n'est pas root : on passe par l'image
+      # fraîchement construite, lancée en root le temps du chown.
+      - name: Fix uploads ownership
+        run: |
+          set -e
+          mkdir -p /opt/platinum-cbd-cup/uploads
+          docker run --rm --user root \
+            -v /opt/platinum-cbd-cup/uploads:/uploads \
+            --entrypoint chown platinum-cbd-cup:latest -R 1001:65533 /uploads
+
       - name: Start postgres
         working-directory: /opt/platinum-cbd-cup
         run: |
