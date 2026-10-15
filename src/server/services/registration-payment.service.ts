@@ -13,6 +13,7 @@ import {
   renderCallout,
   renderEmailLayout,
   renderGreeting,
+  renderHighlight,
   renderParagraph,
   sendEmail,
 } from "~/server/services/email";
@@ -303,10 +304,55 @@ async function sendRegistrationConfirmationEmail(params: {
       scope: "Payment",
       ref: `registration ${registrationId}`,
       to: email,
-      subject: `Inscription confirmée - ${cupName}`,
-      html: renderEmailLayout({
-        title: "Inscription confirmée",
-        body: `
+      ...renderRegistrationConfirmationEmail({
+        name,
+        cupName,
+        productCount,
+        amountPaid,
+        invoiceNumber,
+        registrationsUrl: `${portalBaseUrl}/producer/registrations`,
+        invoiceUrl,
+      }),
+    });
+  } catch (error) {
+    console.error("[Payment] Failed to send registration confirmation email:", error);
+    // Ne jamais relancer : un échec d'email ne doit pas défaire un paiement confirmé.
+  }
+}
+
+/**
+ * Adresse de réception des échantillons. Unique pour toutes les catégories ;
+ * à déplacer dans la configuration de la cup le jour où elle en dépendra.
+ */
+export const SAMPLE_SHIPPING_ADDRESS = ["Thomas RABAUD", "212 Buron", "85220 Coëx"] as const;
+
+/** Quantités attendues par type de produit, rappelées à la confirmation. */
+export const SAMPLE_QUANTITIES = [
+  { product: "Fleurs", quantity: "120 g, têtes calibrées de 1 g à 1,5 g" },
+  { product: "Hash", quantity: "40 g, en morceaux de 0,5 g" },
+] as const;
+
+/**
+ * Contenu du mail de confirmation d'inscription, séparé de l'envoi pour être
+ * prévisualisé et testé.
+ */
+export function renderRegistrationConfirmationEmail(params: {
+  name: string;
+  cupName: string;
+  productCount: number;
+  amountPaid: string;
+  invoiceNumber: string;
+  registrationsUrl: string;
+  invoiceUrl: string;
+}): { subject: string; html: string } {
+  const { name, cupName, productCount, amountPaid, invoiceNumber, registrationsUrl, invoiceUrl } =
+    params;
+
+  return {
+    subject: `Inscription confirmée - ${cupName}`,
+    html: renderEmailLayout({
+      title: "Inscription confirmée",
+      body: `
       ${renderGreeting(name)}
       ${renderParagraph(`Votre inscription à <strong>${escapeHtml(cupName)}</strong> a été confirmée avec succès.`)}
       ${renderCallout({
@@ -319,19 +365,21 @@ async function sendRegistrationConfirmationEmail(params: {
         textColor: "#166534",
         borderColor: "#22c55e",
       })}
-      ${renderParagraph("Vous recevrez prochainement les instructions pour l'envoi de vos échantillons.")}
-      ${renderButton(`${portalBaseUrl}/producer/registrations`, "Voir mes inscriptions")}
+      ${renderParagraph("<strong>Envoi de vos échantillons</strong> — merci de les expédier à l'adresse suivante :")}
+      ${renderHighlight(SAMPLE_SHIPPING_ADDRESS.map(escapeHtml).join("<br />"))}
+      ${renderParagraph(
+        `Quantités à envoyer pour chaque produit inscrit :<br />${SAMPLE_QUANTITIES.map(
+          (q) => `• <strong>${escapeHtml(q.product)}</strong> : ${escapeHtml(q.quantity)}`
+        ).join("<br />")}`
+      )}
+      ${renderButton(registrationsUrl, "Voir mes inscriptions")}
 
           <div style="text-align: center; margin-bottom: 24px;">
             <a href="${invoiceUrl}" style="color: #d4af37; font-size: 14px; text-decoration: underline;">
               Télécharger ma facture (PDF)
             </a>
           </div>`,
-        footerHtml: "Platinum CBD Cup",
-      }),
-    });
-  } catch (error) {
-    console.error("[Payment] Failed to send registration confirmation email:", error);
-    // Ne jamais relancer : un échec d'email ne doit pas défaire un paiement confirmé.
-  }
+      footerHtml: "Platinum CBD Cup",
+    }),
+  };
 }

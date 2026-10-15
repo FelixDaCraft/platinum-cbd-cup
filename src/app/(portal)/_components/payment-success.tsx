@@ -83,7 +83,7 @@ function SuccessInner({ cupId: cupIdFromUrl }: { cupId?: string }) {
     return (
       <StatusBlock
         title="Inscription confirmée"
-        message="Votre paiement a bien été reçu. Votre facture vient de vous être envoyée par email ; vous recevrez prochainement les instructions pour l'envoi de vos échantillons."
+        message="Votre paiement a bien été reçu. Votre facture vient de vous être envoyée par email ; l'adresse d'envoi de vos échantillons et les quantités attendues y figurent."
         actions={
           <>
             <Link href="/producer/registrations" className="btn accent">

@@ -780,10 +780,9 @@ export default function RegisterPage() {
                 <Link href="/producer/profile">Modifier mon profil producteur</Link>
               </p>
               <div className="notice is-info">
-                <b>Envoi des échantillons.</b> Après paiement, chaque produit
-                reçoit un code anonyme et un QR code, à retrouver dans « Mes
-                inscriptions ». Les instructions d&apos;envoi vous seront
-                communiquées.
+                <b>Envoi des échantillons.</b> Après paiement, l&apos;adresse
+                d&apos;envoi et les quantités attendues vous sont envoyées dans
+                le mail de confirmation.
               </div>
             </>
           )}

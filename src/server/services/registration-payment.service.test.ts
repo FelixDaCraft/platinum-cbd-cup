@@ -60,6 +60,7 @@ vi.mock("~/env", () => ({
 import {
   confirmPaidRegistration,
   PaymentVerificationError,
+  renderRegistrationConfirmationEmail,
 } from "./registration-payment.service";
 
 /** Ligne d'inscription telle que la lit le SELECT ... FOR UPDATE. */
@@ -271,5 +272,34 @@ describe("confirmPaidRegistration", () => {
 
     expect(result).toEqual({ status: "not_found" });
     expect(mockTransaction).not.toHaveBeenCalled();
+  });
+});
+
+describe("renderRegistrationConfirmationEmail", () => {
+  const { subject, html } = renderRegistrationConfirmationEmail({
+    name: "Antoine",
+    cupName: "PlatinumCBD CUP 2027",
+    productCount: 2,
+    amountPaid: "400.00 EUR",
+    invoiceNumber: "INV-2026-00003",
+    registrationsUrl: "https://exemple/producer/registrations",
+    invoiceUrl: "https://exemple/api/invoices/reg_1",
+  });
+
+  it("donne l'adresse d'envoi des échantillons", () => {
+    expect(subject).toBe("Inscription confirmée - PlatinumCBD CUP 2027");
+    expect(html).toContain("Thomas RABAUD");
+    expect(html).toContain("212 Buron");
+    expect(html).toContain("85220 Coëx");
+  });
+
+  it("rappelle les quantités attendues", () => {
+    expect(html).toContain("120 g, têtes calibrées de 1 g à 1,5 g");
+    expect(html).toContain("40 g, en morceaux de 0,5 g");
+  });
+
+  it("garde la facture et le lien vers les inscriptions", () => {
+    expect(html).toContain("INV-2026-00003");
+    expect(html).toContain("https://exemple/api/invoices/reg_1");
   });
 });
