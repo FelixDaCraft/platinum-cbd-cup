@@ -331,9 +331,11 @@ export const productRouter = createTRPCRouter({
     )
     .query(async ({ ctx, input }) => {
       const cup = await requireCup(ctx, input.cupId);
-      //4. Get all products for this cup
+      // Produits en lice seulement : un panier non payé n'a ni code ni
+      // échantillon à étiqueter.
       const registrations = await ctx.db.query.registrations.findMany({
-        where: (reg, { eq: eqFn }) => eqFn(reg.cupId, input.cupId),
+        where: (reg, { eq: eqFn, and: andFn }) =>
+          andFn(eqFn(reg.cupId, input.cupId), eqFn(reg.status, "confirmed")),
         with: {
           products: {
             columns: {
