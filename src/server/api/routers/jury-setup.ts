@@ -14,6 +14,8 @@ import { getCupOrThrow } from "~/server/api/helpers/cup";
 import {
   alignUserRoleToJury,
   assertOrganizerMayPlaceInPanel,
+  categoryConflictMessage,
+  findCompetingCategories,
   isCompetingProducer,
 } from "~/server/api/helpers/jury";
 import * as schema from "~/server/db/schema";
@@ -142,6 +144,11 @@ export const jurySetupProcedures = {
         }
         if (input.panel === "public" && (await isCompetingProducer(ctx.db, userId, cup.id))) {
           refuse("Concourt à cette édition en tant que producteur : exclu du jury public");
+          continue;
+        }
+        const conflicts = await findCompetingCategories(ctx.db, userId, cup.id, categoryIds);
+        if (conflicts.length > 0) {
+          refuse(categoryConflictMessage(conflicts));
           continue;
         }
         accepted.push(userId);

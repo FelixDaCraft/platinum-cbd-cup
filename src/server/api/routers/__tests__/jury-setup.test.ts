@@ -36,6 +36,8 @@ vi.mock("~/server/services/jury-invitation.service", () => ({
 const dbState = vi.hoisted(() => ({
   /** Résultats successifs des `select()` (comptages). */
   selectResults: [] as unknown[][],
+  /** Résultats successifs de `selectDistinct()` (catégories où un juré concourt). */
+  competingResults: [] as unknown[][],
   /** Valeurs passées à `update().set()`. */
   updates: [] as Record<string, unknown>[],
   /** Valeurs passées à `insert().values()`. */
@@ -66,6 +68,14 @@ vi.mock("~/server/db", () => {
       registrations: { findFirst: vi.fn() },
     },
     select: selectChain,
+    selectDistinct: () => {
+      const chain = {
+        from: () => chain,
+        innerJoin: () => chain,
+        where: () => Promise.resolve(dbState.competingResults.shift() ?? []),
+      };
+      return chain;
+    },
     insert: () => ({
       values: (values: unknown) => {
         dbState.inserted.push(values);
@@ -100,6 +110,7 @@ vi.mock("~/server/db", () => {
 beforeEach(() => {
   vi.clearAllMocks();
   dbState.selectResults.length = 0;
+  dbState.competingResults.length = 0;
   dbState.updates.length = 0;
   dbState.inserted.length = 0;
   dbState.updateReturning = [];
@@ -484,6 +495,33 @@ describe("Procédures de mise en place des jurys", () => {
 
       expect(result.failed).toBe(1);
       expect(result.results[0]?.error).toContain("producteur");
+      expect(dbState.inserted).toHaveLength(0);
+    });
+
+    it("refuse au jury pro les catégories où le juré concourt", async () => {
+      const db = await withCup();
+      vi.mocked(db.query.categories.findMany).mockResolvedValue([
+        { id: "cat-hash", name: "Hash", sortOrder: 0 },
+        { id: "cat-indoor", name: "Indoor", sortOrder: 1 },
+      ] as never);
+      vi.mocked(db.query.users.findMany).mockResolvedValue([
+        { id: "u1", name: "Un", email: "u@x.fr" },
+      ] as never);
+      vi.mocked(db.query.juryProfiles.findMany).mockResolvedValue([
+        { id: "jp-1", userId: "u1", juryType: "pro", notifyOnAssignment: true },
+      ] as never);
+      dbState.competingResults.push([{ id: "cat-hash", name: "Hash" }]);
+
+      const caller = await createCaller();
+      const result = await caller.addExistingJurors({
+        cupId: "cup-1",
+        userIds: ["u1"],
+        panel: "pro",
+        categoryIds: ["cat-hash", "cat-indoor"],
+      });
+
+      expect(result.failed).toBe(1);
+      expect(result.results[0]?.error).toContain("Hash");
       expect(dbState.inserted).toHaveLength(0);
     });
   });

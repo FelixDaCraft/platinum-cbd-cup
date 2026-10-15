@@ -16,7 +16,13 @@ import {
   juryProcedure,
 } from "~/server/api/trpc";
 import { getCupOrThrow } from "~/server/api/helpers/cup";
-import { alignUserRoleToJury, assertMayJoinPanel } from "~/server/api/helpers/jury";
+import {
+  alignUserRoleToJury,
+  assertMayJoinPanel,
+  assertNoCategoryConflict,
+  categoryConflictMessage,
+  findCompetingCategories,
+} from "~/server/api/helpers/jury";
 import { codeFor, panelColumns } from "~/server/db/panel-columns";
 import * as schema from "~/server/db/schema";
 import { generateId } from "~/server/db/schema/id";
@@ -972,6 +978,8 @@ export const juryRouter = createTRPCRouter({
         }
       }
 
+      await assertNoCategoryConflict(ctx.db, cupJury.userId, cupJury.cupId, input.categoryIds);
+
       // Purge puis reecriture dans la meme transaction : une coupure entre les
       // deux laissait le jure sans aucune categorie assignee, donc sans rien a
       // noter, sans trace de ce qu'il avait avant.
@@ -1048,6 +1056,28 @@ export const juryRouter = createTRPCRouter({
           code: "BAD_REQUEST",
           message: "Certaines categories ne sont pas valides pour cette cup",
         });
+      }
+
+      // Conflit d'interets : aucun jure du lot ne doit concourir dans les
+      // categories assignees. Le lot est refuse en entier, comme pour les
+      // controles de validite ci-dessus.
+      for (const jury of juries) {
+        const conflicts = await findCompetingCategories(
+          ctx.db,
+          jury.userId,
+          input.cupId,
+          categoryIds
+        );
+        if (conflicts.length > 0) {
+          const user = await ctx.db.query.users.findFirst({
+            where: eq(schema.users.id, jury.userId),
+            columns: { name: true, email: true },
+          });
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: `${user?.name ?? user?.email ?? "Un juré"} : ${categoryConflictMessage(conflicts)}`,
+          });
+        }
       }
 
       // Une lecture pour tout le lot au lieu de deux requetes par jure, et une

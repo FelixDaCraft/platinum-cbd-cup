@@ -3,7 +3,7 @@
  */
 
 import { TRPCError } from "@trpc/server";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray, ne } from "drizzle-orm";
 import type { db as dbType } from "~/server/db";
 import * as schema from "~/server/db/schema";
 import type { JuryPanel } from "~/server/db/schema/juries";
@@ -17,9 +17,9 @@ type DB = typeof dbType;
  *
  *   - `public` : le jury est composé de consommateurs. Un producteur qui a
  *     inscrit des produits n'y a pas sa place, quelle que soit la catégorie.
- *   - `pro` : le panel est choisi à la main par l'organisation, qui s'assure
- *     elle-même que personne ne juge une catégorie où il concourt. On ne
- *     bloque donc pas — et surtout pas au niveau de l'édition entière.
+ *   - `pro` : le panel est choisi à la main par l'organisation. On ne bloque
+ *     pas au niveau de l'édition entière : seules les catégories où le juré
+ *     concourt lui sont interdites (`assertNoCategoryConflict`).
  *
  * Ce second point était le défaut : le contrôle portait sur l'édition sans
  * regarder ni la catégorie ni le type. Sur l'édition 2026, cela excluait les
@@ -170,4 +170,105 @@ export async function alignUserRoleToJury(db: DbClient, userId: string) {
     .update(schema.users)
     .set({ role: "jury", updatedAt: new Date() })
     .where(eq(schema.users.id, userId));
+}
+
+/**
+ * Catégories, parmi `categoryIds`, où l'utilisateur a un produit inscrit à la
+ * cup. Une inscription non payée compte : le produit peut l'être à tout
+ * moment. Seule une inscription annulée libère la catégorie.
+ */
+export async function findCompetingCategories(
+  db: DbClient,
+  userId: string,
+  cupId: string,
+  categoryIds: string[]
+): Promise<{ id: string; name: string }[]> {
+  if (categoryIds.length === 0) return [];
+
+  return db
+    .selectDistinct({ id: schema.categories.id, name: schema.categories.name })
+    .from(schema.products)
+    .innerJoin(schema.registrations, eq(schema.products.registrationId, schema.registrations.id))
+    .innerJoin(schema.producers, eq(schema.registrations.producerId, schema.producers.id))
+    .innerJoin(schema.categories, eq(schema.products.categoryId, schema.categories.id))
+    .where(
+      and(
+        eq(schema.producers.userId, userId),
+        eq(schema.registrations.cupId, cupId),
+        ne(schema.registrations.status, "cancelled"),
+        inArray(schema.products.categoryId, categoryIds)
+      )
+    );
+}
+
+/**
+ * Refuse d'affecter un juré à une catégorie où il concourt comme producteur.
+ *
+ * Les produits sont anonymisés, mais un producteur reconnaît le sien : il ne
+ * peut pas noter ses concurrents directs. Les autres catégories de la cup lui
+ * restent ouvertes.
+ */
+export async function assertNoCategoryConflict(
+  db: DbClient,
+  userId: string,
+  cupId: string,
+  categoryIds: string[]
+): Promise<void> {
+  const conflicts = await findCompetingCategories(db, userId, cupId, categoryIds);
+  if (conflicts.length === 0) return;
+
+  throw new TRPCError({
+    code: "FORBIDDEN",
+    message: categoryConflictMessage(conflicts),
+  });
+}
+
+/** Message d'erreur commun aux refus d'affectation pour conflit d'intérêts. */
+export function categoryConflictMessage(conflicts: { name: string }[]): string {
+  const names = conflicts.map((c) => c.name).join(", ");
+  return `Ce juré a un produit inscrit en ${names} : il ne peut pas juger ${
+    conflicts.length > 1 ? "ces catégories" : "cette catégorie"
+  }.`;
+}
+
+/**
+ * Refuse à un juré d'inscrire un produit dans une catégorie qu'il juge.
+ *
+ * Pendant de `assertNoCategoryConflict`, côté producteur. Un juré public est
+ * refusé quelle que soit la catégorie : ce jury est réservé aux consommateurs
+ * (voir `assertProducerMayJudge`).
+ */
+export async function assertJurorMayCompete(
+  db: DbClient,
+  userId: string,
+  cupId: string,
+  categoryId: string
+): Promise<void> {
+  const membership = await db.query.cupJuries.findFirst({
+    where: and(
+      eq(schema.cupJuries.cupId, cupId),
+      eq(schema.cupJuries.userId, userId),
+      eq(schema.cupJuries.isActive, true)
+    ),
+    columns: { panel: true },
+    with: { categoryAssignments: { columns: { categoryId: true } } },
+  });
+
+  if (!membership) return;
+
+  if (membership.panel === "public") {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message:
+        "Vous êtes juré public de cette édition : ce jury est réservé aux consommateurs, vous ne pouvez pas y inscrire de produit.",
+    });
+  }
+
+  if (membership.categoryAssignments.some((a) => a.categoryId === categoryId)) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message:
+        "Vous êtes juré dans cette catégorie : vous ne pouvez pas y inscrire de produit.",
+    });
+  }
 }

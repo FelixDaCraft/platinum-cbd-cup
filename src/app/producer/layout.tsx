@@ -50,6 +50,18 @@ export default async function PortalProducerLayout({
     redirect("/");
   }
 
+  const pathname = (await headers()).get("x-pathname") ?? "";
+
+  // Un juré peut aussi concourir : sans profil producteur, il doit pouvoir
+  // le créer. Le conflit d'intérêts se contrôle ensuite par catégorie.
+  if (
+    pathname === COMPLETE_PROFILE_PATH &&
+    access.roles.includes("jury") &&
+    !access.roles.includes("producer")
+  ) {
+    return <NothingProducerLayout>{children}</NothingProducerLayout>;
+  }
+
   if (!access.roles.includes("producer") && !access.roles.includes("organizer")) {
     // User has access but wrong role - redirect to their area
     if (access.roles.includes("jury")) {
@@ -62,7 +74,6 @@ export default async function PortalProducerLayout({
   // Signed up but never completed the producer profile: every page under
   // /producer needs one, so funnel them to the form instead of bouncing
   // them back to /login (which would send them straight back here).
-  const pathname = (await headers()).get("x-pathname") ?? "";
   if (access.needsProducerProfile && pathname !== COMPLETE_PROFILE_PATH) {
     redirect(COMPLETE_PROFILE_PATH);
   }

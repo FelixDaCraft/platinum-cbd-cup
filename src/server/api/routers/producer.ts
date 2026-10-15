@@ -165,33 +165,9 @@ export const producerRouter = createTRPCRouter({
         });
       }
 
-      // Conflit d'intérêts : un juré ne peut pas déposer de produits. Il serait
-      // de plus redirigé vers /producer par getUserPortalAccess et perdrait
-      // l'accès à son espace de notation.
-      const juryProfile = await ctx.db.query.juryProfiles.findFirst({
-        where: (juryProfiles, { eq: eqFn }) => eqFn(juryProfiles.userId, ctx.userId),
-        columns: { id: true },
-      });
-
-      // Un juré peut avoir été rattaché à une cup sans profil juré (invitation
-      // par code) : c'est `cup_juries` qui porte le droit de notation.
-      const juryMembership = await ctx.db.query.cupJuries.findFirst({
-        where: (cupJuries, { eq: eqFn, and: andFn }) =>
-          andFn(
-            eqFn(cupJuries.userId, ctx.userId),
-            eqFn(cupJuries.isActive, true)
-          ),
-        columns: { id: true },
-      });
-
-      if (juryProfile !== undefined || juryMembership !== undefined) {
-        throw new TRPCError({
-          code: "FORBIDDEN",
-          message:
-            "Votre compte est un compte juré : il ne peut pas créer de profil producteur",
-        });
-      }
-
+      // Un juré peut aussi concourir : le conflit d'intérêts se contrôle par
+      // catégorie, à l'ajout d'un produit (`assertJurorMayCompete`) et à
+      // l'affectation d'un juré (`assertNoCategoryConflict`).
       const producerId = nanoid();
       const [producer] = await ctx.db
         .insert(schema.producers)

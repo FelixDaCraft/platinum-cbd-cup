@@ -1,7 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { TRPCError } from "@trpc/server";
 
-import { assertMayJoinPanel, assertProducerMayJudge, assertSamePanel } from "../jury";
+import {
+  assertJurorMayCompete,
+  assertMayJoinPanel,
+  assertNoCategoryConflict,
+  assertProducerMayJudge,
+  assertSamePanel,
+} from "../jury";
 
 /**
  * Règle métier : c'est le fait de CONCOURIR qui empêche de juger, et la portée
@@ -10,9 +16,8 @@ import { assertMayJoinPanel, assertProducerMayJudge, assertSamePanel } from "../
  *
  *   - panel `public` : le jury est composé de consommateurs, un producteur
  *     inscrit n'y a pas sa place ;
- *   - panel `pro` : l'organisation compose le panel à la main et veille
- *     elle-même à ce que personne ne juge une catégorie où il concourt — le
- *     code ne doit surtout pas l'en empêcher.
+ *   - panel `pro` : l'organisation compose le panel à la main ; un producteur
+ *     peut y siéger, mais jamais dans une catégorie où il concourt.
  *
  * Un utilisateur n'a qu'un panel par cup : rejoindre l'autre est refusé.
  */
@@ -150,6 +155,91 @@ describe("assertMayJoinPanel", () => {
 
     await expect(assertMayJoinPanel(db, "user-1", "cup-1", "public")).rejects.toMatchObject({
       code: "CONFLICT",
+    });
+  });
+});
+
+describe("assertNoCategoryConflict", () => {
+  function dbAvecConcurrences(categories: { id: string; name: string }[]) {
+    const where = vi.fn().mockResolvedValue(categories);
+    const chaine = { from: () => chaine, innerJoin: () => chaine, where };
+    return {
+      db: { selectDistinct: vi.fn(() => chaine) } as unknown as Parameters<
+        typeof assertNoCategoryConflict
+      >[0],
+      where,
+    };
+  }
+
+  it("laisse affecter un juré aux catégories où il ne concourt pas", async () => {
+    const { db } = dbAvecConcurrences([]);
+
+    await expect(
+      assertNoCategoryConflict(db, "user-1", "cup-1", ["indoor", "outdoor"])
+    ).resolves.toBeUndefined();
+  });
+
+  it("refuse une catégorie où il a un produit, en la nommant", async () => {
+    const { db } = dbAvecConcurrences([{ id: "hash", name: "Hash" }]);
+
+    await expect(
+      assertNoCategoryConflict(db, "user-1", "cup-1", ["hash", "indoor"])
+    ).rejects.toMatchObject({
+      code: "FORBIDDEN",
+      message: expect.stringContaining("Hash") as string,
+    });
+  });
+
+  it("n'interroge pas la base sans catégorie à affecter", async () => {
+    const { db, where } = dbAvecConcurrences([{ id: "hash", name: "Hash" }]);
+
+    await assertNoCategoryConflict(db, "user-1", "cup-1", []);
+
+    expect(where).not.toHaveBeenCalled();
+  });
+});
+
+describe("assertJurorMayCompete", () => {
+  function dbAvecJury(membre?: { panel: "pro" | "public"; categories: string[] }) {
+    return {
+      query: {
+        cupJuries: {
+          findFirst: vi.fn().mockResolvedValue(
+            membre && {
+              panel: membre.panel,
+              categoryAssignments: membre.categories.map((categoryId) => ({ categoryId })),
+            }
+          ),
+        },
+      },
+    } as unknown as Parameters<typeof assertJurorMayCompete>[0];
+  }
+
+  it("laisse concourir un producteur qui n'est pas juré de la cup", async () => {
+    await expect(
+      assertJurorMayCompete(dbAvecJury(), "user-1", "cup-1", "hash")
+    ).resolves.toBeUndefined();
+  });
+
+  it("laisse un juré pro concourir dans une catégorie qu'il ne juge pas", async () => {
+    const db = dbAvecJury({ panel: "pro", categories: ["indoor", "outdoor"] });
+
+    await expect(assertJurorMayCompete(db, "user-1", "cup-1", "hash")).resolves.toBeUndefined();
+  });
+
+  it("refuse à un juré pro un produit dans une catégorie qu'il juge", async () => {
+    const db = dbAvecJury({ panel: "pro", categories: ["indoor"] });
+
+    await expect(assertJurorMayCompete(db, "user-1", "cup-1", "indoor")).rejects.toMatchObject({
+      code: "FORBIDDEN",
+    });
+  });
+
+  it("refuse à un juré public tout produit : ce jury est réservé aux consommateurs", async () => {
+    const db = dbAvecJury({ panel: "public", categories: ["indoor"] });
+
+    await expect(assertJurorMayCompete(db, "user-1", "cup-1", "hash")).rejects.toMatchObject({
+      code: "FORBIDDEN",
     });
   });
 });

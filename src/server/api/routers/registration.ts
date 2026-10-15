@@ -27,6 +27,7 @@ import {
   listByCupSchema,
 } from "~/lib/validations/registration";
 import { anonymizeRegistrationProducts } from "~/server/services/anonymization.service";
+import { assertJurorMayCompete } from "~/server/api/helpers/jury";
 import {
   assertCartWithinQuotas,
   countByCategory,
@@ -542,6 +543,9 @@ export const registrationRouter = createTRPCRouter({
           message: "Cette categorie n'appartient pas a cette cup",
         });
       }
+
+      // Conflit d'interets : un jure ne concourt pas dans une categorie qu'il juge.
+      await assertJurorMayCompete(ctx.db, ctx.userId, registration.cupId, input.categoryId);
 
       // Get price for this product
       const price = await getProductPrice(ctx.db, registration.cupId, input.categoryId);
