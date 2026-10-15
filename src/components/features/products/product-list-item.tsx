@@ -11,6 +11,7 @@ import { EditProductNameDialog } from "./edit-product-name-dialog";
 import { LabAnalysisDialog } from "./lab-analysis-dialog";
 import { api } from "~/trpc/react";
 import { formatPanelCodes } from "~/lib/panel-codes";
+import { CheckoutBadge, type ProductCheckout } from "./checkout-badge";
 
 export interface ProductListItemProps {
   id: string;
@@ -25,6 +26,7 @@ export interface ProductListItemProps {
     companyName: string;
     userName: string | null;
   };
+  checkout?: ProductCheckout;
 }
 
 const statusConfig: Record<
@@ -57,6 +59,7 @@ export function ProductListItem({
   anonymousCodePublic,
   excludedFromResults = false,
   producer,
+  checkout,
 }: ProductListItemProps) {
   // Codes pro / public, dans cet ordre.
   const anonymousCode = formatPanelCodes(anonymousCodePro, anonymousCodePublic);
@@ -89,10 +92,13 @@ export function ProductListItem({
         )}
       </div>
 
-      {/* Product name */}
-      <div className="group min-w-0 flex-1 flex items-center gap-1">
-        <span className="truncate font-medium">{name}</span>
-        <EditProductNameDialog productId={id} productName={name} />
+      {/* Product name + parcours d'inscription si elle n'est pas payée */}
+      <div className="min-w-0 flex-1">
+        <div className="group flex items-center gap-1 min-w-0">
+          <span className="truncate font-medium">{name}</span>
+          <EditProductNameDialog productId={id} productName={name} />
+        </div>
+        <CheckoutBadge checkout={checkout} />
       </div>
 
       {/* Producer */}

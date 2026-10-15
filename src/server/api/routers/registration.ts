@@ -1,7 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { nanoid } from "nanoid";
-import { and as drizzleAnd, eq, gte, lte } from "drizzle-orm";
+import { and as drizzleAnd, eq, gte, lte, sql } from "drizzle-orm";
 
 import {
   createTRPCRouter,
@@ -28,6 +28,7 @@ import {
 } from "~/lib/validations/registration";
 import { anonymizeRegistrationProducts } from "~/server/services/anonymization.service";
 import { assertJurorMayCompete } from "~/server/api/helpers/jury";
+import { checkoutState, isFailureEventId } from "~/lib/registration-checkout";
 import {
   assertCartWithinQuotas,
   countByCategory,
@@ -980,7 +981,12 @@ export const registrationRouter = createTRPCRouter({
 
         await ctx.db
           .update(schema.registrations)
-          .set({ paymentOrderCode: orderCode, updatedAt: new Date() })
+          .set({
+            paymentOrderCode: orderCode,
+            paymentAttempts: sql`${schema.registrations.paymentAttempts} + 1`,
+            lastPaymentAttemptAt: new Date(),
+            updatedAt: new Date(),
+          })
           .where(eq(schema.registrations.id, registration.id));
 
         return { checkoutUrl, orderCode };
@@ -1009,7 +1015,12 @@ export const registrationRouter = createTRPCRouter({
    * d'elle-meme a son echeance.
    */
   releasePaymentReservation: producerProcedure
-    .input(getRegistrationSchema)
+    .input(
+      getRegistrationSchema.extend({
+        // EventId que Viva ajoute a l'URL d'echec : le motif du refus.
+        failureEventId: z.string().max(10).optional(),
+      })
+    )
     .mutation(async ({ ctx, input }) => {
       const registration = await ctx.db.query.registrations.findFirst({
         where: (reg, { eq: eqFn, and: andFn }) =>
@@ -1030,6 +1041,22 @@ export const registrationRouter = createTRPCRouter({
           code: "NOT_FOUND",
           message: "Inscription non trouvee",
         });
+      }
+
+      // Motif du refus, garde pour l'organisation. Indicatif : l'EventId
+      // vient de l'URL de retour, il n'engage aucun paiement.
+      if (
+        registration.status === "pending_payment" &&
+        isFailureEventId(input.failureEventId)
+      ) {
+        await ctx.db
+          .update(schema.registrations)
+          .set({
+            lastPaymentFailureAt: new Date(),
+            lastPaymentFailureCode: input.failureEventId,
+            updatedAt: new Date(),
+          })
+          .where(eq(schema.registrations.id, registration.id));
       }
 
       if (
@@ -1361,6 +1388,14 @@ export const registrationRouter = createTRPCRouter({
       return filteredRegistrations.map((reg) => ({
         id: reg.id,
         status: reg.status,
+        checkout: {
+          state: checkoutState({ ...reg, productCount: reg.products.length }),
+          failureCode: reg.lastPaymentFailureCode,
+          failureAt: reg.lastPaymentFailureAt,
+          lastAttemptAt: reg.lastPaymentAttemptAt,
+          paymentAttempts: reg.paymentAttempts,
+          registrationCreatedAt: reg.createdAt,
+        },
         totalAmount: reg.totalAmount,
         currency: reg.currency,
         createdAt: reg.createdAt,

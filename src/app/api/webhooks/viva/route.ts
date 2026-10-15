@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 
+import { and, eq } from "drizzle-orm";
+
+import { isFailureEventId } from "~/lib/registration-checkout";
 import { getTransaction, getWebhookVerificationKey } from "~/lib/viva";
+import { db } from "~/server/db";
+import * as schema from "~/server/db/schema";
 import {
   confirmPaidRegistration,
   PaymentVerificationError,
@@ -18,11 +23,22 @@ import {
  * registration is marked as paid.
  */
 
-/** "Transaction Payment Created" — the only event this endpoint acts on. */
+/** "Transaction Payment Created" — confirms a registration. */
 const TRANSACTION_PAYMENT_CREATED = 1796;
+
+/**
+ * "Transaction Failed" — card declined. Only recorded so the organizer can
+ * see why a registration was not paid; it never changes its status (Viva:
+ * the producer may still retry and pay). Must be enabled in the Viva
+ * back-office alongside 1796.
+ */
+const TRANSACTION_FAILED = 1798;
 
 /** Viva status id for a settled payment. */
 const STATUS_FINISHED = "F";
+
+/** Viva status id for a failed transaction. */
+const STATUS_ERROR = "E";
 
 /**
  * Garde-fou anti-amplification : l'endpoint est forcément public (Viva ne
@@ -118,6 +134,7 @@ interface VivaWebhookBody {
     StatusId?: string;
     MerchantTrns?: string;
     Amount?: number;
+    ResponseEventId?: number;
   };
 }
 
@@ -139,6 +156,10 @@ export async function POST(request: Request) {
 
   const eventTypeId = body.EventTypeId;
   console.log(`[Viva Webhook] Received event: ${eventTypeId ?? "unknown"}`);
+
+  if (eventTypeId === TRANSACTION_FAILED) {
+    return recordFailedTransaction(body);
+  }
 
   if (eventTypeId !== TRANSACTION_PAYMENT_CREATED) {
     // Acknowledge anything else so Viva stops retrying it.
@@ -202,4 +223,51 @@ export async function POST(request: Request) {
     // 500 so Viva retries — the payment did happen, we just failed to record it.
     return NextResponse.json({ error: "Webhook handler failed" }, { status: 500 });
   }
+}
+
+/**
+ * Trace le motif d'un paiement refusé sur l'inscription concernée.
+ *
+ * Comme pour les paiements, le corps n'est pas cru sur parole : la transaction
+ * est relue chez Viva, qui doit la donner en échec et rattachée à une
+ * inscription. Toujours 200 : un refus mal tracé ne mérite pas de relance.
+ */
+async function recordFailedTransaction(body: VivaWebhookBody) {
+  const transactionId = body.EventData?.TransactionId;
+  const failureCode = String(body.EventData?.ResponseEventId ?? "");
+
+  if (!transactionId || !isFailureEventId(failureCode)) {
+    return NextResponse.json({ received: true });
+  }
+
+  try {
+    const transaction = await getTransaction(transactionId);
+    const registrationId = transaction.merchantTrns;
+
+    if (transaction.statusId !== STATUS_ERROR || !registrationId) {
+      return NextResponse.json({ received: true });
+    }
+
+    await db
+      .update(schema.registrations)
+      .set({
+        lastPaymentFailureAt: new Date(),
+        lastPaymentFailureCode: failureCode,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(schema.registrations.id, registrationId),
+          eq(schema.registrations.status, "pending_payment")
+        )
+      );
+
+    console.log(
+      `[Viva Webhook] Payment declined (${failureCode}) for registration ${registrationId}`
+    );
+  } catch (error) {
+    console.error("[Viva Webhook] Could not record failed transaction:", error);
+  }
+
+  return NextResponse.json({ received: true });
 }

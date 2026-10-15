@@ -22,6 +22,7 @@ import { notifyProductStatusChange } from "~/server/services/product-notificatio
 import type { StoredCompoundRow } from "~/server/db/schema/lab-analyses";
 import { juryPanelEnum } from "~/lib/enums";
 import { codeFor } from "~/server/db/panel-columns";
+import { checkoutState, type CheckoutState } from "~/lib/registration-checkout";
 import { formatPanelCodes } from "~/lib/panel-codes";
 
 /**
@@ -166,11 +167,29 @@ export const productRouter = createTRPCRouter({
           companyName: string;
           userName: string | null;
         };
+        // Parcours de l'inscription : distingue les produits en lice (payés)
+        // de ceux d'une inscription non menée jusqu'au paiement.
+        checkout: {
+          state: CheckoutState;
+          failureCode: string | null;
+          failureAt: Date | null;
+          lastAttemptAt: Date | null;
+          paymentAttempts: number;
+          registrationCreatedAt: Date;
+        };
       };
 
       const allProducts: ProductWithProducer[] = [];
 
       for (const reg of registrations) {
+        const checkout = {
+          state: checkoutState({ ...reg, productCount: reg.products.length }),
+          failureCode: reg.lastPaymentFailureCode,
+          failureAt: reg.lastPaymentFailureAt,
+          lastAttemptAt: reg.lastPaymentAttemptAt,
+          paymentAttempts: reg.paymentAttempts,
+          registrationCreatedAt: reg.createdAt,
+        };
         for (const product of reg.products) {
           allProducts.push({
             id: product.id,
@@ -187,6 +206,7 @@ export const productRouter = createTRPCRouter({
               companyName: reg.producer.companyName,
               userName: reg.producer.user.name,
             },
+            checkout,
           });
         }
       }

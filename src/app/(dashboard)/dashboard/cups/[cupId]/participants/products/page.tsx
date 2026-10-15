@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { ProductsView } from "~/components/features/products/products-view";
 import { BatchQRCodesDialog } from "~/components/features/products/batch-qr-codes-dialog";
 import { api } from "~/trpc/react";
+import { isCompeting } from "~/lib/registration-checkout";
 
 export default function CupProductsPage() {
   const params = useParams();
@@ -35,9 +36,13 @@ export default function CupProductsPage() {
     return null;
   }
 
-  const uniqueProducers = new Set(
-    data.categories.flatMap((cat) => cat.products.map((p) => p.producer?.id))
-  ).size;
+  // Compteurs sur les produits en lice : les paniers non payés se consultent
+  // via le filtre « Non terminées ».
+  const competingProducts = data.categories
+    .flatMap((cat) => cat.products)
+    .filter((p) => isCompeting(p.checkout.state));
+  const uniqueProducers = new Set(competingProducts.map((p) => p.producer.id)).size;
+  const competingCategories = new Set(competingProducts.map((p) => p.categoryId)).size;
 
   return (
     <div className="space-y-6">
@@ -65,13 +70,13 @@ export default function CupProductsPage() {
           <BatchQRCodesDialog
             cupId={cupId}
             cupName={data.cupName}
-            totalProducts={data.totalProducts}
+            totalProducts={competingProducts.length}
             type="reception"
           />
           <BatchQRCodesDialog
             cupId={cupId}
             cupName={data.cupName}
-            totalProducts={data.totalProducts}
+            totalProducts={competingProducts.length}
             type="notation"
             buttonVariant="default"
           />
@@ -98,7 +103,7 @@ export default function CupProductsPage() {
               marginBottom: "6px",
             }}
           >
-            PRODUITS INSCRITS
+            PRODUITS EN LICE
           </p>
           <p
             style={{
@@ -109,7 +114,7 @@ export default function CupProductsPage() {
               lineHeight: 1,
             }}
           >
-            {data.totalProducts}
+            {competingProducts.length}
           </p>
         </div>
         <div
@@ -141,7 +146,7 @@ export default function CupProductsPage() {
               lineHeight: 1,
             }}
           >
-            {data.totalCategories}
+            {competingCategories}
           </p>
         </div>
         <div

@@ -1,11 +1,23 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { mockGetTransaction, mockGetWebhookVerificationKey, mockConfirm } =
+const { mockGetTransaction, mockGetWebhookVerificationKey, mockConfirm, mockUpdateSet } =
   vi.hoisted(() => ({
     mockGetTransaction: vi.fn(),
     mockGetWebhookVerificationKey: vi.fn(),
     mockConfirm: vi.fn(),
+    mockUpdateSet: vi.fn(),
   }));
+
+vi.mock("~/server/db", () => ({
+  db: {
+    update: () => ({
+      set: (values: unknown) => {
+        mockUpdateSet(values);
+        return { where: () => Promise.resolve(undefined) };
+      },
+    }),
+  },
+}));
 
 vi.mock("~/lib/viva", () => ({
   getTransaction: mockGetTransaction,
@@ -178,5 +190,49 @@ describe("Viva webhook", () => {
     expect(statuses).toContain(429);
     // L'API Viva n'est pas appelée pour les requêtes rejetées.
     expect(mockGetTransaction.mock.calls.length).toBeLessThan(35);
+  });
+});
+
+describe("Viva webhook — paiement refusé (1798)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  const failedEvent = {
+    EventTypeId: 1798,
+    EventData: { TransactionId: "trx_e", ResponseEventId: 10051 },
+  };
+
+  it("trace le motif d'un refus confirmé par Viva", async () => {
+    mockGetTransaction.mockResolvedValue({
+      ...settledTransaction,
+      transactionId: "trx_e",
+      statusId: "E",
+    });
+
+    const response = await POST(webhookRequest(failedEvent, "10.0.8.1"));
+
+    expect(response.status).toBe(200);
+    expect(mockUpdateSet).toHaveBeenCalledWith(
+      expect.objectContaining({ lastPaymentFailureCode: "10051" })
+    );
+    // Un refus ne confirme ni n'annule rien.
+    expect(mockConfirm).not.toHaveBeenCalled();
+  });
+
+  it("ignore un refus que Viva ne confirme pas", async () => {
+    mockGetTransaction.mockResolvedValue({ ...settledTransaction, transactionId: "trx_e" });
+
+    const response = await POST(webhookRequest(failedEvent, "10.0.8.2"));
+
+    expect(response.status).toBe(200);
+    expect(mockUpdateSet).not.toHaveBeenCalled();
+  });
+
+  it("accuse réception sans appeler Viva quand le motif manque", async () => {
+    const response = await POST(
+      webhookRequest({ EventTypeId: 1798, EventData: { TransactionId: "trx_e" } }, "10.0.8.3")
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockGetTransaction).not.toHaveBeenCalled();
   });
 });

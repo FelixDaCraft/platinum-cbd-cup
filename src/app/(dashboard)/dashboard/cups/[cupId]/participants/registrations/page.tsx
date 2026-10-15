@@ -36,22 +36,11 @@ import {
 } from "~/components/ui/collapsible";
 import { api } from "~/trpc/react";
 import { formatPrice, type Currency } from "~/lib/validations/pricing";
-
-// Registration status configuration
-const registrationStatusConfig = {
-  pending_payment: {
-    label: "EN ATTENTE",
-    color: "var(--n-warning)",
-  },
-  confirmed: {
-    label: "CONFIRME",
-    color: "var(--n-success)",
-  },
-  cancelled: {
-    label: "ANNULE",
-    color: "var(--n-accent)",
-  },
-};
+import {
+  CheckoutBadge,
+  type ProductCheckout,
+} from "~/components/features/products/checkout-badge";
+import { checkoutStateConfig } from "~/lib/registration-checkout";
 
 // Product status configuration
 const productStatusConfig = {
@@ -108,6 +97,42 @@ interface Registration {
   producer: Producer;
   products: Product[];
   productCount: number;
+  checkout: ProductCheckout;
+}
+
+/**
+ * Montant d'une inscription. Un total à 0 n'est jamais une gratuité ici :
+ * panier vide, ou inscription importée réglée hors du site.
+ */
+function formatRegistrationAmount(registration: Registration): string {
+  if (registration.checkout.state === "imported") return "Hors site";
+  if (registration.checkout.state === "empty") return "—";
+  return formatPrice(registration.totalAmount, (registration.currency as Currency) ?? "EUR");
+}
+
+/** Statut affiché : le parcours d'inscription, plus parlant que le statut brut. */
+function RegistrationStatusCell({ registration }: { registration: Registration }) {
+  if (registration.checkout.state === "paid") {
+    const config = checkoutStateConfig.paid;
+    return (
+      <span
+        title={config.hint}
+        style={{
+          fontFamily: "'Space Mono', monospace",
+          fontSize: "10px",
+          fontWeight: 700,
+          letterSpacing: "0.04em",
+          color: config.color,
+          background: config.bg,
+          borderRadius: "4px",
+          padding: "1px 6px",
+        }}
+      >
+        {config.label}
+      </span>
+    );
+  }
+  return <CheckoutBadge checkout={registration.checkout} />;
 }
 
 export default function CupRegistrationsPage() {
@@ -295,7 +320,6 @@ export default function CupRegistrationsPage() {
                 </TableHeader>
                 <TableBody>
                   {registrations.map((registration) => {
-                    const statusConfig = registrationStatusConfig[registration.status];
                     return (
                       <TableRow
                         key={registration.id}
@@ -318,26 +342,11 @@ export default function CupRegistrationsPage() {
                           </span>
                         </TableCell>
                         <TableCell>
-                          <span style={{
-                            fontFamily: "'Space Mono', monospace",
-                            fontSize: "10px",
-                            letterSpacing: "0.06em",
-                            textTransform: "uppercase",
-                            fontWeight: 700,
-                            color: statusConfig.color,
-                            border: `1px solid ${statusConfig.color}`,
-                            borderRadius: "4px",
-                            padding: "2px 6px",
-                          }}>
-                            {statusConfig.label}
-                          </span>
+                          <RegistrationStatusCell registration={registration} />
                         </TableCell>
                         <TableCell className="hidden sm:table-cell">
                           <span style={{ fontFamily: "'Space Mono', monospace", color: "var(--n-text-primary)" }}>
-                            {formatPrice(
-                              registration.totalAmount,
-                              (registration.currency as Currency) ?? "EUR"
-                            )}
+                            {formatRegistrationAmount(registration)}
                           </span>
                         </TableCell>
                         <TableCell className="hidden md:table-cell">
@@ -381,26 +390,16 @@ export default function CupRegistrationsPage() {
 
               <div style={{ marginTop: "24px" }} className="space-y-6">
                 {/* Registration Status */}
-                <div className="flex items-center gap-3">
-                  <span style={{
-                    fontFamily: "'Space Mono', monospace",
-                    fontSize: "10px",
-                    letterSpacing: "0.06em",
-                    textTransform: "uppercase",
-                    fontWeight: 700,
-                    color: registrationStatusConfig[selectedRegistration.status].color,
-                    border: `1px solid ${registrationStatusConfig[selectedRegistration.status].color}`,
-                    borderRadius: "4px",
-                    padding: "2px 6px",
-                  }}>
-                    {registrationStatusConfig[selectedRegistration.status].label}
-                  </span>
-                  <span style={{ fontFamily: "'Space Mono', monospace", color: "var(--n-text-secondary)" }}>
-                    {formatPrice(
-                      selectedRegistration.totalAmount,
-                      (selectedRegistration.currency as Currency) ?? "EUR"
-                    )}
-                  </span>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-3">
+                    <RegistrationStatusCell registration={selectedRegistration} />
+                    <span style={{ fontFamily: "'Space Mono', monospace", color: "var(--n-text-secondary)" }}>
+                      {formatRegistrationAmount(selectedRegistration)}
+                    </span>
+                  </div>
+                  <p style={{ fontSize: "12px", color: "var(--n-text-secondary)" }}>
+                    {checkoutStateConfig[selectedRegistration.checkout.state].hint}
+                  </p>
                 </div>
 
                 {/* Company Info */}

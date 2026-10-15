@@ -38,7 +38,11 @@ function CancelInner({ cupId }: { cupId?: string }) {
   // Viva ajoute `s` (code de commande) à l'URL d'échec : c'est le moyen le
   // plus sûr de retrouver le panier, l'URL fixe de la source ne portant pas
   // la cup. À défaut, la cup de l'URL, puis le seul panier en attente.
-  const orderCode = useSearchParams().get("s");
+  const searchParams = useSearchParams();
+  const orderCode = searchParams.get("s");
+  // Motif du refus (EventId Viva), transmis pour que l'organisation sache
+  // pourquoi l'inscription n'a pas abouti.
+  const failureEventId = searchParams.get("eventId") ?? undefined;
   const pending = (registrations ?? []).filter(
     (registration) =>
       registration.status === "pending_payment" && registration.productsCount > 0
@@ -63,8 +67,8 @@ function CancelInner({ cupId }: { cupId?: string }) {
   useEffect(() => {
     if (!pendingRegistrationId || releasedFor.current === pendingRegistrationId) return;
     releasedFor.current = pendingRegistrationId;
-    releaseReservation.mutate({ registrationId: pendingRegistrationId });
-  }, [pendingRegistrationId, releaseReservation]);
+    releaseReservation.mutate({ registrationId: pendingRegistrationId, failureEventId });
+  }, [pendingRegistrationId, releaseReservation, failureEventId]);
 
   const handleRetry = async () => {
     if (!pendingRegistration) return;

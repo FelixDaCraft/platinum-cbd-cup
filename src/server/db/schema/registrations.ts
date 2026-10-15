@@ -53,6 +53,15 @@ export const registrations = pgTable(
     // aboutir sur une place déjà libérée. Effacée à la confirmation, à
     // l'annulation de la commande et à toute modification du panier.
     paymentReservedUntil: timestamp("payment_reserved_until", { withTimezone: true }),
+    // Suivi des tentatives de paiement, pour expliquer une inscription non
+    // aboutie (panier jamais validé, paiement abandonné, carte refusée).
+    // `paymentOrderCode` ne suffit pas : il est effacé au retour de la page
+    // d'échec et à chaque modification du panier.
+    paymentAttempts: integer("payment_attempts").notNull().default(0),
+    lastPaymentAttemptAt: timestamp("last_payment_attempt_at", { withTimezone: true }),
+    lastPaymentFailureAt: timestamp("last_payment_failure_at", { withTimezone: true }),
+    // EventId Viva du dernier refus (motif bancaire), voir `paymentFailureLabel`.
+    lastPaymentFailureCode: text("last_payment_failure_code"),
     // Legacy: payments taken through Stripe before the switch to Viva.com.
     // Kept read-only so old registrations keep their audit trail; nothing
     // writes to it any more.

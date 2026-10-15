@@ -11,6 +11,7 @@ import { EditProductNameDialog } from "./edit-product-name-dialog";
 import { LabAnalysisDialog } from "./lab-analysis-dialog";
 import { api } from "~/trpc/react";
 import { formatPanelCodes } from "~/lib/panel-codes";
+import { CheckoutBadge, type ProductCheckout } from "./checkout-badge";
 
 export interface ProductCardProps {
   id: string;
@@ -25,6 +26,7 @@ export interface ProductCardProps {
     companyName: string;
     userName: string | null;
   };
+  checkout?: ProductCheckout;
 }
 
 const statusConfig: Record<
@@ -73,6 +75,7 @@ export function ProductCard({
   anonymousCodePublic,
   excludedFromResults = false,
   producer,
+  checkout,
 }: ProductCardProps) {
   const anonymousCode = formatPanelCodes(anonymousCodePro, anonymousCodePublic);
   const statusInfo = statusConfig[status] ?? {
@@ -200,6 +203,13 @@ export function ProductCard({
             {producer.userName && ` - ${producer.userName}`}
           </span>
         </div>
+
+        {/* Parcours d'inscription, si elle n'est pas payée */}
+        {checkout && checkout.state !== "paid" && (
+          <div style={{ marginTop: "8px" }}>
+            <CheckoutBadge checkout={checkout} />
+          </div>
+        )}
       </div>
 
       {/* Actions */}
