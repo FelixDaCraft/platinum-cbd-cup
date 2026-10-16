@@ -126,6 +126,11 @@ interface Registration {
   invoiceNumber: string | null;
 }
 
+// Ligne label/valeur des cartes du panneau : le libellé ne se compresse pas,
+// la valeur (email, site web…) passe à la ligne au lieu de déborder.
+const detailRowClass =
+  "flex items-baseline justify-between gap-4 [&>:first-child]:shrink-0 [&>:last-child]:min-w-0 [&>:last-child]:text-right [&>:last-child]:[overflow-wrap:anywhere]";
+
 /**
  * Montant d'une inscription. Un total à 0 n'est jamais une gratuité ici :
  * panier vide, ou inscription importée réglée hors du site.
@@ -423,10 +428,10 @@ export default function CupRegistrationsPage() {
 
       {/* Producer Detail Sheet */}
       <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
-        <SheetContent className="w-[400px] sm:w-[540px] overflow-y-auto">
+        <SheetContent className="w-full max-w-[400px] gap-0 overflow-y-auto px-5 pt-6 pb-10 sm:w-[540px] sm:max-w-[540px] sm:px-6">
           {selectedRegistration && (
             <>
-              <SheetHeader>
+              <SheetHeader className="p-0 pr-8">
                 <SheetTitle style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: "16px", textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: 700, color: "var(--n-text-display)" }}>
                   {selectedRegistration.producer.brandName}
                 </SheetTitle>
@@ -435,10 +440,10 @@ export default function CupRegistrationsPage() {
                 </SheetDescription>
               </SheetHeader>
 
-              <div style={{ marginTop: "24px" }} className="space-y-6">
+              <div className="mt-6 space-y-8">
                 {/* Registration Status */}
                 <div className="space-y-2">
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-3">
                     <RegistrationStatusCell registration={selectedRegistration} />
                     <span style={{ fontFamily: "'Space Mono', monospace", color: "var(--n-text-secondary)" }}>
                       {formatRegistrationAmount(selectedRegistration)}
@@ -448,7 +453,7 @@ export default function CupRegistrationsPage() {
                     {checkoutStateConfig[selectedRegistration.checkout.state].hint}
                   </p>
                   {selectedRegistration.invoiceNumber && (
-                    <Button variant="outline" size="sm" asChild>
+                    <Button variant="outline" size="sm" className="mt-1 h-auto min-h-8 whitespace-normal" asChild>
                       <a href={`/api/invoices/${selectedRegistration.id}`} download>
                         <Download className="h-4 w-4 mr-2" />
                         Télécharger la facture {selectedRegistration.invoiceNumber}
@@ -460,21 +465,21 @@ export default function CupRegistrationsPage() {
                 {/* Company Info */}
                 <div className="space-y-3">
                   <p className="n-label" style={{ color: "var(--n-text-secondary)" }}>ENTREPRISE</p>
-                  <div style={{ background: "var(--n-surface)", border: "1px solid var(--n-border)", borderRadius: "8px", padding: "12px" }} className="space-y-2">
-                    <div className="flex justify-between">
+                  <div style={{ background: "var(--n-surface)", border: "1px solid var(--n-border)", borderRadius: "8px", padding: "14px 16px" }} className="space-y-3">
+                    <div className={detailRowClass}>
                       <span className="n-label" style={{ color: "var(--n-text-secondary)" }}>NOM COMMERCIAL</span>
                       <span style={{ color: "var(--n-text-primary)" }}>
                         {selectedRegistration.producer.companyName}
                       </span>
                     </div>
-                    <div className="flex justify-between">
+                    <div className={detailRowClass}>
                       <span className="n-label" style={{ color: "var(--n-text-secondary)" }}>MARQUE</span>
                       <span style={{ color: "var(--n-text-primary)" }}>
                         {selectedRegistration.producer.brandName}
                       </span>
                     </div>
                     {selectedRegistration.producer.siret && (
-                      <div className="flex justify-between">
+                      <div className={detailRowClass}>
                         <span className="n-label" style={{ color: "var(--n-text-secondary)" }}>SIRET</span>
                         <span style={{ fontFamily: "'Space Mono', monospace", color: "var(--n-text-primary)" }}>
                           {selectedRegistration.producer.siret}
@@ -482,7 +487,7 @@ export default function CupRegistrationsPage() {
                       </div>
                     )}
                     {selectedRegistration.producer.website && (
-                      <div className="flex justify-between">
+                      <div className={detailRowClass}>
                         <span className="n-label" style={{ color: "var(--n-text-secondary)" }}>SITE WEB</span>
                         <a
                           href={selectedRegistration.producer.website}
@@ -501,14 +506,14 @@ export default function CupRegistrationsPage() {
                 {/* Contact Info */}
                 <div className="space-y-3">
                   <p className="n-label" style={{ color: "var(--n-text-secondary)" }}>CONTACT</p>
-                  <div style={{ background: "var(--n-surface)", border: "1px solid var(--n-border)", borderRadius: "8px", padding: "12px" }} className="space-y-2">
-                    <div className="flex justify-between">
+                  <div style={{ background: "var(--n-surface)", border: "1px solid var(--n-border)", borderRadius: "8px", padding: "14px 16px" }} className="space-y-3">
+                    <div className={detailRowClass}>
                       <span className="n-label" style={{ color: "var(--n-text-secondary)" }}>NOM</span>
                       <span style={{ color: "var(--n-text-primary)" }}>
                         {selectedRegistration.producer.user.name ?? "Non renseigné"}
                       </span>
                     </div>
-                    <div className="flex justify-between">
+                    <div className={detailRowClass}>
                       <span className="n-label" style={{ color: "var(--n-text-secondary)" }}>EMAIL</span>
                       <a
                         href={`mailto:${selectedRegistration.producer.user.email}`}
@@ -518,7 +523,7 @@ export default function CupRegistrationsPage() {
                         {selectedRegistration.producer.user.email}
                       </a>
                     </div>
-                    <div className="flex justify-between">
+                    <div className={detailRowClass}>
                       <span className="n-label" style={{ color: "var(--n-text-secondary)" }}>TÉLÉPHONE</span>
                       {selectedRegistration.producer.phone ? (
                         <a
@@ -552,20 +557,20 @@ export default function CupRegistrationsPage() {
                           <CollapsibleTrigger asChild>
                             <Button
                               variant="ghost"
-                              className="w-full justify-between h-auto py-2"
+                              className="w-full justify-between gap-3 h-auto px-4 py-2.5"
                               style={{ border: "1px solid var(--n-border)" }}
                             >
-                              <span style={{ fontWeight: 500, color: "var(--n-text-primary)" }}>
+                              <span className="min-w-0 truncate text-left" style={{ fontWeight: 500, color: "var(--n-text-primary)" }}>
                                 {category.name}
                               </span>
-                              <div className="flex items-center gap-2">
+                              <div className="flex shrink-0 items-center gap-2">
                                 <span className="n-tag">{products.length}</span>
                                 <ChevronDown className="h-4 w-4" style={{ color: "var(--n-text-secondary)" }} />
                               </div>
                             </Button>
                           </CollapsibleTrigger>
                           <CollapsibleContent>
-                            <div style={{ paddingLeft: "16px" }} className="space-y-2 py-2">
+                            <div className="space-y-2 px-4 pt-3 pb-1">
                               {products.map((product) => {
                                 const pStatusConfig =
                                   productStatusConfig[
@@ -574,9 +579,9 @@ export default function CupRegistrationsPage() {
                                 return (
                                   <div
                                     key={product.id}
-                                    className="flex items-center justify-between"
+                                    className="flex items-center justify-between gap-3"
                                   >
-                                    <span style={{ color: "var(--n-text-primary)" }}>
+                                    <span className="min-w-0 [overflow-wrap:anywhere]" style={{ color: "var(--n-text-primary)" }}>
                                       {product.name}
                                     </span>
                                     <span style={{
@@ -589,6 +594,7 @@ export default function CupRegistrationsPage() {
                                       border: `1px solid ${pStatusConfig.color}`,
                                       borderRadius: "4px",
                                       padding: "2px 6px",
+                                      flexShrink: 0,
                                     }}>
                                       {pStatusConfig.label}
                                     </span>
@@ -604,7 +610,7 @@ export default function CupRegistrationsPage() {
                 </div>
 
                 {/* Registration Date */}
-                <div style={{ paddingTop: "16px", borderTop: "1px solid var(--n-border-visible)" }}>
+                <div style={{ paddingTop: "24px", borderTop: "1px solid var(--n-border-visible)" }}>
                   <p className="n-label" style={{ color: "var(--n-text-disabled)" }}>
                     Inscrit le{" "}
                     {format(new Date(selectedRegistration.createdAt), "dd MMMM yyyy 'à' HH:mm", {
@@ -617,8 +623,8 @@ export default function CupRegistrationsPage() {
               {/* Suppression : jamais pour une inscription payée (facture à conserver) */}
               {selectedRegistration.checkout.state !== "paid" && (
                 <div
-                  className="space-y-2"
-                  style={{ marginTop: "24px", paddingTop: "16px", borderTop: "1px solid var(--n-border)" }}
+                  className="space-y-3"
+                  style={{ marginTop: "32px", paddingTop: "24px", borderTop: "1px solid var(--n-border)" }}
                 >
                   <p className="text-xs" style={{ color: "var(--n-text-secondary)" }}>
                     Supprime l&apos;inscription et ses {selectedRegistration.productCount} produit
@@ -636,7 +642,7 @@ export default function CupRegistrationsPage() {
                       Supprimer l&apos;inscription
                     </Button>
                   ) : (
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                       <Button
                         size="sm"
                         disabled={deleteRegistration.isPending}
