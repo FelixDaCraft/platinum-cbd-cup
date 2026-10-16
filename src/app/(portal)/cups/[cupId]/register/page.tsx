@@ -307,7 +307,7 @@ export default function RegisterPage() {
           data.vintage ? `Millésime: ${data.vintage}` : null,
           data.thc ? `THC: ${data.thc}%` : null,
           data.cbd ? `CBD: ${data.cbd}%` : null,
-          data.hasCoa ? "COA fourni à réception" : null,
+          data.hasCoa ? "COA disponible" : null,
         ]
           .filter(Boolean)
           .join(" · ") || undefined,
@@ -664,8 +664,9 @@ export default function RegisterPage() {
                     onClick={() => set("hasCoa", !data.hasCoa)}
                   />
                   <span style={{ fontSize: 16, lineHeight: 1.5, color: "var(--fg-2)" }}>
-                    Je fournirai un certificat d&apos;analyse (COA) à réception
-                    de l&apos;échantillon.
+                    J&apos;ai un certificat d&apos;analyse (COA). Facultatif : vous
+                    pourrez déposer le PDF depuis « Mes inscriptions » une fois le
+                    produit ajouté ; seule l&apos;organisation le consultera.
                   </span>
                 </label>
               </fieldset>

@@ -812,6 +812,8 @@ export const registrationRouter = createTRPCRouter({
             anonymousCodePro: true,
             anonymousCodePublic: true,
             receivedAt: true,
+            coaFile: true,
+            coaUploadedAt: true,
             finalScorePro: true,
             finalScorePublic: true,
             categoryRankPro: true,

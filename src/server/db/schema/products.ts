@@ -50,6 +50,11 @@ export const products = pgTable(
     anonymousCodePublic: text("anonymous_code_public"),
     // Timestamp when the product was received (set when status changes to "received")
     receivedAt: timestamp("received_at", { withTimezone: true }),
+    // Certificat d'analyse (COA) déposé par le producteur ou l'organisation :
+    // chemin /uploads/coa/<productId>/…pdf, servi aux seuls organisateurs et
+    // au producteur du produit (il porte souvent son nom). Facultatif.
+    coaFile: text("coa_file"),
+    coaUploadedAt: timestamp("coa_uploaded_at", { withTimezone: true }),
     // Résultats calculés à la publication, un jeu par panel (échelle 0-100).
     // Score = moyenne des moyennes pondérées des jurés du panel.
     finalScorePro: numeric("final_score_pro", { precision: 5, scale: 2 }),

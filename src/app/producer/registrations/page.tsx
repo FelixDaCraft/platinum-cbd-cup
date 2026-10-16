@@ -17,6 +17,7 @@ import {
 import { cn } from "~/lib/utils";
 import { api } from "~/trpc/react";
 import { QRCodeDisplay } from "~/components/features/products/qr-code-display";
+import { CoaControl } from "~/components/features/products/coa-control";
 import {
   convertScoreToScale,
 } from "~/lib/validations/labels";
@@ -578,6 +579,12 @@ export default function ProducerRegistrationsPage() {
                                   </p>
                                 </div>
                                 <div className="flex items-center gap-3 shrink-0">
+                                  {/* Certificat d'analyse, facultatif : vu par l'organisation seule */}
+                                  <CoaControl
+                                    productId={product.id}
+                                    coaFile={product.coaFile}
+                                    onChanged={() => void refetch()}
+                                  />
                                   {product.status === "pending" && (
                                     <QRCodeDisplay
                                       productId={product.id}

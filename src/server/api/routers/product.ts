@@ -23,6 +23,7 @@ import type { StoredCompoundRow } from "~/server/db/schema/lab-analyses";
 import { juryPanelEnum } from "~/lib/enums";
 import { codeFor } from "~/server/db/panel-columns";
 import { checkoutState, type CheckoutState } from "~/lib/registration-checkout";
+import { removeCoaFile } from "~/server/services/coa-files";
 import { formatPanelCodes } from "~/lib/panel-codes";
 
 /**
@@ -157,6 +158,8 @@ export const productRouter = createTRPCRouter({
         anonymousCodePro: string | null;
         anonymousCodePublic: string | null;
         excludedFromResults: boolean;
+        coaFile: string | null;
+        coaUploadedAt: Date | null;
         categoryId: string;
         category: {
           id: string;
@@ -200,6 +203,8 @@ export const productRouter = createTRPCRouter({
             anonymousCodePro: product.anonymousCodePro,
             anonymousCodePublic: product.anonymousCodePublic,
             excludedFromResults: product.excludedFromResults,
+            coaFile: product.coaFile,
+            coaUploadedAt: product.coaUploadedAt,
             categoryId: product.categoryId,
             category: product.category,
             producer: {
@@ -263,6 +268,38 @@ export const productRouter = createTRPCRouter({
    * Get QR code for a single product
    * Returns both reception and notation QR codes
    */
+  /**
+   * Retire le certificat d'analyse (COA) d'un produit : organisation, ou
+   * producteur du produit.
+   */
+  removeCoa: protectedProcedure
+    .input(z.object({ productId: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      const product = await ctx.db.query.products.findFirst({
+        where: (p, { eq: eqFn }) => eqFn(p.id, input.productId),
+        columns: { id: true, coaFile: true },
+        with: { registration: { columns: {}, with: { producer: { columns: { userId: true } } } } },
+      });
+
+      if (!product) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Produit non trouve" });
+      }
+
+      const isOwner = product.registration.producer.userId === ctx.userId;
+      if (!isOwner && !(await callerIsOrganizer(ctx))) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Acces non autorise a ce produit" });
+      }
+
+      await ctx.db
+        .update(products)
+        .set({ coaFile: null, coaUploadedAt: null, updatedAt: new Date() })
+        .where(eq(products.id, product.id));
+
+      await removeCoaFile(product.coaFile);
+
+      return { removed: true as const };
+    }),
+
   getQRCode: protectedProcedure
     .input(
       z.object({

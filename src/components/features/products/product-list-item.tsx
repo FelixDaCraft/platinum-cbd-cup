@@ -12,6 +12,7 @@ import { LabAnalysisDialog } from "./lab-analysis-dialog";
 import { api } from "~/trpc/react";
 import { formatPanelCodes } from "~/lib/panel-codes";
 import { CheckoutBadge, type ProductCheckout } from "./checkout-badge";
+import { CoaControl } from "./coa-control";
 
 export interface ProductListItemProps {
   id: string;
@@ -27,6 +28,7 @@ export interface ProductListItemProps {
     userName: string | null;
   };
   checkout?: ProductCheckout;
+  coaFile?: string | null;
 }
 
 const statusConfig: Record<
@@ -60,6 +62,7 @@ export function ProductListItem({
   excludedFromResults = false,
   producer,
   checkout,
+  coaFile = null,
 }: ProductListItemProps) {
   // Codes pro / public, dans cet ordre.
   const anonymousCode = formatPanelCodes(anonymousCodePro, anonymousCodePublic);
@@ -117,6 +120,12 @@ export function ProductListItem({
         anonymousCode={anonymousCode}
       />
 
+      {/* Certificat d'analyse déposé par le producteur ou l'organisation */}
+      <CoaControl
+        productId={id}
+        coaFile={coaFile}
+        onChanged={() => void utils.product.listByCupGroupedByCategory.invalidate()}
+      />
       {/* Lab analysis upload + review */}
       <LabAnalysisDialog
         productId={id}

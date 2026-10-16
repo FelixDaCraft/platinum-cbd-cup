@@ -35,16 +35,42 @@ const UPLOADS_ROOT = path.resolve(process.cwd(), "public", "uploads");
  * serving them to anyone who guesses a product id would leak a producer's
  * analysis results.
  */
-const PRIVATE_PREFIXES = ["lab-analyses"] as const;
+const PRIVATE_PREFIXES = ["lab-analyses", "coa"] as const;
 
-async function callerIsOrganizer(): Promise<boolean> {
+async function sessionUserId(): Promise<string | null> {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user?.id) return false;
+  return session?.user?.id ?? null;
+}
+
+async function isOrganizer(userId: string): Promise<boolean> {
   const caller = await db.query.users.findFirst({
-    where: (u, { eq }) => eq(u.id, session.user.id),
+    where: (u, { eq }) => eq(u.id, userId),
     columns: { role: true, isAdmin: true },
   });
   return Boolean(caller && (caller.role === "organizer" || caller.isAdmin));
+}
+
+/** Vrai si l'utilisateur est le producteur du produit (COA rangés par produit). */
+async function ownsProduct(userId: string, productId: string | undefined): Promise<boolean> {
+  if (!productId) return false;
+  const product = await db.query.products.findFirst({
+    where: (p, { eq }) => eq(p.id, productId),
+    columns: { id: true },
+    with: { registration: { columns: {}, with: { producer: { columns: { userId: true } } } } },
+  });
+  return product?.registration.producer.userId === userId;
+}
+
+/**
+ * Accès aux sous-dossiers privés : analyses labo pour l'organisation seule,
+ * COA pour l'organisation et le producteur qui l'a déposé
+ * (`coa/<productId>/…`).
+ */
+async function mayReadPrivate(prefix: (typeof PRIVATE_PREFIXES)[number], segments: string[]) {
+  const userId = await sessionUserId();
+  if (!userId) return false;
+  if (await isOrganizer(userId)) return true;
+  return prefix === "coa" && (await ownsProduct(userId, segments[1]));
 }
 
 export async function GET(
@@ -81,14 +107,15 @@ export async function GET(
       return NextResponse.json({ error: "Invalid path" }, { status: 400 });
     }
 
-    if (
-      PRIVATE_PREFIXES.includes(
-        pathSegments[0] as (typeof PRIVATE_PREFIXES)[number]
-      ) &&
-      !(await callerIsOrganizer())
-    ) {
+    const privatePrefix = PRIVATE_PREFIXES.find((prefix) => prefix === pathSegments[0]);
+    if (privatePrefix && !(await mayReadPrivate(privatePrefix, pathSegments))) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
+    // Un fichier privé ne doit jamais être gardé par un cache partagé
+    // (Cloudflare met les PDF en cache) : il serait resservi sans contrôle.
+    const cacheControl = privatePrefix
+      ? "private, no-store"
+      : "public, max-age=31536000, immutable";
 
     // Check the file exists and is a regular file (never a directory)
     let fileStat;
@@ -109,7 +136,7 @@ export async function GET(
         status: 304,
         headers: {
           ETag: etag,
-          "Cache-Control": "public, max-age=31536000, immutable",
+          "Cache-Control": cacheControl,
         },
       });
     }
@@ -122,7 +149,7 @@ export async function GET(
     const responseHeaders: Record<string, string> = {
       "Content-Type": mimeType,
       "X-Content-Type-Options": "nosniff",
-      "Cache-Control": "public, max-age=31536000, immutable",
+      "Cache-Control": cacheControl,
       "Content-Length": fileStat.size.toString(),
       ETag: etag,
       "Last-Modified": new Date(fileStat.mtimeMs).toUTCString(),
