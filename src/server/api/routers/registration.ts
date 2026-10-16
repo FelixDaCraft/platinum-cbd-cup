@@ -29,6 +29,7 @@ import {
 import { anonymizeRegistrationProducts } from "~/server/services/anonymization.service";
 import { assertJurorMayCompete } from "~/server/api/helpers/jury";
 import { checkoutState, isFailureEventId } from "~/lib/registration-checkout";
+import { logActivity } from "~/server/services/activity-logger";
 
 /**
  * Le téléphone est obligatoire pour aller au paiement : l'organisation en a
@@ -1336,6 +1337,86 @@ export const registrationRouter = createTRPCRouter({
    * Organisateur uniquement : la reponse expose l'email, le SIRET et le montant
    * paye de chaque producteur participant.
    */
+  /**
+   * Supprime une inscription et ses produits (organisateur).
+   *
+   * Réservé aux inscriptions sans paiement en ligne : panier vide ou non
+   * validé, paiement abandonné ou refusé, inscription annulée, ou importée
+   * sans notes. Une inscription payée garde sa facture (pièce comptable) :
+   * elle s'annule et se rembourse, elle ne s'efface pas.
+   */
+  deleteByOrganizer: organizerProcedure
+    .input(z.object({ registrationId: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      const registration = await ctx.db.query.registrations.findFirst({
+        where: eq(schema.registrations.id, input.registrationId),
+        with: {
+          cup: { columns: { name: true } },
+          producer: { columns: { brandName: true, companyName: true } },
+          products: {
+            columns: { id: true },
+            with: { ratings: { columns: { id: true }, limit: 1 } },
+          },
+        },
+      });
+
+      if (!registration) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Inscription non trouvee" });
+      }
+
+      if (
+        registration.paymentTransactionId ||
+        registration.stripePaymentIntentId ||
+        registration.invoiceNumber
+      ) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message:
+            "Inscription payée : sa facture doit être conservée. Remboursez-la depuis Viva plutôt que de la supprimer.",
+        });
+      }
+
+      if (registration.products.some((product) => product.ratings.length > 0)) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "Des produits de cette inscription ont déjà été notés : elle ne peut plus être supprimée.",
+        });
+      }
+
+      // Commande Viva encore ouverte : on l'annule d'abord, sinon le
+      // producteur pourrait payer une inscription qui n'existe plus.
+      if (registration.status === "pending_payment" && registration.paymentOrderCode) {
+        const cancelled = await cancelPaymentOrder(registration.paymentOrderCode);
+        if (!cancelled && registration.paymentReservedUntil && registration.paymentReservedUntil > new Date()) {
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message:
+              "Un paiement est peut-être en cours sur cette inscription. Réessayez dans quelques minutes.",
+          });
+        }
+      }
+
+      await ctx.db
+        .delete(schema.registrations)
+        .where(eq(schema.registrations.id, registration.id));
+
+      void logActivity({
+        userId: ctx.userId,
+        action: "other",
+        description: `Inscription supprimée : ${registration.producer.brandName} — ${registration.cup.name} (${registration.products.length} produit(s))`,
+        metadata: {
+          kind: "registration_deleted",
+          registrationId: registration.id,
+          cupId: registration.cupId,
+          producerId: registration.producerId,
+          status: registration.status,
+          productCount: registration.products.length,
+        },
+      });
+
+      return { deleted: true as const };
+    }),
+
   listByCup: organizerProcedure
     .input(listByCupSchema)
     .query(async ({ ctx, input }) => {
@@ -1425,6 +1506,7 @@ export const registrationRouter = createTRPCRouter({
           brandName: reg.producer.brandName,
           siret: reg.producer.siret,
           website: reg.producer.website,
+          phone: reg.producer.phone,
           user: reg.producer.user,
         },
         products: reg.products.map((p) => ({

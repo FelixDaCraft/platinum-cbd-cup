@@ -4,7 +4,8 @@ import { useState } from "react";
 import { useParams } from "next/navigation";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "~/components/ui/button";
 import {
@@ -46,6 +47,7 @@ import {
   isUnfinished,
   type CheckoutState,
 } from "~/lib/registration-checkout";
+import { formatPhone } from "~/lib/validations/producer";
 
 /** Filtre par parcours : groupes, puis chaque étape du parcours. */
 const parcoursFilters: { value: string; label: string }[] = [
@@ -92,6 +94,7 @@ interface Producer {
   brandName: string;
   siret: string | null;
   website: string | null;
+  phone: string | null;
   user: {
     id: string;
     name: string | null;
@@ -165,6 +168,7 @@ export default function CupRegistrationsPage() {
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [selectedRegistration, setSelectedRegistration] = useState<Registration | null>(null);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const { data: cup, isLoading: isCupLoading, isError: isCupError } = api.cup.getById.useQuery({ id: cupId });
 
@@ -202,8 +206,24 @@ export default function CupRegistrationsPage() {
 
   const handleViewDetails = (registration: Registration) => {
     setSelectedRegistration(registration);
+    setConfirmDelete(false);
     setIsSheetOpen(true);
   };
+
+  const utils = api.useUtils();
+  const deleteRegistration = api.registration.deleteByOrganizer.useMutation({
+    onSuccess: () => {
+      toast.success("Inscription supprimée");
+      setIsSheetOpen(false);
+      setSelectedRegistration(null);
+      void utils.registration.listByCup.invalidate();
+      void utils.product.listByCupGroupedByCategory.invalidate();
+    },
+    onError: (error) => {
+      toast.error(error.message);
+      setConfirmDelete(false);
+    },
+  });
 
   const resetFilters = () => {
     setStatusFilter("all");
@@ -360,6 +380,15 @@ export default function CupRegistrationsPage() {
                             <div className="n-label" style={{ color: "var(--n-text-secondary)" }}>
                               {registration.producer.companyName}
                             </div>
+                            {registration.producer.phone && (
+                              <a
+                                href={`tel:${registration.producer.phone}`}
+                                className="n-label hover:underline"
+                                style={{ color: "var(--n-text-secondary)" }}
+                              >
+                                {formatPhone(registration.producer.phone)}
+                              </a>
+                            )}
                           </div>
                         </TableCell>
                         <TableCell className="hidden sm:table-cell">
@@ -489,6 +518,20 @@ export default function CupRegistrationsPage() {
                         {selectedRegistration.producer.user.email}
                       </a>
                     </div>
+                    <div className="flex justify-between">
+                      <span className="n-label" style={{ color: "var(--n-text-secondary)" }}>TÉLÉPHONE</span>
+                      {selectedRegistration.producer.phone ? (
+                        <a
+                          href={`tel:${selectedRegistration.producer.phone}`}
+                          style={{ color: "var(--n-accent)" }}
+                          className="hover:underline"
+                        >
+                          {formatPhone(selectedRegistration.producer.phone)}
+                        </a>
+                      ) : (
+                        <span style={{ color: "var(--n-text-disabled)" }}>Non renseigné</span>
+                      )}
+                    </div>
                   </div>
                   <Button variant="outline" size="sm" asChild>
                     <a href={`mailto:${selectedRegistration.producer.user.email}`} className="n-label">
@@ -570,6 +613,47 @@ export default function CupRegistrationsPage() {
                   </p>
                 </div>
               </div>
+
+              {/* Suppression : jamais pour une inscription payée (facture à conserver) */}
+              {selectedRegistration.checkout.state !== "paid" && (
+                <div
+                  className="space-y-2"
+                  style={{ marginTop: "24px", paddingTop: "16px", borderTop: "1px solid var(--n-border)" }}
+                >
+                  <p className="text-xs" style={{ color: "var(--n-text-secondary)" }}>
+                    Supprime l&apos;inscription et ses {selectedRegistration.productCount} produit
+                    {selectedRegistration.productCount !== 1 ? "s" : ""}. Le compte du producteur
+                    est conservé.
+                  </p>
+                  {!confirmDelete ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setConfirmDelete(true)}
+                      style={{ color: "var(--n-accent)", borderColor: "var(--n-accent)" }}
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Supprimer l&apos;inscription
+                    </Button>
+                  ) : (
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        disabled={deleteRegistration.isPending}
+                        onClick={() =>
+                          deleteRegistration.mutate({ registrationId: selectedRegistration.id })
+                        }
+                        style={{ background: "var(--n-accent)", color: "var(--n-text-display)" }}
+                      >
+                        {deleteRegistration.isPending ? "Suppression…" : "Confirmer la suppression"}
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => setConfirmDelete(false)}>
+                        Annuler
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
             </>
           )}
         </SheetContent>

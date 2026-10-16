@@ -29,11 +29,17 @@ export function normalizePhone(value: string): string {
   return value.replace(/[\s.\-()]/g, "");
 }
 
-/** Affichage : 0612345678 → 06 12 34 56 78 ; le reste est rendu tel quel. */
+/**
+ * Affichage : 0612345678 → 06 12 34 56 78, +33612345678 → +33 6 12 34 56 78 ;
+ * les autres formats sont rendus tels quels.
+ */
 export function formatPhone(value: string | null | undefined): string {
   if (!value) return "";
   const digits = normalizePhone(value);
-  return /^0\d{9}$/.test(digits) ? digits.replace(/(\d{2})(?=\d)/g, "$1 ") : value;
+  if (/^0\d{9}$/.test(digits)) return digits.replace(/(\d{2})(?=\d)/g, "$1 ");
+  const french = /^\+33(\d)(\d{8})$/.exec(digits);
+  if (french) return `+33 ${french[1]} ${french[2]!.replace(/(\d{2})(?=\d)/g, "$1 ")}`;
+  return value;
 }
 
 export const phoneSchema = z
