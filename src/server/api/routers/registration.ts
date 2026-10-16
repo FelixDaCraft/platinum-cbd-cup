@@ -1490,6 +1490,7 @@ export const registrationRouter = createTRPCRouter({
       return filteredRegistrations.map((reg) => ({
         id: reg.id,
         status: reg.status,
+        invoiceNumber: reg.invoiceNumber,
         checkout: {
           state: checkoutState({ ...reg, productCount: reg.products.length }),
           failureCode: reg.lastPaymentFailureCode,

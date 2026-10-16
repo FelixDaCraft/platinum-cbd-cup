@@ -3,12 +3,15 @@
  * GET /api/invoices/[registrationId]
  *
  * Returns the PDF invoice for a registration.
- * Only the producer who owns the registration can download.
+ * The producer who owns the registration can download it, and so can the
+ * organizers — but only an invoice that already exists: generating it
+ * allocates the next invoice number, which only the producer's own download
+ * (or the payment) may trigger.
  */
 
 import { NextResponse } from "next/server";
 import { db } from "~/server/db";
-import { forbidden, requireSession } from "../../_lib/route-auth";
+import { forbidden, getCallerRole, requireSession } from "../../_lib/route-auth";
 import { eq } from "drizzle-orm";
 import * as schema from "~/server/db/schema";
 import { generateInvoicePdf } from "~/server/services/invoice.service";
@@ -91,9 +94,19 @@ export async function GET(
       );
     }
 
-    // Check if the user is the owner of this registration
+    // Owner, or an organizer for an invoice already issued (an imported
+    // registration settled off-site has none and must not get one here).
     if (registration.producer.userId !== session.userId) {
-      return forbidden();
+      const role = await getCallerRole(session.userId);
+      if (role !== "organizer") {
+        return forbidden();
+      }
+      if (!registration.invoiceNumber) {
+        return NextResponse.json(
+          { error: "Aucune facture n'a été émise pour cette inscription" },
+          { status: 404 }
+        );
+      }
     }
 
     // Check if registration is confirmed (has paid)

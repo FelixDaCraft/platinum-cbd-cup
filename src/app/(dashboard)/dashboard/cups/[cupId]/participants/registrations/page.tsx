@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useParams } from "next/navigation";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
-import { ChevronDown, Trash2 } from "lucide-react";
+import { ChevronDown, Download, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "~/components/ui/button";
@@ -123,6 +123,7 @@ interface Registration {
   products: Product[];
   productCount: number;
   checkout: ProductCheckout;
+  invoiceNumber: string | null;
 }
 
 /**
@@ -446,6 +447,14 @@ export default function CupRegistrationsPage() {
                   <p style={{ fontSize: "12px", color: "var(--n-text-secondary)" }}>
                     {checkoutStateConfig[selectedRegistration.checkout.state].hint}
                   </p>
+                  {selectedRegistration.invoiceNumber && (
+                    <Button variant="outline" size="sm" asChild>
+                      <a href={`/api/invoices/${selectedRegistration.id}`} download>
+                        <Download className="h-4 w-4 mr-2" />
+                        Télécharger la facture {selectedRegistration.invoiceNumber}
+                      </a>
+                    </Button>
+                  )}
                 </div>
 
                 {/* Company Info */}
