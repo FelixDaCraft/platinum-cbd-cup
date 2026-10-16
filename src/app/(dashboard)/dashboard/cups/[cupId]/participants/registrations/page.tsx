@@ -380,15 +380,6 @@ export default function CupRegistrationsPage() {
                             <div className="n-label" style={{ color: "var(--n-text-secondary)" }}>
                               {registration.producer.companyName}
                             </div>
-                            {registration.producer.phone && (
-                              <a
-                                href={`tel:${registration.producer.phone}`}
-                                className="n-label hover:underline"
-                                style={{ color: "var(--n-text-secondary)" }}
-                              >
-                                {formatPhone(registration.producer.phone)}
-                              </a>
-                            )}
                           </div>
                         </TableCell>
                         <TableCell className="hidden sm:table-cell">
