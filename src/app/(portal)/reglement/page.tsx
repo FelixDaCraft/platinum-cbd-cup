@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 
+import { ArrowUp } from "lucide-react";
 import { db } from "~/server/db";
+import { PageHead } from "~/components/portal/street/street";
 import { getLegalDocument } from "~/server/services/legal-document.service";
 import { TipTapContent, tiptapHeadings } from "../_components/tiptap-content";
 import { canonical } from "../_lib/seo";
@@ -51,17 +53,13 @@ export default async function ReglementPage() {
   }).format(doc.updatedAt);
 
   return (
-    <div className="pg pg--narrow page-enter legal">
-      <header className="pg-head">
-        <h1 className="display">{doc.title}</h1>
-        {doc.lede && <p className="pg-lede">{doc.lede}</p>}
-        <p className="pg-meta" style={{ margin: 0 }}>
-          Dernière mise à jour : {updatedAt}
-        </p>
-      </header>
+    <div className="pg pg--narrow legal">
+      <PageHead edition="Conditions de participation" title="Règlement" lede={doc.lede || undefined} seed={10}>
+        <p className="legal-updated">Dernière mise à jour : {updatedAt}</p>
+      </PageHead>
 
       {headings.length > 1 && (
-        <nav aria-label="Sommaire" className="legal-toc">
+        <nav aria-label="Sommaire" className="legal-toc" id="sommaire">
           <p className="legal-toc-title">Sommaire</p>
           <ol className="legal-toc-list">
             {headings.map((h) => (
@@ -82,6 +80,14 @@ export default async function ReglementPage() {
         {sections.map((section, i) => (
           <section key={i} id={`article-${i + 1}`} className="prose legal-section">
             <TipTapContent content={{ type: "doc", content: section }} />
+            {/* Le règlement est long (11 000 px sur mobile) : retour au
+                sommaire en fin d'article. */}
+            {headings.length > 1 && (
+              <a href="#sommaire" className="legal-top">
+                Sommaire
+                <ArrowUp size={14} aria-hidden="true" />
+              </a>
+            )}
           </section>
         ))}
       </div>

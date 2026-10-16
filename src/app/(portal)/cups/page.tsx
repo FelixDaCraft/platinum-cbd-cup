@@ -15,6 +15,7 @@ import {
   type EditionDetails,
 } from "../_lib/edition";
 import { baseUrl, OG_IMAGE_PAR_DEFAUT } from "../_lib/seo";
+import { PageHead, Sparkle } from "~/components/portal/street/street";
 
 export const metadata: Metadata = {
   title: "Participer",
@@ -108,17 +109,19 @@ export default async function CupsPage() {
   const now = Date.now();
 
   return (
-    <div className="home">
-      <section className="home-hero is-compact">
-        <div className="home-hero-text">
-          <h1 className="display">Participer</h1>
-          <p className="lede home-hero-lede">
-            Inscrivez vos produits dans une ou plusieurs catégories, en une seule
-            commande. Chaque produit est noté à l&apos;aveugle par le jury
-            professionnel et par le jury public.
-          </p>
-        </div>
-      </section>
+    <div className="st-home st-cups">
+      <PageHead
+        edition={
+          <>
+            Producteurs
+            <Sparkle size={12} />
+            Inscriptions
+          </>
+        }
+        title="Participer"
+        lede="Inscrivez vos produits dans une ou plusieurs catégories, en une seule commande. Chaque produit est noté à l'aveugle par le jury professionnel et par le jury public."
+        seed={5}
+      />
 
       <section className="home-section" style={{ paddingTop: 0 }}>
         {current.length === 0 ? (

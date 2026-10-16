@@ -14,12 +14,14 @@ import {
 import { PORTAL_CACHE_TAGS, PORTAL_REVALIDATE } from "../../_lib/cache";
 import {
   editionOrdinal,
+  editionYear,
   getEditionDetails,
   phaseOf,
   statusLine,
   stepsOf,
 } from "../../_lib/edition";
 import { baseUrl, imagePartage } from "../../_lib/seo";
+import { PageHead, Sparkle } from "~/components/portal/street/street";
 
 interface PageProps {
   params: Promise<{ cupId: string }>;
@@ -32,7 +34,7 @@ interface PageProps {
  */
 const getCachedEdition = unstable_cache(
   (cupId: string) => getEditionDetails(cupId),
-  ["portal-edition-details-v2"],
+  ["portal-edition-details-v3"],
   { revalidate: PORTAL_REVALIDATE, tags: [PORTAL_CACHE_TAGS.cups] },
 );
 
@@ -47,6 +49,9 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       description: true,
       publicPageDescription: true,
       bannerUrl: true,
+      eventDate: true,
+      ratingEndAt: true,
+      createdAt: true,
     },
   });
 
@@ -57,21 +62,24 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   }
 
   const url = `${baseUrl()}/cups/${cupId}`;
+  // Le nom en base (« PlatinumCBD CUP 2027 ») répétait la marque déjà portée
+  // par le gabarit de titre : on titre par l'édition.
+  const title = `Édition ${editionYear(cup)}`;
   const description =
-    cup.publicPageDescription ??
-    cup.description ??
-    `Catégories, tarifs et calendrier de ${cup.name}.`;
+    cup.publicPageDescription?.trim() ||
+    cup.description?.trim() ||
+    `Catégories, tarifs et calendrier de l'édition ${editionYear(cup)} de la Platinum CBD Cup.`;
 
   return {
-    title: cup.name,
+    title,
     description,
     alternates: { canonical: url },
     openGraph: {
       type: "website",
-      title: cup.name,
+      title,
       description,
       url,
-      images: imagePartage(cup.bannerUrl, cup.name),
+      images: imagePartage(cup.bannerUrl, title),
     },
   };
 }
@@ -87,41 +95,42 @@ export default async function CupDetailPage({ params }: PageProps) {
   const registerHref = `/cups/${edition.id}/register`;
 
   return (
-    <div className="home">
-      <section className="home-hero is-compact">
-        <div className="home-hero-text">
-          <EditionStatus open={isOpen} text={statusLine(edition, phase, now)} />
-          <div className="home-section-head">
-            <p className="eyebrow">
-              <b>
-                Édition {edition.year} · {editionOrdinal(edition.year)}
-              </b>
-            </p>
-            <h1 className="display">{edition.name}</h1>
-          </div>
-          {edition.description && (
-            <p className="lede home-hero-lede">{edition.description}</p>
-          )}
-          <div className="home-actions">
-            {isOpen && (
-              <Link href={registerHref} className="btn accent btn-lg">
-                Inscrire mes produits
-              </Link>
-            )}
-            {edition.resultsPublished && (
-              <Link
-                href={`/palmares?edition=${edition.year}`}
-                className={`btn btn-lg ${isOpen ? "ghost" : "accent"}`}
-              >
-                Voir le palmarès {edition.year}
-              </Link>
-            )}
-            <Link href="/reglement" className="btn ghost btn-lg">
-              Lire le règlement
+    <div className="st-home">
+      <PageHead
+        edition={
+          <>
+            {editionOrdinal(edition.year)}
+            <Sparkle size={12} />
+            {edition.year}
+          </>
+        }
+        title={`Édition ${edition.year}`}
+        seed={5}
+      >
+        <EditionStatus open={isOpen} text={statusLine(edition, phase, now)} />
+        <p className="st-head-lede">
+          {edition.description ??
+            `Catégories, tarifs et calendrier de la ${editionOrdinal(edition.year)} de la Platinum CBD Cup.`}
+        </p>
+        <div className="st-actions">
+          {isOpen && (
+            <Link href={registerHref} className="btn accent btn-lg">
+              Inscrire mes produits
             </Link>
-          </div>
+          )}
+          {edition.resultsPublished && (
+            <Link
+              href={`/palmares?edition=${edition.year}`}
+              className={`btn btn-lg ${isOpen ? "ghost" : "accent"}`}
+            >
+              Voir le palmarès {edition.year}
+            </Link>
+          )}
+          <Link href="/reglement" className="btn ghost btn-lg">
+            Lire le règlement
+          </Link>
         </div>
-      </section>
+      </PageHead>
 
       <EditionSteps steps={stepsOf(edition, now)} year={edition.year} />
 
@@ -134,7 +143,6 @@ export default async function CupDetailPage({ params }: PageProps) {
 
       <JuriesExplainer labels={edition.labels} />
 
-      <div className="home-section-spacer" />
     </div>
   );
 }

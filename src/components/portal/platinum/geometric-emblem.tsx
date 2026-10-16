@@ -73,8 +73,16 @@ export function GeometricEmblem({
   const reducedMotion = usePrefersReducedMotion();
   const effectiveRotationSpeed = reducedMotion ? 0 : rotationSpeed;
 
+  // Hors écran, la boucle de rendu s'arrête : elle redessinait sinon le
+  // canvas à chaque image, même défilé tout en bas de la page.
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const onScreen = useOnScreen(wrapperRef);
+  // Sans rotation (mouvement réduit), on ne redessine qu'à l'interaction.
+  const frameloop = onScreen && !reducedMotion ? "always" : "demand";
+
   return (
     <div
+      ref={wrapperRef}
       style={{
         position: "relative",
         width: size,
@@ -117,6 +125,10 @@ export function GeometricEmblem({
 
       <Canvas
         camera={{ position: [0, 0.6, 4.2], fov: 35 }}
+        // Plafond de densité : en Retina, 750 px donnaient 1500×1500 pixels
+        // redessinés à chaque image.
+        dpr={[1, 1.5]}
+        frameloop={frameloop}
         gl={{ antialias: true, alpha: true }}
         style={{
           position: "relative",
@@ -263,6 +275,19 @@ function useSilenceGltfTextureNoise() {
       }
     };
   }, []);
+}
+
+/** Vrai tant que l'élément est (au moins en partie) dans l'écran. */
+function useOnScreen(ref: React.RefObject<HTMLElement | null>): boolean {
+  const [visible, setVisible] = useState(true);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !("IntersectionObserver" in window)) return;
+    const io = new IntersectionObserver(([entry]) => setVisible(entry?.isIntersecting ?? true));
+    io.observe(el);
+    return () => io.disconnect();
+  }, [ref]);
+  return visible;
 }
 
 /**

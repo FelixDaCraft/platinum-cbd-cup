@@ -7,6 +7,7 @@ import * as schema from "~/server/db/schema";
 import type { Cup } from "~/server/db/schema/cups";
 import { ActiveChipIntoView } from "./_components/active-chip-into-view";
 import { EditionSelect } from "./_components/edition-select";
+import { EditionBar, LiquidText, Sparkle } from "~/components/portal/street/street";
 import {
   PORTAL_CACHE_TAGS,
   PORTAL_REVALIDATE,
@@ -33,6 +34,8 @@ interface ProductRow {
   code: string;
   productName: string;
   producerName: string;
+  /** Logo du producteur (chemin /uploads/…), s'il en a déposé un. */
+  logo: string | null;
   categoryName: string;
   categoryId: string;
   score: number;
@@ -254,6 +257,7 @@ async function fetchProducts(
       disqualified: schema.products.disqualified,
       brandName: schema.producers.brandName,
       companyName: schema.producers.companyName,
+      logo: schema.producers.logo,
     })
     .from(schema.products)
     .innerJoin(
@@ -299,6 +303,7 @@ async function fetchProducts(
         // Company first (the entity), brand second as a fallback when the
         // producer registered without a company (rare, single-person).
         producerName: r.companyName ?? r.brandName ?? "—",
+        logo: r.logo ?? null,
         categoryName: r.categoryName ?? "",
         categoryId: r.categoryId ?? "",
         score,
@@ -578,18 +583,22 @@ export default async function PalmaresPage({
   return (
     <div className="pal">
       {/* ── EN-TÊTE ──────────────────────────────────────────────────── */}
-      <section className="pal-head">
-        <div className="pal-head-title">
-          <h1 className="display">
-            Palmarès <em>{year}</em>
-          </h1>
-          <p>
-            {titleCase(editionOrdinal(year))} · {productCount} produit
-            {productCount > 1 ? "s" : ""} · {categories.length} catégorie
-            {categories.length > 1 ? "s" : ""}
-          </p>
+      <section className="pal-head st-pal-head">
+        <EditionBar>
+          {editionOrdinal(year)}
+          <Sparkle size={12} />
+          {productCount} produit{productCount > 1 ? "s" : ""}
+          <Sparkle size={12} />
+          {categories.length} catégorie{categories.length > 1 ? "s" : ""}
+        </EditionBar>
+        <div className="st-pal-head-row">
+          <LiquidText as="h1" className="st-pal-title" seed={11} fit={8}>
+            Palmarès
+            <br />
+            {year}
+          </LiquidText>
+          <EditionSelect options={editionOptions} current={String(year)} />
         </div>
-        <EditionSelect options={editionOptions} current={String(year)} />
       </section>
 
       {/* ── JURY ET CATÉGORIES ───────────────────────────────────────── */}
@@ -673,26 +682,42 @@ export default async function PalmaresPage({
         </div>
 
         {podium.length > 0 && (
-          <ol className="pal-podium" aria-label="Podium">
+          <ol className="st-podium st-pal-podium" aria-label="Podium">
             {podium.map((p) => {
               const showScore = !hideScores;
               const tier = isPublic && p.rank > 1 ? p.labelName : null;
-              const meta = [
-                showScore ? frScore(p.score, cup.ratingScale) : null,
-                tier ? `Label ${titleCase(tier)}` : null,
-              ].filter(Boolean);
+              const distinction =
+                isPublic && p.rank === 1 ? "Prix du public" : tier ? `Label ${titleCase(tier)}` : null;
               return (
                 <li key={p.code} className={`is-rank-${Math.min(p.rank, 3)}`}>
-                  {isPublic && p.rank === 1 && (
-                    <span className="pal-podium-prize">Prix du public</span>
-                  )}
-                  <span className="pal-podium-rank">
+                  <span className="st-podium-rank">
                     {p.rank}
                     <sup>{p.rank === 1 ? "er" : "e"}</sup>
                   </span>
-                  <span className="pal-podium-name">{p.productName || p.code}</span>
-                  <span className="pal-podium-producer">{p.producerName}</span>
-                  {meta.length > 0 && <span className="pal-podium-meta">{meta.join(" · ")}</span>}
+                  {/* Logo du producteur, sinon la note dans la case. */}
+                  {p.logo ? (
+                    <span className="st-podium-logo">
+                      <img
+                        src={p.logo}
+                        alt={`Logo ${p.producerName}`}
+                        width={160}
+                        height={160}
+                        loading="lazy"
+                        decoding="async"
+                      />
+                    </span>
+                  ) : showScore ? (
+                    <span className="st-podium-logo is-score">
+                      <b>{frNumber(p.score)}</b>
+                      <small>sur {scaleMax(cup.ratingScale)}</small>
+                    </span>
+                  ) : null}
+                  <span className="st-podium-name">{p.productName || p.code}</span>
+                  <span className="st-podium-producer">{p.producerName}</span>
+                  {distinction && <span className="st-podium-prize">{distinction}</span>}
+                  {showScore && p.logo && (
+                    <span className="st-podium-score">{frScore(p.score, cup.ratingScale)}</span>
+                  )}
                 </li>
               );
             })}

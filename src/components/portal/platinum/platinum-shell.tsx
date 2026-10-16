@@ -4,6 +4,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { MobileBottomNav } from "~/components/portal/mobile/mobile-bottom-nav";
+import { Instagram } from "lucide-react";
+import { StreetDefs } from "~/components/portal/street/street";
+import { ScrollReveal } from "~/components/portal/street/scroll-reveal";
 import { useSession } from "~/lib/auth-client";
 import { currentEdition } from "./edition";
 import { accountHref, isNavActive, PORTAL_NAV } from "./nav";
@@ -22,8 +25,33 @@ interface PlatinumShellProps {
   liveStatus?: "live" | "idle";
 }
 
+const FOOTER_LINKS = [
+  { href: "/about", label: "Le concours" },
+  { href: "/cups", label: "Participer" },
+  { href: "/palmares", label: "Palmarès" },
+  { href: "/archives", label: "Éditions" },
+  { href: "/reglement", label: "Règlement" },
+  { href: "/articles", label: "Articles" },
+  { href: "/press", label: "Presse" },
+  { href: "/sponsors", label: "Partenaires" },
+  { href: "/contact", label: "Contact" },
+  { href: "/activate", label: "Activer un code juré" },
+  { href: "/mentions-legales", label: "Mentions légales" },
+  { href: "/confidentialite", label: "Confidentialité" },
+];
+
+/** Réseaux sociaux de la cup ; ajouter ici les prochains comptes. */
+const SOCIAL_LINKS = [
+  {
+    href: "https://www.instagram.com/platinum_cup_france/",
+    label: "Instagram",
+    handle: "@platinum_cup_france",
+    Icon: Instagram,
+  },
+];
+
 /**
- * Coquille du portail public (direction « Grand Cru ») : en-tête collant
+ * Coquille du portail public (direction « street » 2027) : en-tête collant
  * (logo, navigation, compte, bouton principal), contenu, pied de page, et
  * barre de navigation basse sur mobile.
  */
@@ -36,6 +64,8 @@ export function PlatinumShell({ children, liveStatus = "idle" }: PlatinumShellPr
 
   return (
     <div className="shell">
+      <StreetDefs />
+      <ScrollReveal />
       {/* Lien d'évitement : premier élément focalisable de la page. */}
       <a href="#contenu-principal" className="skip-link">
         Aller au contenu
@@ -96,26 +126,43 @@ export function PlatinumShell({ children, liveStatus = "idle" }: PlatinumShellPr
 
       <MobileBottomNav />
 
-      <footer className="footer">
-        <span className="brand-name footer-brand">Platinum CBD Cup</span>
-
-        <nav className="footer-nav" aria-label="Liens du pied de page">
-          {[
-            { href: "/about", label: "Le concours" },
-            { href: "/reglement", label: "Règlement" },
-            { href: "/press", label: "Presse" },
-            { href: "/sponsors", label: "Partenaires" },
-            { href: "/contact", label: "Contact" },
-            { href: "/mentions-legales", label: "Mentions légales" },
-            { href: "/confidentialite", label: "Confidentialité" },
-          ].map((link) => (
-            <Link key={link.href} href={link.href}>
-              {link.label}
-            </Link>
-          ))}
-        </nav>
-
-        <span suppressHydrationWarning>© {year} Association Platinum CBD</span>
+      <footer className="footer st-footer">
+        <div className="st-footer-inner">
+          <div className="st-footer-top">
+            <div className="st-footer-brand">
+              <span className="st-footer-name">Platinum CBD Cup</span>
+              <p className="st-footer-tag">
+                Le concours européen du CBD. Chaque produit est noté à l&apos;aveugle par un
+                jury professionnel et par un jury public, depuis 2023.
+              </p>
+            </div>
+            <div className="st-footer-links">
+              <nav className="st-footer-nav" aria-label="Liens du pied de page">
+                {FOOTER_LINKS.map((link) => (
+                  <Link key={link.href} href={link.href}>
+                    {link.label}
+                  </Link>
+                ))}
+              </nav>
+              <ul className="st-footer-social" aria-label="Réseaux sociaux">
+                {SOCIAL_LINKS.map(({ href, label, handle, Icon }) => (
+                  <li key={href}>
+                    <a href={href} target="_blank" rel="noopener noreferrer">
+                      <Icon size={20} strokeWidth={1.8} aria-hidden="true" />
+                      <span>
+                        <b>{label}</b>
+                        {handle}
+                      </span>
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+          <div className="st-footer-base">
+            <span suppressHydrationWarning>© {year} Association Platinum CBD</span>
+          </div>
+        </div>
       </footer>
     </div>
   );

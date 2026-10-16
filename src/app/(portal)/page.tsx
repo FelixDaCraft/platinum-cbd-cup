@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { unstable_cache } from "next/cache";
+import { Fragment } from "react";
 import Link from "next/link";
+import { ArrowUpRight } from "lucide-react";
 import { and, asc, between, eq, inArray, isNotNull } from "drizzle-orm";
 import { db } from "~/server/db";
 import * as schema from "~/server/db/schema";
@@ -8,14 +10,25 @@ import { panelColumns } from "~/server/db/panel-columns";
 import type { JuryPanel } from "~/lib/enums";
 import { DesktopEmblem } from "./_components/desktop-emblem";
 import {
+  EditionBar,
+  GoldList,
+  LiquidText,
+  longestWord,
+  Sparkle,
+  Tape,
+} from "~/components/portal/street/street";
+import {
   CategoryPrices,
   EditionStatus,
   EditionSteps,
   JuriesExplainer,
 } from "./_components/edition-blocks";
 import {
+  editionOrdinal,
   editionYear,
   formatNumber,
+  formatPrice,
+  formatShortDay,
   getCurrentEditionId,
   getEditionDetails,
   phaseOf,
@@ -64,6 +77,8 @@ interface Teaser {
     rank: number;
     productName: string;
     producerName: string;
+    /** Logo du producteur (chemin /uploads/…), s'il en a déposé un. */
+    logo: string | null;
     /** null quand l'édition ne publie pas ses notes (2023). */
     score: number | null;
   }[];
@@ -97,6 +112,7 @@ async function getPalmaresTeaser(): Promise<Teaser | null> {
         categoryName: schema.categories.name,
         companyName: schema.producers.companyName,
         brandName: schema.producers.brandName,
+        logo: schema.producers.logo,
       })
       .from(schema.products)
       .innerJoin(schema.registrations, eq(schema.products.registrationId, schema.registrations.id))
@@ -143,6 +159,7 @@ async function getPalmaresTeaser(): Promise<Teaser | null> {
       rank: r.rank ?? 0,
       productName: r.productName ?? "",
       producerName: r.companyName ?? r.brandName ?? "—",
+      logo: r.logo ?? null,
       // L'édition 2023 a été classée sans notes chiffrées (cf. palmarès).
       score: year === 2023 || r.score == null ? null : Number(r.score),
     })),
@@ -198,149 +215,223 @@ export default async function PortalHomePage() {
   const tiers = edition?.labels.length ? edition.labels : (teaser?.labels ?? []);
 
   const palmaresHref = teaser ? "/palmares" : "/archives";
-  const palmaresLabel = teaser ? `Voir le palmarès ${teaser.year}` : "Les éditions passées";
+  const palmaresLabel = teaser ? `Palmarès ${teaser.year}` : "Les éditions passées";
   const registerHref = edition ? `/cups/${edition.id}/register` : "/cups";
 
   const teaserHref = teaser
     ? `/palmares?edition=${teaser.cupId}&cat=${teaser.categoryId}${teaser.bothPanels ? `&jury=${teaser.panel}` : ""}`
     : null;
 
-  return (
-    <div className="home">
-      {/* ── HERO ───────────────────────────────────────────────────────── */}
-      <section className="home-hero">
-        <div className="home-hero-text">
-          <EditionStatus
-            open={isOpen}
-            text={
-              edition && phase
-                ? statusLine(edition, phase)
-                : teaser
-                  ? `Palmarès ${teaser.year} publié · prochaine édition en préparation`
-                  : "Prochaine édition en préparation"
-            }
-          />
+  const status =
+    edition && phase
+      ? statusLine(edition, phase)
+      : teaser
+        ? `Palmarès ${teaser.year} publié · prochaine édition en préparation`
+        : "Prochaine édition en préparation";
 
-          <div className="home-hero-title">
-            <h1 className="display display--brand">
-              Platinum
-              <br />
-              CBD Cup{heroYear != null && <> <em>{heroYear}</em></>}
-            </h1>
+  const ordinal = heroYear != null ? editionOrdinal(heroYear) : null;
+  const categoryNames = edition?.categories.map((c) => c.name) ?? [];
+
+  // Tarif affiché seulement s'il est réellement enregistré pour l'édition.
+  const prices = edition?.categories.map((c) => c.priceCents ?? 0) ?? [];
+  const minPrice = prices.length > 0 ? Math.min(...prices) : 0;
+  const priceText =
+    edition && minPrice > 0
+      ? `${prices.every((p) => p === minPrice) ? "" : "Dès "}${formatPrice(minPrice, edition.currency)} par produit`
+      : null;
+
+  const closeAt = edition?.registrationCloseAt ?? null;
+  const tapeItems = edition
+    ? [
+        isOpen && closeAt != null
+          ? `Inscriptions ouvertes jusqu'au ${formatShortDay(closeAt, true)}`
+          : status,
+        categoryNames.length > 0
+          ? `${categoryNames.length} catégorie${categoryNames.length > 1 ? "s" : ""}`
+          : null,
+        priceText,
+        "Notation à l'aveugle",
+        "Jury pro et jury public",
+        ordinal && heroYear != null ? `${ordinal} · ${heroYear}` : null,
+      ].filter((x): x is string => Boolean(x))
+    : [];
+
+  const heroTitle = ["Mesure-toi", "aux", "meilleurs"];
+
+  return (
+    <div className="st-home">
+      {/* ── HERO ───────────────────────────────────────────────────────── */}
+      <section className="st-hero">
+        {ordinal && heroYear != null && (
+          <EditionBar>
+            {ordinal}
+            <Sparkle size={12} />
+            {heroYear}
+          </EditionBar>
+        )}
+
+        <div className="st-hero-grid">
+          <div className="st-hero-text">
+            <EditionStatus open={isOpen} text={status} />
+
+            <LiquidText
+              as="h1"
+              className="st-hero-title"
+              seed={5}
+              fit={longestWord(...heroTitle)}
+            >
+              <span className="sr-only">Platinum CBD Cup{heroYear != null ? ` ${heroYear}` : ""} : </span>
+              {heroTitle.map((line, i) => (
+                <Fragment key={line}>
+                  {i > 0 && <br />}
+                  {line}
+                </Fragment>
+              ))}
+            </LiquidText>
+
+            <p className="st-hero-lede">
+              Le concours européen du CBD. Vos produits sont notés à l&apos;aveugle par
+              un jury professionnel et par un jury public, chacun avec son propre code
+              d&apos;anonymat.
+            </p>
+
+            {categoryNames.length > 0 && <GoldList items={categoryNames} />}
+
+            <div className="st-actions">
+              {isOpen ? (
+                <>
+                  <Link href={registerHref} className="btn accent btn-lg">
+                    Inscrire mes produits
+                  </Link>
+                  <Link href={palmaresHref} className="btn ghost btn-lg">
+                    {palmaresLabel}
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <Link href={palmaresHref} className="btn accent btn-lg">
+                    {palmaresLabel}
+                  </Link>
+                  <Link href="/about" className="btn ghost btn-lg">
+                    Découvrir le concours
+                  </Link>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div className="st-hero-visual">
+            {/* Emblème 3D : rotation lente, penché vers la droite, et
+                manipulable au cliquer-glisser. Bureau avec souris seulement
+                (voir DesktopEmblem) ; ailleurs, le logo fixe le remplace. */}
+            <DesktopEmblem size={750} tiltZ={-0.22} glow={false} />
             <img
-              className="home-hero-mark"
+              className="st-hero-mark"
               src="/brand/platinum-cbd-cup-logo.png"
               alt=""
-              width={96}
-              height={96}
+              width={220}
+              height={220}
               decoding="async"
             />
           </div>
-
-          <p className="lede home-hero-lede">
-            Le concours européen du CBD. Chaque produit est noté à l&apos;aveugle
-            par deux jurys : des professionnels, et des consommateurs.
-          </p>
-
-          <div className="home-actions">
-            {isOpen ? (
-              <>
-                <Link href={registerHref} className="btn accent btn-lg">
-                  Inscrire mes produits
-                </Link>
-                <Link href={palmaresHref} className="btn ghost btn-lg">
-                  {palmaresLabel}
-                </Link>
-              </>
-            ) : (
-              <>
-                <Link href={palmaresHref} className="btn accent btn-lg">
-                  {palmaresLabel}
-                </Link>
-                <Link href="/about" className="btn ghost btn-lg">
-                  Découvrir le concours
-                </Link>
-              </>
-            )}
-          </div>
-        </div>
-
-        <div className="home-hero-emblem" aria-hidden="true">
-          {/* Monté uniquement au-dessus de 881px : sur mobile, l'emblème
-              statique placé à côté du titre le remplace. */}
-          <DesktopEmblem size={690} tiltZ={-0.18} />
         </div>
       </section>
 
+      {tapeItems.length > 0 && <Tape items={tapeItems} />}
+
       {/* ── CALENDRIER ─────────────────────────────────────────────────── */}
       {edition && <EditionSteps steps={stepsOf(edition, now)} year={edition.year} />}
-
-      {/* ── DEUX JURYS ─────────────────────────────────────────────────── */}
-      <JuriesExplainer labels={tiers} />
 
       {/* ── CATÉGORIES ET TARIFS ───────────────────────────────────────── */}
       {edition && phase && (
         <CategoryPrices edition={edition} phase={phase} registerHref={registerHref} />
       )}
 
+      {/* ── DEUX JURYS ─────────────────────────────────────────────────── */}
+      <JuriesExplainer labels={tiers} />
+
       {/* ── PALMARÈS ───────────────────────────────────────────────────── */}
       {teaser && teaserHref && (
-        <section className="home-band is-filled">
-          <div className="home-section home-palmares">
-            <div className="home-section-head is-split">
-              <div>
-                <p className="eyebrow">
-                  <b>
-                    Palmarès {teaser.year} · {teaser.categoryName} ·{" "}
-                    {teaser.panel === "public" ? "Jury public" : "Jury professionnel"}
-                  </b>
-                </p>
-                <h2 className="section-title">Les lauréats</h2>
-              </div>
-              <Link href="/palmares" className="home-link">
-                Tout le palmarès {teaser.year} →
-              </Link>
+        <section className="st-sec st-podium-sec" aria-labelledby="laureats">
+          <div className="st-sec-head is-split">
+            <div className="st-podium-head">
+              <LiquidText
+                as="h2"
+                className="st-h2-liquid"
+                seed={11}
+                fit={longestWord("Palmarès", teaser.year)}
+              >
+                <span id="laureats">Palmarès {teaser.year}</span>
+              </LiquidText>
+              <p className="st-sec-lede">
+                {teaser.categoryName} ·{" "}
+                {teaser.panel === "public" ? "Jury public" : "Jury professionnel"}
+              </p>
             </div>
-            <ol className="home-podium">
-              {teaser.podium.map((p) => {
-                const tier =
-                  teaser.panel === "public" && p.rank > 1 && p.score != null
-                    ? resolveTier(p.score, teaser.labels)
-                    : null;
-                const distinction =
-                  teaser.panel === "public" && p.rank === 1
-                    ? "Prix du public"
-                    : tier
-                      ? `Label ${tierName(tier.name)}`
-                      : null;
-                const score = p.score != null ? `${formatNumber(p.score)} / 20` : null;
-                return (
-                  <li key={`${p.rank}-${p.productName}`} className={p.rank === 1 ? "is-first" : undefined}>
-                    <span className="home-podium-rank">
-                      {p.rank}
-                      <sup>{p.rank === 1 ? "er" : "e"}</sup>
-                    </span>
-                    <span className="home-podium-name">{p.productName}</span>
-                    <span className="home-podium-producer">{p.producerName}</span>
-                    {(distinction ?? score) && (
-                      <span className="home-podium-meta">
-                        {[distinction, score].filter(Boolean).join(" · ")}
-                      </span>
-                    )}
-                  </li>
-                );
-              })}
-            </ol>
-            <Link href={teaserHref} className="home-link home-palmares-more">
-              Le classement complet de la catégorie →
+            <Link href="/palmares" className="home-link st-link-arrow">
+              Tout le palmarès {teaser.year}
+              <ArrowUpRight size={16} aria-hidden="true" />
             </Link>
           </div>
+          <ol className="st-podium">
+            {teaser.podium.map((p) => {
+              const tier =
+                teaser.panel === "public" && p.rank > 1 && p.score != null
+                  ? resolveTier(p.score, teaser.labels)
+                  : null;
+              const distinction =
+                teaser.panel === "public" && p.rank === 1
+                  ? "Prix du public"
+                  : tier
+                    ? `Label ${tierName(tier.name)}`
+                    : null;
+              const score = p.score != null ? `${formatNumber(p.score)} / 20` : null;
+              return (
+                <li key={`${p.rank}-${p.productName}`} className={`is-rank-${p.rank}`}>
+                  <span className="st-podium-rank">
+                    {p.rank}
+                    <sup>{p.rank === 1 ? "er" : "e"}</sup>
+                  </span>
+                  {/* Logo du producteur s'il en a déposé un ; sinon la case
+                      porte la note, qui est l'information du podium. */}
+                  {p.logo ? (
+                    <span className="st-podium-logo">
+                      <img
+                        src={p.logo}
+                        alt={`Logo ${p.producerName}`}
+                        width={160}
+                        height={160}
+                        loading="lazy"
+                        decoding="async"
+                      />
+                    </span>
+                  ) : p.score != null ? (
+                    <span className="st-podium-logo is-score">
+                      <b>{formatNumber(p.score)}</b>
+                      <small>sur 20</small>
+                    </span>
+                  ) : null}
+                  <span className="st-podium-name">{p.productName}</span>
+                  <span className="st-podium-producer">{p.producerName}</span>
+                  {distinction && <span className="st-podium-prize">{distinction}</span>}
+                  {score && p.logo && <span className="st-podium-score">{score}</span>}
+                </li>
+              );
+            })}
+          </ol>
+          <Link href={teaserHref} className="home-link st-link-arrow">
+            Le classement complet de la catégorie
+            <ArrowUpRight size={16} aria-hidden="true" />
+          </Link>
         </section>
       )}
 
-      {/* ── PAR PUBLIC ─────────────────────────────────────────────────── */}
-      <section className="home-section">
-        <ul className="home-audiences">
+      {/* ── PAR PROFIL ─────────────────────────────────────────────────── */}
+      <section className="st-sec st-routes" aria-labelledby="par-profil">
+        <h2 id="par-profil" className="st-h2">
+          Vous êtes
+        </h2>
+        <ul>
           {[
             {
               href: edition ? `/cups/${edition.id}` : "/cups",
@@ -362,21 +453,56 @@ export default async function PortalHomePage() {
             },
             {
               href: "/press",
-              title: "Presse et partenaires",
+              title: "Presse",
               text: "Kit média, visuels, contacts et dossier de partenariat.",
               cta: "Espace presse",
             },
           ].map((a) => (
             <li key={a.title}>
-              <Link href={a.href} className="home-audience">
-                <span className="home-audience-title">{a.title}</span>
-                <span className="home-audience-text">{a.text}</span>
-                <span className="home-audience-cta">{a.cta} →</span>
+              <Link href={a.href} className="st-route">
+                <span className="st-route-name">{a.title}</span>
+                <span className="st-route-text">{a.text}</span>
+                <span className="st-route-cta">
+                  {a.cta}
+                  <ArrowUpRight size={18} aria-hidden="true" />
+                </span>
               </Link>
             </li>
           ))}
         </ul>
       </section>
+
+      {/* ── CLÔTURE ────────────────────────────────────────────────────── */}
+      {edition && isOpen && closeAt != null && (
+        <section className="st-close" aria-labelledby="cloture">
+          <div className="st-close-text">
+            <EditionBar>
+              {ordinal}
+              <Sparkle size={12} />
+              {edition.year}
+            </EditionBar>
+            <LiquidText as="h2" className="st-close-title" seed={7} fit={8}>
+              <span id="cloture">
+                Jusqu&apos;au
+                <br />
+                {formatShortDay(closeAt)}
+              </span>
+            </LiquidText>
+            <p className="st-hero-lede">
+              {statusLine(edition, "open")}. Une seule commande pour toutes vos
+              catégories.
+            </p>
+            <div className="st-actions">
+              <Link href={registerHref} className="btn accent btn-lg">
+                Inscrire mes produits
+              </Link>
+              <Link href="/reglement" className="btn ghost btn-lg">
+                Lire le règlement
+              </Link>
+            </div>
+          </div>
+        </section>
+      )}
     </div>
   );
 }

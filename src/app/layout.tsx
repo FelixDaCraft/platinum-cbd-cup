@@ -302,6 +302,15 @@ ${PORTAL_THEME.customCss ? sanitizeCustomCss(PORTAL_THEME.customCss) : ""}
           href="/fonts/LouizeDisplay-BoldItalic.ttf"
           crossOrigin="anonymous"
         />
+        {/* Unbounded — titres, navigation et boutons du portail : même raison,
+            et son changement de largeur faisait sauter l'en-tête. */}
+        <link
+          rel="preload"
+          as="font"
+          type="font/woff2"
+          href="/fonts/Unbounded-VF.woff2"
+          crossOrigin="anonymous"
+        />
       </head>
       <body data-theme="dark" data-density="regular" data-matrix="on">
         {/* Platinum design-system CSS — :root vars, all utility classes, animations */}

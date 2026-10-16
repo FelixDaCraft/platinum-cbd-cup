@@ -2,6 +2,7 @@ import Link from "next/link";
 import { db } from "~/server/db";
 import { editionOrdinal, editionYear, formatDay } from "../_lib/edition";
 import { canonical } from "../_lib/seo";
+import { PageHead, Sparkle } from "~/components/portal/street/street";
 
 export const metadata = {
   alternates: { canonical: canonical("/archives") },
@@ -44,14 +45,18 @@ export default async function ArchivesPage() {
 
   return (
     <div className="pg">
-      <header className="pg-head">
-        <p className="eyebrow">Éditions</p>
-        <h1 className="display">Les éditions passées</h1>
-        <p className="pg-lede">
-          Chaque édition de la Platinum CBD Cup et son palmarès, depuis la
-          première en 2023.
-        </p>
-      </header>
+      <PageHead
+        edition={
+          <>
+            Depuis 2023
+            <Sparkle size={12} />
+            Les palmarès
+          </>
+        }
+        title="Éditions"
+        lede="Chaque édition de la Platinum CBD Cup et son palmarès, depuis la première en 2023."
+        seed={4}
+      />
 
       <section className="pg-section" style={{ paddingTop: 0 }}>
         {editions.length === 0 ? (
@@ -75,7 +80,7 @@ export default async function ArchivesPage() {
                   className="pg-tile"
                 >
                   <span className="pg-meta">{editionOrdinal(ed.year)}</span>
-                  <h3 style={{ fontSize: 32 }}>{ed.year}</h3>
+                  <h3 className="st-archive-year">{ed.year}</h3>
                   {details.length > 0 && <p>{details.join(" · ")}</p>}
                   <span className="pg-link" style={{ marginTop: "auto" }}>
                     Voir le palmarès

@@ -122,7 +122,8 @@ export async function getEditionDetails(cupId: string): Promise<EditionDetails |
     name: cup.name,
     year: editionYear(cup),
     status: cup.status,
-    description: cup.publicPageDescription ?? cup.description,
+    // Une description vide en base ("" ou espaces) vaut absence de description.
+    description: cup.publicPageDescription?.trim() || cup.description?.trim() || null,
     currency: cup.currency ?? "EUR",
     registrationOpenAt: ms(cup.registrationOpenAt),
     registrationCloseAt: ms(cup.registrationCloseAt),
@@ -211,6 +212,23 @@ export interface Step {
   title: string;
   when: string;
   state: StepState;
+  /** Bornes en millisecondes, pour l'affichage condensé des dates. */
+  start: number | null;
+  end: number | null;
+}
+
+/** « 10.10 » ou « 31.12.2026 » : dates courtes du calendrier. */
+export function formatShortDay(ms: number, withYear = false): string {
+  const parts = new Intl.DateTimeFormat("fr-FR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: withYear ? "numeric" : undefined,
+    timeZone: TZ,
+  }).formatToParts(ms);
+  return parts
+    .filter((p) => p.type !== "literal")
+    .map((p) => p.value)
+    .join(".");
 }
 
 /** Calendrier de l'édition, réduit aux étapes dont les dates sont connues. */
@@ -244,6 +262,8 @@ export function stepsOf(
       title: "Inscriptions",
       when: range(ed.registrationOpenAt, ed.registrationCloseAt),
       state: stateOf(ed.registrationOpenAt, ed.registrationCloseAt),
+      start: ed.registrationOpenAt,
+      end: ed.registrationCloseAt,
     });
   }
   if (ed.ratingStartAt != null || ed.ratingEndAt != null) {
@@ -251,6 +271,8 @@ export function stepsOf(
       title: "Notation à l'aveugle",
       when: range(ed.ratingStartAt, ed.ratingEndAt),
       state: stateOf(ed.ratingStartAt, ed.ratingEndAt),
+      start: ed.ratingStartAt,
+      end: ed.ratingEndAt,
     });
   }
   if (ed.eventDate != null) {
@@ -260,6 +282,8 @@ export function stepsOf(
         ? `Le ${formatDay(ed.eventDate)}, ${ed.eventLocation}`
         : `Le ${formatDay(ed.eventDate)}`,
       state: ed.eventDate <= now ? "done" : "next",
+      start: ed.eventDate,
+      end: null,
     });
   }
   return steps;

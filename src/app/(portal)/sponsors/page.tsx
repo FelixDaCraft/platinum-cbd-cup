@@ -2,6 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { db } from "~/server/db";
 import { canonical } from "../_lib/seo";
+import { PageHead, Sparkle } from "~/components/portal/street/street";
 
 export const metadata = {
   alternates: { canonical: canonical("/sponsors") },
@@ -24,13 +25,18 @@ export default async function SponsorsPage() {
 
   return (
     <div className="pg editorial">
-      <header className="pg-head">
-        <p className="eyebrow">Partenaires</p>
-        <h1 className="display">Nos partenaires</h1>
-        <p className="pg-lede">
-          Les marques et structures qui soutiennent la Platinum CBD Cup.
-        </p>
-      </header>
+      <PageHead
+        edition={
+          <>
+            Sponsors
+            <Sparkle size={12} />
+            Soutiens
+          </>
+        }
+        title="Partenaires"
+        lede="Les marques et structures qui soutiennent la Platinum CBD Cup."
+        seed={6}
+      />
 
       <section className="pg-section" style={{ paddingTop: 0 }}>
         {sponsors.length === 0 ? (

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ContactForm } from "./_components/contact-form";
 import { canonical } from "../_lib/seo";
+import { PageHead, Sparkle } from "~/components/portal/street/street";
 
 export const metadata: Metadata = {
   alternates: { canonical: canonical("/contact") },
@@ -14,14 +15,20 @@ const CONTACT_EMAIL = "contact@platinumcbdcup.eu";
 export default function ContactPage() {
   return (
     <div className="pg editorial">
-      <header className="pg-head">
-        <p className="eyebrow">Contact</p>
-        <h1 className="display">Écrivez-nous</h1>
-        <p className="pg-lede">
-          Une question sur le concours, les inscriptions, les résultats ou un
-          partenariat ? Nous lisons chaque message et vous répondons par email.
-        </p>
-      </header>
+      <PageHead
+        edition={
+          <>
+            Concours
+            <Sparkle size={12} />
+            Inscriptions
+            <Sparkle size={12} />
+            Partenariats
+          </>
+        }
+        title="Contact"
+        lede="Une question sur le concours, les inscriptions, les résultats ou un partenariat ? Nous lisons chaque message et vous répondons par email."
+        seed={12}
+      />
 
       <div className="contact-layout">
         <ContactForm />

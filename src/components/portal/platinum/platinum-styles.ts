@@ -14,6 +14,7 @@ import { responsiveCSS as editorialLegalCSS } from "./responsive/editorial-legal
 import { responsiveCSS as inscriptionCSS } from "./responsive/inscription";
 import { responsiveCSS as palmaresEditionsCSS } from "./responsive/palmares-editions";
 import { responsiveCSS as shellHomeCSS } from "./responsive/shell-home";
+import { streetCSS } from "./street-styles";
 
 const baseCSS = `
 @font-face{
@@ -859,4 +860,6 @@ export const platinumCSS = [
   authCSS,
   inscriptionCSS,
   editorialLegalCSS,
+  // Direction « street » 2027, limitée à .shell : en dernier pour primer.
+  streetCSS,
 ].join("\n");

@@ -1,4 +1,5 @@
 import { Children, isValidElement, type ReactNode } from "react";
+import { PageHead } from "~/components/portal/street/street";
 
 /**
  * Identité de l'entité qui édite le site et organise le concours.
@@ -96,14 +97,10 @@ export function LegalPage({
   );
 
   return (
-    <div className="pg pg--narrow page-enter legal">
-      <header className="pg-head">
-        <h1 className="display">{title}</h1>
-        <p className="pg-lede">{lede}</p>
-        <p className="pg-meta" style={{ margin: 0 }}>
-          Dernière mise à jour : {updatedAt}
-        </p>
-      </header>
+    <div className="pg pg--narrow legal">
+      <PageHead edition="Informations légales" title={title} lede={lede} seed={10}>
+        <p className="legal-updated">Dernière mise à jour : {updatedAt}</p>
+      </PageHead>
 
       {toc && items.length > 1 && <LegalToc items={items} />}
 

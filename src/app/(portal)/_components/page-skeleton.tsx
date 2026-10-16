@@ -13,7 +13,7 @@ export function PageSkeleton({ rows = 6 }: { rows?: number }) {
   return (
     <div className="pg" aria-busy="true">
       <style>{`
-        .sk { background: var(--line); border-radius: 8px; animation: sk-pulse 1.4s ease-in-out infinite; }
+        .sk { background: var(--line); border-radius: 0; animation: sk-pulse 1.4s ease-in-out infinite; }
         @keyframes sk-pulse { 50% { opacity: .38; } }
         @media (prefers-reduced-motion: reduce) { .sk { animation: none; opacity: .6; } }
       `}</style>

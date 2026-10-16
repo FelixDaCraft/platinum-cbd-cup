@@ -3,6 +3,8 @@ import Link from "next/link";
 import { db } from "~/server/db";
 import type { TeamMember } from "~/server/db/schema/organization-about";
 import { canonical } from "../_lib/seo";
+import { JuriesExplainer } from "../_components/edition-blocks";
+import { PageHead, Sparkle } from "~/components/portal/street/street";
 
 export const metadata: Metadata = {
   alternates: { canonical: canonical("/about") },
@@ -16,50 +18,32 @@ async function getTeamMembers(): Promise<TeamMember[]> {
   return (aboutContent?.teamMembers ?? []) as TeamMember[];
 }
 
-const JURIES = [
-  {
-    title: "Le jury professionnel",
-    body: "Producteurs, sommeliers et analystes notent chaque produit sans connaître sa marque. Leurs notes établissent un classement par catégorie. Ce jury ne décerne pas de label.",
-  },
-  {
-    title: "Le jury public",
-    body: "Des consommateurs reçoivent une box d'échantillons et notent les produits chez eux. Selon la note obtenue, un produit reçoit le label Or, Argent ou Bronze, et le premier de chaque catégorie remporte le Prix du public.",
-  },
-];
-
 export default async function AboutPage() {
   const teamMembers = await getTeamMembers();
 
   return (
     <div className="pg">
-      <header className="pg-head">
-        <p className="eyebrow">Le concours</p>
-        <h1 className="display">
-          Chaque produit noté à l&apos;aveugle par <em>deux</em> jurys
-        </h1>
-        <p className="pg-lede">
-          La Platinum CBD Cup est un concours européen de CBD, organisé chaque
-          année depuis 2023. Les produits sont jugés sur ce qu&apos;ils sont, pas
-          sur leur nom.
-        </p>
-      </header>
+      <PageHead
+        edition={
+          <>
+            Depuis 2023
+            <Sparkle size={12} />
+            Deux jurys
+            <Sparkle size={12} />
+            À l&apos;aveugle
+          </>
+        }
+        title="Le concours"
+        lede="La Platinum CBD Cup est un concours européen de CBD, organisé chaque année depuis 2023. Chaque produit est noté à l'aveugle par deux jurys : il est jugé sur ce qu'il est, pas sur son nom."
+        seed={3}
+      />
 
-      <section className="pg-section" aria-labelledby="about-juries">
-        <h2 id="about-juries" style={{ margin: 0, fontSize: 28 }}>
-          Deux jurys, deux regards
-        </h2>
-        <div className="pg-grid pal-about-juries">
-          {JURIES.map((j) => (
-            <article key={j.title} className="pg-tile">
-              <h3>{j.title}</h3>
-              <p>{j.body}</p>
-            </article>
-          ))}
-        </div>
-      </section>
+      {/* Même bloc que l'accueil et la page d'une édition : une seule
+          formulation des deux jurys sur tout le site. */}
+      <JuriesExplainer labels={[]} />
 
       <section className="pg-section" aria-labelledby="about-blind">
-        <h2 id="about-blind" style={{ margin: 0, fontSize: 28 }}>
+        <h2 id="about-blind">
           L&apos;anonymat des échantillons
         </h2>
         <div className="prose" style={{ maxWidth: 720 }}>
@@ -87,7 +71,7 @@ export default async function AboutPage() {
 
       {teamMembers.length > 0 && (
         <section className="pg-section" aria-labelledby="about-team">
-          <h2 id="about-team" style={{ margin: 0, fontSize: 28 }}>
+          <h2 id="about-team">
             L&apos;équipe
           </h2>
           <div
@@ -108,13 +92,7 @@ export default async function AboutPage() {
                     height={500}
                     loading="lazy"
                     decoding="async"
-                    style={{
-                      width: "100%",
-                      height: "auto",
-                      aspectRatio: "4 / 5",
-                      objectFit: "cover",
-                      borderRadius: 10,
-                    }}
+                    className="st-team-photo"
                   />
                 )}
                 <figcaption style={{ display: "flex", flexDirection: "column", gap: 6 }}>

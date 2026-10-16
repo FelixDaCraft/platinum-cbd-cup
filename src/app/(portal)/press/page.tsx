@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { db } from "~/server/db";
 import { canonical } from "../_lib/seo";
+import { PageHead, Sparkle } from "~/components/portal/street/street";
 
 export const metadata = {
   alternates: { canonical: canonical("/press") },
@@ -51,10 +52,20 @@ export default async function PressPage() {
 
   return (
     <div className="pg editorial">
-      <header className="pg-head">
-        <p className="eyebrow">Presse</p>
-        <h1 className="display">Espace presse</h1>
-        <p className="pg-lede">
+      <PageHead
+        edition={
+          <>
+            Communiqués
+            <Sparkle size={12} />
+            Kit média
+            <Sparkle size={12} />
+            Photos
+          </>
+        }
+        title="Presse"
+        seed={8}
+      >
+        <p className="st-head-lede">
           Communiqués, kit média et photos de la Platinum CBD Cup. Pour toute
           demande, écrivez à{" "}
           <a href={`mailto:${emailPresse}`} className="pg-link">
@@ -62,7 +73,7 @@ export default async function PressPage() {
           </a>
           .
         </p>
-      </header>
+      </PageHead>
 
       {/* KIT MÉDIA */}
       {showMediaKit && settings?.mediaKitUrl && (

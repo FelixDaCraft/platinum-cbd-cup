@@ -2,6 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { db } from "~/server/db";
 import { canonical } from "../_lib/seo";
+import { PageHead, Sparkle } from "~/components/portal/street/street";
 
 export const metadata = {
   alternates: { canonical: canonical("/articles") },
@@ -42,13 +43,20 @@ export default async function ArticlesPage() {
 
   return (
     <div className="pg editorial">
-      <header className="pg-head">
-        <p className="eyebrow">Journal</p>
-        <h1 className="display">Articles</h1>
-        <p className="pg-lede">
-          Actualités, entretiens et coulisses de la Platinum CBD Cup.
-        </p>
-      </header>
+      <PageHead
+        edition={
+          <>
+            Actualités
+            <Sparkle size={12} />
+            Entretiens
+            <Sparkle size={12} />
+            Coulisses
+          </>
+        }
+        title="Articles"
+        lede="Actualités, entretiens et coulisses de la Platinum CBD Cup."
+        seed={2}
+      />
 
       <section className="pg-section" style={{ paddingTop: 0 }}>
         {articles.length === 0 ? (
