@@ -29,6 +29,21 @@ import {
 import { anonymizeRegistrationProducts } from "~/server/services/anonymization.service";
 import { assertJurorMayCompete } from "~/server/api/helpers/jury";
 import { checkoutState, isFailureEventId } from "~/lib/registration-checkout";
+
+/**
+ * Le téléphone est obligatoire pour aller au paiement : l'organisation en a
+ * besoin pour la logistique des échantillons. Les comptes créés avant qu'il
+ * le devienne sont rattrapés ici.
+ */
+function assertProducerHasPhone(producer: { phone: string | null }): void {
+  if (!producer.phone?.trim()) {
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message:
+        "Ajoutez votre numéro de téléphone dans votre profil producteur avant de payer.",
+    });
+  }
+}
 import {
   assertCartWithinQuotas,
   countByCategory,
@@ -850,6 +865,8 @@ export const registrationRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const producer = ctx.producer;
 
+      assertProducerHasPhone(producer);
+
       // Get registration with products and cup
       const registration = await ctx.db.query.registrations.findFirst({
         where: (reg, { eq: eqFn, and: andFn }) =>
@@ -1188,6 +1205,8 @@ export const registrationRouter = createTRPCRouter({
     .input(getRegistrationSchema)
     .mutation(async ({ ctx, input }) => {
       const producer = ctx.producer;
+
+      assertProducerHasPhone(producer);
 
       // Get registration
       const registration = await ctx.db.query.registrations.findFirst({

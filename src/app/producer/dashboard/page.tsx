@@ -65,11 +65,15 @@ export default function ProducerDashboardPage() {
     ? stats.registeredProducts - (stats.obtainedLabels ?? 0)
     : 0;
 
-  const profileScore = [profile?.brandName, profile?.companyName, profile?.website].filter(
-    Boolean
-  ).length;
-  const profileIncomplete =
-    profile && (!profile.brandName || !profile.companyName || !profile.website);
+  // Ce dont l'organisation a besoin : le téléphone (obligatoire pour payer),
+  // le logo et la photo repris sur les réseaux sociaux.
+  const profileItems = [
+    { label: "Téléphone", done: !!profile?.phone },
+    { label: "Logo", done: !!profile?.logo },
+    { label: "Photo de vous ou de votre équipe", done: !!profile?.teamPhoto },
+  ];
+  const profileScore = profileItems.filter((item) => item.done).length;
+  const profileIncomplete = profile && profileScore < profileItems.length;
 
   return (
     <div className="space-y-10">
@@ -383,9 +387,17 @@ export default function ProducerDashboardPage() {
               <div className="n-label mb-1" style={{ color: "var(--n-warning)" }}>
                 PROFIL INCOMPLET
               </div>
-              <p className="text-sm mb-4" style={{ color: "var(--n-text-secondary)" }}>
-                Completez votre profil pour augmenter votre visibilite.
+              <p className="text-sm mb-2" style={{ color: "var(--n-text-secondary)" }}>
+                Votre logo et votre photo servent à annoncer votre participation
+                sur nos réseaux sociaux. Il manque :
               </p>
+              <ul className="text-sm mb-4 list-disc pl-5" style={{ color: "var(--n-text-primary)" }}>
+                {profileItems
+                  .filter((item) => !item.done)
+                  .map((item) => (
+                    <li key={item.label}>{item.label}</li>
+                  ))}
+              </ul>
 
               {/* Segmented progress */}
               <div className="mb-1 flex items-center justify-between">
@@ -393,11 +405,11 @@ export default function ProducerDashboardPage() {
                   PROGRESSION
                 </span>
                 <span className="n-font-data text-xs" style={{ color: "var(--n-text-primary)" }}>
-                  {profileScore}/3
+                  {profileScore}/{profileItems.length}
                 </span>
               </div>
               <div className="n-progress-bar mb-4">
-                {Array.from({ length: 3 }).map((_, i) => (
+                {profileItems.map((_, i) => (
                   <div
                     key={i}
                     className={`n-progress-segment ${i < profileScore ? "filled" : ""}`}

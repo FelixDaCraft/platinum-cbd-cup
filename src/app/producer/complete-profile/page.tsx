@@ -5,24 +5,15 @@ import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { z } from "zod";
 
 import { Input } from "~/components/ui/input";
+import { ProducerMediaFields } from "~/components/producer/producer-media-fields";
 import { useSession } from "~/lib/auth-client";
+import {
+  producerCreateProfileSchema as completeProfileSchema,
+  type ProducerCreateProfileInput as CompleteProfileInput,
+} from "~/lib/validations/producer";
 import { api } from "~/trpc/react";
-
-const completeProfileSchema = z.object({
-  companyName: z
-    .string()
-    .min(1, "Le nom de l'entreprise est requis")
-    .max(100, "Le nom de l'entreprise ne peut pas dépasser 100 caractères"),
-  brandName: z
-    .string()
-    .min(1, "Le nom de la marque est requis")
-    .max(100, "Le nom de la marque ne peut pas dépasser 100 caractères"),
-});
-
-type CompleteProfileInput = z.infer<typeof completeProfileSchema>;
 
 export default function CompleteProfilePage() {
   const router = useRouter();
@@ -31,12 +22,21 @@ export default function CompleteProfilePage() {
     brandName: string;
   } | null>(null);
 
+  // Deux étapes : identité et téléphone (crée le profil), puis visuels pour
+  // les réseaux sociaux. Les visuels viennent après la création : le dépôt
+  // d'images exige un profil producteur.
+  const [step, setStep] = useState<"identity" | "media">("identity");
+
   const utils = api.useUtils();
+  const { data: profile } = api.producer.getProfile.useQuery(undefined, {
+    enabled: step === "media",
+  });
   const createProfile = api.producer.createProfile.useMutation({
     onSuccess: () => {
       void utils.producer.hasProfile.invalidate();
+      void utils.producer.getProfile.invalidate();
       toast.success("Profil producteur créé !");
-      router.push("/producer/dashboard");
+      setStep("media");
     },
     onError: (error) => {
       if (error.message.includes("existe deja")) {
@@ -63,6 +63,7 @@ export default function CompleteProfilePage() {
     defaultValues: {
       companyName: "",
       brandName: "",
+      phone: "",
     },
   });
 
@@ -86,13 +87,59 @@ export default function CompleteProfilePage() {
     createProfile.mutate(data);
   };
 
+  if (step === "media") {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="w-full max-w-2xl n-card">
+          <div className="mb-6">
+            <div className="n-label mb-1" style={{ color: "var(--n-text-disabled)" }}>
+              PRODUCTEUR · ÉTAPE 2/2
+            </div>
+            <h1
+              className="n-font-data text-xl font-bold"
+              style={{ color: "var(--n-text-display)" }}
+            >
+              VOS VISUELS
+            </h1>
+            <p className="text-sm mt-2" style={{ color: "var(--n-text-secondary)" }}>
+              Ajoutez votre logo et une photo de vous ou de votre équipe : nous les
+              utiliserons pour annoncer votre participation.
+            </p>
+          </div>
+
+          <ProducerMediaFields media={profile} />
+
+          <div
+            className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-5 mt-6 border-t"
+            style={{ borderColor: "var(--n-border)" }}
+          >
+            <button
+              type="button"
+              className="n-btn-ghost"
+              onClick={() => router.push("/producer/dashboard")}
+            >
+              JE LE FERAI PLUS TARD
+            </button>
+            <button
+              type="button"
+              className="n-btn-primary"
+              onClick={() => router.push("/producer/dashboard")}
+            >
+              TERMINER
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-[60vh] items-center justify-center">
       <div className="w-full max-w-md n-card">
         {/* Header */}
         <div className="mb-6">
           <div className="n-label mb-1" style={{ color: "var(--n-text-disabled)" }}>
-            PRODUCTEUR
+            PRODUCTEUR · ÉTAPE 1/2
           </div>
           <h1
             className="n-font-data text-xl font-bold"
@@ -170,6 +217,40 @@ export default function CompleteProfilePage() {
             )}
           </div>
 
+          {/* Phone */}
+          <div className="space-y-2">
+            <label
+              htmlFor="phone"
+              className="n-label block"
+              style={{ color: "var(--n-text-secondary)" }}
+            >
+              TÉLÉPHONE
+            </label>
+            <Input
+              id="phone"
+              type="tel"
+              autoComplete="tel"
+              placeholder="06 12 34 56 78"
+              className="n-font-data"
+              aria-invalid={!!errors.phone}
+              {...register("phone")}
+              style={{
+                backgroundColor: "var(--n-surface-raised)",
+                borderColor: errors.phone ? "var(--n-accent)" : "var(--n-border-visible)",
+                color: "var(--n-text-primary)",
+              }}
+            />
+            {errors.phone ? (
+              <p className="n-font-data text-xs" style={{ color: "var(--n-accent)" }}>
+                {errors.phone.message}
+              </p>
+            ) : (
+              <p className="text-xs" style={{ color: "var(--n-text-disabled)" }}>
+                Pour vous joindre au sujet de vos échantillons.
+              </p>
+            )}
+          </div>
+
           {/* Submit */}
           <div
             className="pt-2 border-t"
@@ -182,7 +263,7 @@ export default function CompleteProfilePage() {
             >
               {isSubmitting || createProfile.isPending
                 ? "[CREATION EN COURS...]"
-                : "FINALISER MON INSCRIPTION"}
+                : "CONTINUER"}
             </button>
           </div>
         </form>

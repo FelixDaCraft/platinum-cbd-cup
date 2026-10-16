@@ -8,11 +8,12 @@ import { toast } from "sonner";
 
 import { Input } from "~/components/ui/input";
 import { Switch } from "~/components/ui/switch";
-import { ImageUpload } from "~/components/ui/image-upload";
+import { ProducerMediaFields } from "~/components/producer/producer-media-fields";
 import { api } from "~/trpc/react";
 import { GdprSettings } from "~/components/profile/gdpr-settings";
 import { authClient } from "~/lib/auth-client";
 import {
+  formatPhone,
   producerProfileUpdateSchema,
   type ProducerProfileUpdateInput,
 } from "~/lib/validations/producer";
@@ -57,16 +58,6 @@ export default function ProducerProfilePage() {
       },
     });
 
-  const updateLogo = api.producer.updateLogo.useMutation({
-    onSuccess: () => {
-      void utils.producer.getProfile.invalidate();
-      toast.success("Logo mis a jour avec succes");
-    },
-    onError: (error) => {
-      toast.error(error.message || "Erreur lors de la mise a jour du logo");
-    },
-  });
-
   const {
     register,
     handleSubmit,
@@ -77,6 +68,7 @@ export default function ProducerProfilePage() {
     defaultValues: {
       companyName: "",
       brandName: "",
+      phone: "",
       siret: "",
       website: "",
     },
@@ -87,6 +79,7 @@ export default function ProducerProfilePage() {
       reset({
         companyName: profile.companyName,
         brandName: profile.brandName,
+        phone: formatPhone(profile.phone),
         siret: profile.siret ?? "",
         website: profile.website ?? "",
       });
@@ -261,6 +254,45 @@ export default function ProducerProfilePage() {
                   )}
                 </div>
 
+                {/* Phone */}
+                <div className="space-y-2">
+                  <label
+                    htmlFor="phone"
+                    className="n-label block"
+                    style={{ color: "var(--n-text-secondary)" }}
+                  >
+                    TÉLÉPHONE *
+                  </label>
+                  <Input
+                    id="phone"
+                    type="tel"
+                    autoComplete="tel"
+                    placeholder="06 12 34 56 78"
+                    className="n-font-data"
+                    aria-invalid={!!errors.phone}
+                    {...register("phone")}
+                    style={{
+                      backgroundColor: "var(--n-surface-raised)",
+                      borderColor: errors.phone
+                        ? "var(--n-accent)"
+                        : "var(--n-border-visible)",
+                      color: "var(--n-text-primary)",
+                    }}
+                  />
+                  {errors.phone ? (
+                    <p
+                      className="n-font-data text-xs"
+                      style={{ color: "var(--n-accent)" }}
+                    >
+                      {errors.phone.message}
+                    </p>
+                  ) : (
+                    <p className="n-label" style={{ color: "var(--n-text-disabled)" }}>
+                      POUR VOUS JOINDRE AU SUJET DE VOS ÉCHANTILLONS
+                    </p>
+                  )}
+                </div>
+
                 {/* Website */}
                 <div className="space-y-2">
                   <label
@@ -307,30 +339,18 @@ export default function ProducerProfilePage() {
               </div>
             </form>
           </div>
+
+          {/* Visuels repris sur les réseaux sociaux */}
+          <div className="n-card mt-6">
+            <div className="n-label mb-4" style={{ color: "var(--n-text-disabled)" }}>
+              VISUELS RÉSEAUX SOCIAUX
+            </div>
+            <ProducerMediaFields media={profile} />
+          </div>
         </div>
 
         {/* Right column — 1/3 */}
         <div className="space-y-6">
-          {/* Logo */}
-          <div className="n-card">
-            <div className="n-label mb-1" style={{ color: "var(--n-text-disabled)" }}>
-              LOGO ENTREPRISE
-            </div>
-            <p className="text-xs mb-4" style={{ color: "var(--n-text-secondary)" }}>
-              Format carre, 400x400px minimum
-            </p>
-            <ImageUpload
-              value={profile?.logo ?? ""}
-              onChange={(url) => updateLogo.mutate({ logo: url })}
-              folder="producer-logos"
-              placeholder="Glissez votre logo ici"
-              aspectRatio="auto"
-              objectFit="contain"
-              maxSize={2}
-              disabled={updateLogo.isPending}
-            />
-          </div>
-
           {/* Notifications */}
           <div className="n-card">
             <div className="n-label mb-4" style={{ color: "var(--n-text-disabled)" }}>

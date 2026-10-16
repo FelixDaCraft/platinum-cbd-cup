@@ -52,10 +52,20 @@ export default function ConfidentialitePage() {
 
         <P>
           <strong>Producteurs participants.</strong> Raison sociale, marque,
-          SIRET, adresse, téléphone, site web, logo, et les produits inscrits.
+          SIRET, adresse, téléphone, site web, et les produits inscrits.
           Finalité : gérer l&apos;inscription, l&apos;anonymisation des
-          échantillons et la facturation. Base légale : exécution du contrat, et
-          obligation légale pour les pièces comptables.
+          échantillons et la facturation, et joindre le producteur au sujet de
+          ses échantillons. Base légale : exécution du contrat, et obligation
+          légale pour les pièces comptables.
+        </P>
+
+        <P>
+          <strong>Visuels des producteurs.</strong> Logo et photo du producteur
+          ou de son équipe, s&apos;il choisit de les fournir. Finalité : les
+          publier sur les réseaux sociaux de la Platinum CBD Cup pour annoncer
+          sa participation. Base légale : son consentement, donné avant tout
+          envoi et retirable à tout moment depuis son profil ; nous cessons
+          alors de les utiliser pour de nouvelles publications.
         </P>
 
         <P>

@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useSession } from "~/lib/auth-client";
 import { api } from "~/trpc/react";
 import { Eyebrow, Field, Check } from "~/components/portal/platinum";
+import { formatPhone } from "~/lib/validations/producer";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -63,6 +64,7 @@ const STEPS = [
 ];
 
 const STEP_CART = 3;
+const STEP_DETAILS = 4;
 const STEP_PAY = 5;
 
 /** Taux affiché à la française : 0.3 → « 0,3 % ». */
@@ -771,10 +773,17 @@ export default function RegisterPage() {
                 <div className="kv">
                   <span className="kv-k">Téléphone</span>
                   <span className="kv-v reg-kv-v">
-                    {producerProfile?.phone ?? "Non renseigné"}
+                    {producerProfile?.phone ? formatPhone(producerProfile.phone) : "Non renseigné"}
                   </span>
                 </div>
               </div>
+              {producerProfile && !producerProfile.phone && (
+                <div className="notice is-error" role="alert">
+                  <b>Téléphone requis.</b> Nous en avons besoin pour vous joindre au
+                  sujet de vos échantillons.{" "}
+                  <Link href="/producer/profile">Ajouter mon numéro</Link>
+                </div>
+              )}
               <p className="form-foot" style={{ margin: 0 }}>
                 Ces informations figureront sur votre facture.{" "}
                 <Link href="/producer/profile">Modifier mon profil producteur</Link>
@@ -878,7 +887,8 @@ export default function RegisterPage() {
               disabled={
                 submitting ||
                 (step === 1 && !selectedCategory) ||
-                (step === STEP_CART && cartProducts.length === 0)
+                (step === STEP_CART && cartProducts.length === 0) ||
+                (step >= STEP_DETAILS && !!producerProfile && !producerProfile.phone)
               }
               onClick={() => {
                 setSubmitError(null);

@@ -7,6 +7,8 @@ import {
   producerRegisterSchema,
   producerProfileUpdateSchema,
   producerLogoUpdateSchema,
+  producerCreateProfileSchema,
+  normalizePhone,
 } from "~/lib/validations/producer";
 
 vi.mock("nanoid", () => ({ nanoid: () => "test-producer-id" }));
@@ -270,6 +272,7 @@ describe("Producer Router", () => {
     it("accepts valid profile update with all fields", () => {
       const result = producerProfileUpdateSchema.safeParse({
         companyName: "Updated Company",
+        phone: "06 12 34 56 78",
         brandName: "Updated Brand",
         siret: "12345678901234",
         website: "https://example.com",
@@ -281,6 +284,7 @@ describe("Producer Router", () => {
     it("accepts profile update with empty optional fields", () => {
       const result = producerProfileUpdateSchema.safeParse({
         companyName: "Updated Company",
+        phone: "06 12 34 56 78",
         brandName: "Updated Brand",
         siret: "",
         website: "",
@@ -292,6 +296,7 @@ describe("Producer Router", () => {
     it("accepts profile update without optional fields", () => {
       const result = producerProfileUpdateSchema.safeParse({
         companyName: "Updated Company",
+        phone: "06 12 34 56 78",
         brandName: "Updated Brand",
       });
 
@@ -325,6 +330,31 @@ describe("Producer Router", () => {
       });
 
       expect(result.success).toBe(false);
+    });
+  });
+
+  describe("Téléphone producteur (obligatoire)", () => {
+    const base = { companyName: "Ma Société", brandName: "Ma Marque" };
+
+    it("accepte un numéro français ou international, séparateurs compris", () => {
+      for (const phone of ["0612345678", "06 12 34 56 78", "06.12.34.56.78", "+33 6 12 34 56 78"]) {
+        expect(producerCreateProfileSchema.safeParse({ ...base, phone }).success).toBe(true);
+      }
+    });
+
+    it("refuse un numéro absent ou invalide", () => {
+      for (const phone of ["", "   ", "12345", "06 12 34", "abcdefghij"]) {
+        expect(producerCreateProfileSchema.safeParse({ ...base, phone }).success).toBe(false);
+      }
+    });
+
+    it("le profil ne s'enregistre plus sans téléphone", () => {
+      expect(producerProfileUpdateSchema.safeParse(base).success).toBe(false);
+    });
+
+    it("normalise le numéro avant stockage", () => {
+      expect(normalizePhone("06 12.34-56 78")).toBe("0612345678");
+      expect(normalizePhone("+33 (0)6 12 34 56 78")).toBe("+330612345678");
     });
   });
 
@@ -771,5 +801,62 @@ describe("Producer Router", () => {
       ).toBe("NOT_FOUND");
       expect(updates).toHaveLength(0);
     });
+  });
+});
+
+describe("Visuels réseaux sociaux (logo, photo d'équipe)", () => {
+  async function callerFor(profile: unknown) {
+    const { auth } = await import("~/lib/auth");
+    vi.mocked(auth.api.getSession).mockResolvedValue({
+      user: { id: "user-1", email: "p@x.fr", name: "P" },
+      session: { id: "session-1" },
+    } as never);
+    const { db } = await import("~/server/db");
+    vi.mocked(db.query.producers.findFirst).mockResolvedValue(profile as never);
+    const { producerRouter } = await import("./producer");
+    return producerRouter.createCaller({ headers: new Headers(), db } as never);
+  }
+
+  beforeEach(() => vi.clearAllMocks());
+
+  it("refuse un visuel tant que le consentement n'est pas donné", async () => {
+    const caller = await callerFor({ id: "prod-1", mediaConsentAt: null });
+
+    await expect(
+      caller.updateMedia({ field: "teamPhoto", url: "/uploads/producer-photos/a.webp" })
+    ).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
+    expect(updates).toHaveLength(0);
+  });
+
+  it("enregistre la photo une fois le consentement donné", async () => {
+    const caller = await callerFor({ id: "prod-1", mediaConsentAt: new Date() });
+
+    await caller.updateMedia({ field: "teamPhoto", url: "/uploads/producer-photos/a.webp" });
+
+    expect(updates.at(-1)).toMatchObject({ teamPhoto: "/uploads/producer-photos/a.webp" });
+  });
+
+  it("laisse retirer un visuel même sans consentement", async () => {
+    const caller = await callerFor({ id: "prod-1", mediaConsentAt: null });
+
+    await caller.updateMedia({ field: "logo", url: "" });
+
+    expect(updates.at(-1)).toMatchObject({ logo: null });
+  });
+
+  it("refuse une URL qui n'est pas un fichier téléversé sur le site", async () => {
+    const caller = await callerFor({ id: "prod-1", mediaConsentAt: new Date() });
+
+    await expect(
+      caller.updateMedia({ field: "logo", url: "https://ailleurs.example/logo.png" })
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  });
+
+  it("le retrait du consentement efface sa date", async () => {
+    const caller = await callerFor({ id: "prod-1", mediaConsentAt: new Date() });
+
+    await caller.setMediaConsent({ consent: false });
+
+    expect(updates.at(-1)).toMatchObject({ mediaConsentAt: null });
   });
 });

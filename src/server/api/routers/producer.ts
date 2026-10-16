@@ -21,6 +21,9 @@ import * as schema from "~/server/db/schema";
 import {
   producerProfileUpdateSchema,
   producerLogoUpdateSchema,
+  producerCreateProfileSchema,
+  producerMediaUpdateSchema,
+  normalizePhone,
 } from "~/lib/validations/producer";
 import {
   generateProductSynthesisPdf,
@@ -56,6 +59,42 @@ const requireProducerIdByUser = async (
   return producerId;
 };
 
+/**
+ * Enregistre (ou retire, avec "") un visuel du producteur. Déposer une image
+ * suppose le consentement à sa reprise sur les réseaux sociaux : le
+ * producteur doit savoir, avant l'envoi, à quoi elle servira.
+ */
+const setProducerMedia = async (
+  ctx: AuthedContext,
+  field: "logo" | "teamPhoto",
+  url: string
+) => {
+  const producer = await ctx.db.query.producers.findFirst({
+    where: eq(schema.producers.userId, ctx.userId),
+    columns: { id: true, mediaConsentAt: true },
+  });
+
+  if (!producer) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Profil producteur non trouve" });
+  }
+
+  if (url && !producer.mediaConsentAt) {
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message:
+        "Acceptez d'abord l'utilisation de vos visuels sur les réseaux sociaux de la Platinum CBD Cup.",
+    });
+  }
+
+  const [updatedProducer] = await ctx.db
+    .update(schema.producers)
+    .set({ [field]: url || null, updatedAt: new Date() })
+    .where(eq(schema.producers.id, producer.id))
+    .returning();
+
+  return updatedProducer;
+};
+
 export const producerRouter = createTRPCRouter({
   /**
    * List all producers (single-tenant).
@@ -85,6 +124,9 @@ export const producerRouter = createTRPCRouter({
       brandName: p.brandName,
       phone: p.phone,
       website: p.website,
+      logo: p.logo,
+      teamPhoto: p.teamPhoto,
+      mediaConsentAt: p.mediaConsentAt,
       userName: p.user.name,
       userEmail: p.user.email,
       cups: p.registrations.map((r) => ({
@@ -147,12 +189,7 @@ export const producerRouter = createTRPCRouter({
    * A user can have at most ONE producer profile.
    */
   createProfile: protectedProcedure
-    .input(
-      z.object({
-        companyName: z.string().min(1).max(100),
-        brandName: z.string().min(1).max(100),
-      })
-    )
+    .input(producerCreateProfileSchema)
     .mutation(async ({ ctx, input }) => {
       const existingProducer = await ctx.db.query.producers.findFirst({
         where: (producers, { eq: eqFn }) => eqFn(producers.userId, ctx.userId),
@@ -176,6 +213,7 @@ export const producerRouter = createTRPCRouter({
           userId: ctx.userId,
           companyName: input.companyName,
           brandName: input.brandName,
+          phone: normalizePhone(input.phone),
         })
         .returning();
 
@@ -556,6 +594,7 @@ export const producerRouter = createTRPCRouter({
         .set({
           companyName: input.companyName,
           brandName: input.brandName,
+          phone: normalizePhone(input.phone),
           siret: input.siret || null,
           website: input.website || null,
           updatedAt: new Date(),
@@ -572,17 +611,33 @@ export const producerRouter = createTRPCRouter({
   updateLogo: protectedProcedure
     .input(producerLogoUpdateSchema)
     .mutation(async ({ ctx, input }) => {
-      const producerId = await requireProducerIdByUser(
-        ctx,
-        "Profil producteur non trouve"
-      );
+      return setProducerMedia(ctx, "logo", input.logo ?? "");
+    }),
+
+  /**
+   * Dépose ou retire un visuel repris sur les réseaux sociaux (logo, photo du
+   * producteur ou de son équipe). Le dépôt exige le consentement.
+   */
+  updateMedia: protectedProcedure
+    .input(producerMediaUpdateSchema)
+    .mutation(async ({ ctx, input }) => {
+      return setProducerMedia(ctx, input.field, input.url);
+    }),
+
+  /**
+   * Donne ou retire le consentement à la reprise du logo et de la photo sur
+   * les réseaux sociaux de la cup. Le retirer laisse les fichiers en place
+   * (pour un nouvel accord) mais l'organisation ne doit plus les utiliser :
+   * le dashboard les masque.
+   */
+  setMediaConsent: protectedProcedure
+    .input(z.object({ consent: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      const producerId = await requireProducerIdByUser(ctx, "Profil producteur non trouve");
 
       const [updatedProducer] = await ctx.db
         .update(schema.producers)
-        .set({
-          logo: input.logo || null,
-          updatedAt: new Date(),
-        })
+        .set({ mediaConsentAt: input.consent ? new Date() : null, updatedAt: new Date() })
         .where(eq(schema.producers.id, producerId))
         .returning();
 

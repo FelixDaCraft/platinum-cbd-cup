@@ -18,7 +18,13 @@ export const producers = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     companyName: text("company_name").notNull(),
     brandName: text("brand_name").notNull(),
-    logo: text("logo"), // URL to Cloudflare R2
+    logo: text("logo"), // Chemin /uploads/producer-logos/…
+    // Photo du producteur ou de son équipe, reprise avec le logo sur les
+    // réseaux sociaux de la cup pour annoncer sa participation.
+    teamPhoto: text("team_photo"),
+    // Consentement à cette reprise : date d'acceptation, null s'il n'a pas été
+    // donné ou a été retiré. Aucun visuel ne se dépose sans lui.
+    mediaConsentAt: timestamp("media_consent_at", { withTimezone: true }),
     siret: text("siret"), // French company ID (14 digits), optional
     website: text("website"), // Optional website URL
     phone: text("phone"), // Contact phone number, optional

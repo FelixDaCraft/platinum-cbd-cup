@@ -68,6 +68,12 @@ const FOLDER_RULES: Record<
     kinds: ["image"],
     profile: "producer",
   },
+  // Photo du producteur ou de son équipe (réseaux sociaux de la cup).
+  "producer-photos": {
+    roles: ["producer", "organizer"],
+    kinds: ["image"],
+    profile: "producer",
+  },
   "jury-avatars": {
     roles: ["jury", "organizer"],
     kinds: ["image"],

@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 
 import { api } from "~/trpc/react";
+import { formatPhone } from "~/lib/validations/producer";
 
 export default function ProducersPage() {
   const [search, setSearch] = useState("");
@@ -160,7 +161,7 @@ export default function ProducersPage() {
                     <span className="n-font-data" style={{ color: "var(--n-text-disabled)", fontSize: "12px" }}>{p.userEmail}</span>
                   </td>
                   <td style={{ padding: "12px 16px" }}>
-                    <span className="n-font-data" style={{ color: "var(--n-text-secondary)", fontSize: "13px" }}>{p.phone ?? "—"}</span>
+                    <span className="n-font-data" style={{ color: "var(--n-text-secondary)", fontSize: "13px" }}>{p.phone ? formatPhone(p.phone) : "—"}</span>
                   </td>
                   <td style={{ padding: "12px 16px", textAlign: "right" }}>
                     <span className="n-font-data" style={{ fontSize: "16px", fontWeight: 700, color: p.cups.length > 0 ? "var(--n-text-display)" : "var(--n-text-disabled)" }}>
@@ -225,7 +226,7 @@ export default function ProducersPage() {
               {selected.phone && (
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingBottom: "12px", borderBottom: "1px solid var(--n-border)" }}>
                   <span className="n-label" style={{ color: "var(--n-text-disabled)" }}>TELEPHONE</span>
-                  <span className="n-font-data" style={{ color: "var(--n-text-primary)", fontSize: "13px" }}>{selected.phone}</span>
+                  <span className="n-font-data" style={{ color: "var(--n-text-primary)", fontSize: "13px" }}>{formatPhone(selected.phone)}</span>
                 </div>
               )}
 
@@ -239,6 +240,13 @@ export default function ProducersPage() {
                 </div>
               )}
             </div>
+
+            {/* Visuels pour les réseaux sociaux */}
+            <ProducerMediaPanel
+              logo={selected.logo}
+              teamPhoto={selected.teamPhoto}
+              mediaConsentAt={selected.mediaConsentAt}
+            />
 
             {/* Actions */}
             <div style={{ display: "flex", gap: "8px", marginTop: "32px" }}>
@@ -289,6 +297,82 @@ export default function ProducersPage() {
             </div>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+/** Version PNG enregistrée à côté du WebP par /api/upload, plus simple à
+ *  reprendre dans les outils des réseaux sociaux. */
+function pngOf(url: string): string {
+  return url.endsWith(".webp") ? url.replace(/\.webp$/, ".png") : url;
+}
+
+/**
+ * Logo et photo du producteur, à reprendre sur les réseaux sociaux. Sans
+ * consentement (jamais donné ou retiré), les visuels ne sont pas proposés :
+ * l'organisation ne doit pas les publier.
+ */
+function ProducerMediaPanel({
+  logo,
+  teamPhoto,
+  mediaConsentAt,
+}: {
+  logo: string | null;
+  teamPhoto: string | null;
+  mediaConsentAt: Date | null;
+}) {
+  const visuals = [
+    { label: "LOGO", url: logo, file: "logo" },
+    { label: "PHOTO ÉQUIPE", url: teamPhoto, file: "photo" },
+  ];
+
+  return (
+    <div style={{ marginTop: "32px" }}>
+      <p className="n-label" style={{ color: "var(--n-text-disabled)", marginBottom: "8px" }}>
+        VISUELS RÉSEAUX SOCIAUX
+      </p>
+      {mediaConsentAt ? (
+        <>
+          <p className="n-label" style={{ color: "var(--n-success)", marginBottom: "12px" }}>
+            PUBLICATION AUTORISÉE LE {new Date(mediaConsentAt).toLocaleDateString("fr-FR")}
+          </p>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+            {visuals.map((v) => (
+              <div key={v.label}>
+                <p className="n-label" style={{ color: "var(--n-text-disabled)", marginBottom: "6px" }}>
+                  {v.label}
+                </p>
+                {v.url ? (
+                  <a href={pngOf(v.url)} download title="Télécharger (PNG)">
+                    <img
+                      src={v.url}
+                      alt={v.label}
+                      style={{
+                        width: "100%",
+                        height: "110px",
+                        objectFit: "contain",
+                        background: "var(--n-surface-raised)",
+                        border: "1px solid var(--n-border)",
+                        borderRadius: "8px",
+                      }}
+                    />
+                    <span className="n-label" style={{ color: "var(--n-interactive)", display: "block", marginTop: "4px" }}>
+                      TÉLÉCHARGER
+                    </span>
+                  </a>
+                ) : (
+                  <p className="n-label" style={{ color: "var(--n-text-disabled)" }}>NON FOURNI</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </>
+      ) : (
+        <p className="text-xs" style={{ color: "var(--n-warning)" }}>
+          Le producteur n&apos;a pas autorisé la publication de ses visuels
+          {logo || teamPhoto ? " (fichiers présents mais non utilisables)" : ""}.
+        </p>
       )}
     </div>
   );
