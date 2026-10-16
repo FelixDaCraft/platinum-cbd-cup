@@ -97,11 +97,6 @@ export default function CupLayout({ children }: { children: React.ReactNode }) {
           label: "Produits",
           icon: Package,
         },
-        {
-          href: `/dashboard/cups/${cupId}/participants/lab-rankings`,
-          label: "Classement terpènes",
-          icon: FlaskConical,
-        },
       ],
     },
     {
@@ -143,6 +138,11 @@ export default function CupLayout({ children }: { children: React.ReactNode }) {
           href: `/dashboard/cups/${cupId}/results/synthesis`,
           label: "Synthèses PDF",
           icon: FileText,
+        },
+        {
+          href: `/dashboard/cups/${cupId}/results/lab-rankings`,
+          label: "Classement terpènes",
+          icon: FlaskConical,
         },
       ],
     },
