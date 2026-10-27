@@ -124,6 +124,7 @@ export const producerRouter = createTRPCRouter({
       brandName: p.brandName,
       phone: p.phone,
       website: p.website,
+      instagram: p.instagram,
       logo: p.logo,
       teamPhoto: p.teamPhoto,
       mediaConsentAt: p.mediaConsentAt,
@@ -597,6 +598,7 @@ export const producerRouter = createTRPCRouter({
           phone: normalizePhone(input.phone),
           siret: input.siret || null,
           website: input.website || null,
+          instagram: input.instagram || null,
           updatedAt: new Date(),
         })
         .where(eq(schema.producers.id, producerId))

@@ -1509,6 +1509,7 @@ export const registrationRouter = createTRPCRouter({
           brandName: reg.producer.brandName,
           siret: reg.producer.siret,
           website: reg.producer.website,
+          instagram: reg.producer.instagram,
           phone: reg.producer.phone,
           user: reg.producer.user,
         },

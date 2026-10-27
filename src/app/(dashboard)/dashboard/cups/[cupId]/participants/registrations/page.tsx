@@ -94,6 +94,7 @@ interface Producer {
   brandName: string;
   siret: string | null;
   website: string | null;
+  instagram: string | null;
   phone: string | null;
   user: {
     id: string;
@@ -497,6 +498,20 @@ export default function CupRegistrationsPage() {
                           className="hover:underline"
                         >
                           {selectedRegistration.producer.website}
+                        </a>
+                      </div>
+                    )}
+                    {selectedRegistration.producer.instagram && (
+                      <div className={detailRowClass}>
+                        <span className="n-label" style={{ color: "var(--n-text-secondary)" }}>INSTAGRAM</span>
+                        <a
+                          href={`https://www.instagram.com/${selectedRegistration.producer.instagram}/`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ color: "var(--n-accent)" }}
+                          className="hover:underline"
+                        >
+                          @{selectedRegistration.producer.instagram}
                         </a>
                       </div>
                     )}

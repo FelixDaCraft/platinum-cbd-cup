@@ -27,6 +27,9 @@ export const producers = pgTable(
     mediaConsentAt: timestamp("media_consent_at", { withTimezone: true }),
     siret: text("siret"), // French company ID (14 digits), optional
     website: text("website"), // Optional website URL
+    // Compte Instagram de la marque, sans @ (mentionné sur les publications
+    // de la cup qui annoncent sa participation).
+    instagram: text("instagram"),
     phone: text("phone"), // Contact phone number, optional
     address: text("address"), // Business address, optional
     // Notification preferences

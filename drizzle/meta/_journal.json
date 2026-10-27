@@ -127,6 +127,13 @@
       "when": 1792143376971,
       "tag": "0017_coa_produit",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1793106072076,
+      "tag": "0018_instagram_producteur",
+      "breakpoints": true
     }
   ]
 }

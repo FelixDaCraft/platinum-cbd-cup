@@ -71,6 +71,7 @@ export default function ProducerProfilePage() {
       phone: "",
       siret: "",
       website: "",
+      instagram: "",
     },
   });
 
@@ -82,6 +83,7 @@ export default function ProducerProfilePage() {
         phone: formatPhone(profile.phone),
         siret: profile.siret ?? "",
         website: profile.website ?? "",
+        instagram: profile.instagram ? `@${profile.instagram}` : "",
       });
     }
   }, [profile, reset]);
@@ -323,6 +325,46 @@ export default function ProducerProfilePage() {
                       style={{ color: "var(--n-accent)" }}
                     >
                       {errors.website.message}
+                    </p>
+                  )}
+                </div>
+
+                {/* Instagram */}
+                <div className="space-y-2">
+                  <label
+                    htmlFor="instagram"
+                    className="n-label block"
+                    style={{ color: "var(--n-text-secondary)" }}
+                  >
+                    INSTAGRAM (OPTIONNEL)
+                  </label>
+                  <Input
+                    id="instagram"
+                    type="text"
+                    autoComplete="off"
+                    placeholder="@votremarque"
+                    className="n-font-data"
+                    aria-invalid={!!errors.instagram}
+                    aria-describedby="instagram-hint"
+                    {...register("instagram")}
+                    style={{
+                      backgroundColor: "var(--n-surface-raised)",
+                      borderColor: errors.instagram
+                        ? "var(--n-accent)"
+                        : "var(--n-border-visible)",
+                      color: "var(--n-text-primary)",
+                    }}
+                  />
+                  {errors.instagram ? (
+                    <p
+                      className="n-font-data text-xs"
+                      style={{ color: "var(--n-accent)" }}
+                    >
+                      {errors.instagram.message}
+                    </p>
+                  ) : (
+                    <p id="instagram-hint" className="n-label" style={{ color: "var(--n-text-disabled)" }}>
+                      POUR ÊTRE IDENTIFIÉ SUR LES PUBLICATIONS DE LA CUP
                     </p>
                   )}
                 </div>

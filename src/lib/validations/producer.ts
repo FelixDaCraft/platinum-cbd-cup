@@ -21,6 +21,29 @@ export const websiteSchema = z
   .or(z.literal(""));
 
 /**
+ * Compte Instagram de la marque, repris en @mention sur les publications
+ * de la cup. Accepte « compte », « @compte » ou l'URL du profil ; stocké
+ * normalisé, sans @ et en minuscules (Instagram ignore la casse).
+ */
+export function normalizeInstagramHandle(value: string): string {
+  const trimmed = value.trim();
+  const fromUrl = /^(?:https?:\/\/)?(?:www\.)?instagram\.com\/([^/?#]+)/i.exec(trimmed);
+  return (fromUrl?.[1] ?? trimmed).replace(/^@/, "").toLowerCase();
+}
+
+// Règles d'Instagram : 30 caractères, lettres, chiffres, points et tirets
+// bas ; ni point en tête ou en fin, ni deux points de suite.
+const INSTAGRAM_HANDLE_PATTERN = /^(?!\.)(?!.*\.\.)(?!.*\.$)[a-z0-9._]{1,30}$/;
+
+export const instagramHandleSchema = z
+  .string()
+  .transform(normalizeInstagramHandle)
+  .refine((val) => val === "" || INSTAGRAM_HANDLE_PATTERN.test(val), {
+    message: "Compte Instagram invalide : @compte ou lien vers le profil",
+  })
+  .optional();
+
+/**
  * Téléphone du producteur, obligatoire : l'organisation l'appelle pour la
  * logistique des échantillons. Séparateurs usuels tolérés (espaces, points,
  * tirets) ; format français (0X XX XX XX XX) ou international (+33…).
@@ -93,6 +116,7 @@ export const producerProfileUpdateSchema = z.object({
   phone: phoneSchema,
   siret: siretSchema,
   website: websiteSchema,
+  instagram: instagramHandleSchema,
 });
 
 export type ProducerProfileUpdateInput = z.infer<typeof producerProfileUpdateSchema>;
