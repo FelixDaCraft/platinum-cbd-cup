@@ -1,25 +1,10 @@
-import { createHash, timingSafeEqual } from "node:crypto";
-
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
 import * as schema from "~/server/db/schema";
 import type { db as Database } from "~/server/db";
 import { and, eq, isNotNull, lte } from "drizzle-orm";
-
-/**
- * Comparaison a temps constant du secret de cron.
- *
- * Les deux valeurs sont hachees avant comparaison pour que `timingSafeEqual`
- * recoive toujours deux buffers de meme longueur (il leve une exception sinon,
- * ce qui divulguerait la longueur du secret attendu).
- */
-function cronSecretMatches(provided: string, expected: string): boolean {
-  return timingSafeEqual(
-    createHash("sha256").update(provided).digest(),
-    createHash("sha256").update(expected).digest()
-  );
-}
+import { secretsMatch } from "~/lib/secret";
 
 /**
  * Routeur d'automatisation des phases.
@@ -61,7 +46,7 @@ export const phaseAutomationRouter = createTRPCRouter({
         });
       }
 
-      if (!cronSecretMatches(input.cronSecret, expectedSecret)) {
+      if (!secretsMatch(input.cronSecret, expectedSecret)) {
         throw new TRPCError({
           code: "UNAUTHORIZED",
           message: "Invalid cron secret",

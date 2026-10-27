@@ -20,6 +20,11 @@ export const env = createEnv({
     // (`phaseAutomation.checkPhaseTransitions`). Optionnel : sans lui, les
     // transitions automatiques sont simplement inactives.
     CRON_SECRET: z.string().min(1).optional(),
+    // Clé partagée avec InstaPlanner, qui lit les participants confirmés pour
+    // préparer leurs publications Instagram (route
+    // /api/integrations/instaplanner/participants). Optionnelle : sans elle,
+    // la route répond 404.
+    INSTAPLANNER_API_KEY: z.string().min(32).optional(),
     // Viva.com (Viva Wallet) — producer registration payments.
     // Optional so the app still boots before the credentials are filled in;
     // `assertVivaConfigured()` in ~/lib/viva raises a clear error at checkout
@@ -50,6 +55,7 @@ export const env = createEnv({
     EMAIL_FROM: process.env.EMAIL_FROM,
     NODE_ENV: process.env.NODE_ENV,
     CRON_SECRET: process.env.CRON_SECRET,
+    INSTAPLANNER_API_KEY: process.env.INSTAPLANNER_API_KEY,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
     VIVA_ENV: process.env.VIVA_ENV,
     VIVA_CLIENT_ID: process.env.VIVA_CLIENT_ID,
@@ -110,6 +116,7 @@ function assertProductionEnv() {
   // une valeur d'exemple, ils échouent silencieusement au premier paiement ou
   // à la première transition de phase, loin du démarrage.
   rejectPlaceholder("CRON_SECRET", env.CRON_SECRET, errors);
+  rejectPlaceholder("INSTAPLANNER_API_KEY", env.INSTAPLANNER_API_KEY, errors);
   rejectPlaceholder("VIVA_CLIENT_ID", env.VIVA_CLIENT_ID, errors);
   rejectPlaceholder("VIVA_CLIENT_SECRET", env.VIVA_CLIENT_SECRET, errors);
   rejectPlaceholder("VIVA_SOURCE_CODE", env.VIVA_SOURCE_CODE, errors);
