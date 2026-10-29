@@ -55,8 +55,8 @@ export default async function AboutPage() {
           </p>
           <p>
             Les seuils de note des labels Or, Argent et Bronze sont fixés pour
-            chaque édition. Le détail des règles figure dans le{" "}
-            <Link href="/reglement">règlement</Link>.
+            chaque édition. Le détail des règles figure dans le règlement du
+            concours.
           </p>
         </div>
         <div className="form-actions">
@@ -65,6 +65,9 @@ export default async function AboutPage() {
           </Link>
           <Link href="/cups" className="btn ghost">
             Participer
+          </Link>
+          <Link href="/reglement" className="btn ghost">
+            Lire le règlement
           </Link>
         </div>
       </section>

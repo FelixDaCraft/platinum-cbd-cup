@@ -573,7 +573,8 @@ export const streetCSS = `
 /* ── Pages éditoriales et légales ──────────────────────────── */
 .shell .pg-tile p{ color: var(--st-ink-2); }
 .shell .pg-section > h2{ margin: 0; }
-.st-team-photo{ display: block; width: 100%; height: auto; aspect-ratio: 4 / 5; object-fit: cover; filter: url(#st-duotone) contrast(1.06); }
+/* Photos de l'équipe en noir et blanc (la bichromie or est réservée aux visuels de la cup) */
+.st-team-photo{ display: block; width: 100%; height: auto; aspect-ratio: 4 / 5; object-fit: cover; filter: grayscale(1) contrast(1.06); }
 .shell .pg > .st-sec{ padding-top: 24px; padding-bottom: 64px; }
 .legal-updated{ margin: 0; font-family: var(--st-display); font-weight: 600; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--st-ink-3); }
 .shell .legal-toc{ margin: 0 0 8px; padding: 22px 0 26px; background: transparent; border: 0;
