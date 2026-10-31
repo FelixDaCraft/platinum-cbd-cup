@@ -92,9 +92,10 @@ export function JuriesExplainer({ labels }: { labels: LabelTier[] }) {
           </LiquidText>
           <h3>Le classement des experts</h3>
           <p>
-            Producteurs, sommeliers, analystes : chaque juré note l&apos;aspect,
-            l&apos;odeur, le goût et l&apos;effet. Il en sort un classement par
-            catégorie.
+            Producteurs, sommeliers, analystes : chaque juré note le visuel
+            (manucure, trichomes, propreté), l&apos;odeur (puissance, qualité,
+            originalité) et le goût (qualité, fidélité à l&apos;odeur,
+            persistance). Il en sort un classement et un podium par catégorie.
           </p>
         </article>
 
@@ -126,7 +127,9 @@ export function JuriesExplainer({ labels }: { labels: LabelTier[] }) {
           <h3>Les labels et le Prix du public</h3>
           <p>
             Des consommateurs notent chez eux, à partir d&apos;un coffret
-            d&apos;échantillons. Leur note décerne le Prix du public
+            d&apos;échantillons, sur une grille allégée : l&apos;aspect, puis la
+            puissance et l&apos;originalité de l&apos;odeur et du goût. Leur note
+            décerne le Prix du public
             {tiers.length > 0 ? " et les labels :" : " et les labels."}
           </p>
           {tiers.length > 0 && (
