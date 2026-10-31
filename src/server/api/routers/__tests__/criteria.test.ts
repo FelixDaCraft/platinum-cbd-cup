@@ -359,31 +359,25 @@ describe("Criteria Router", () => {
   });
 
   describe("Constants - DEFAULT_CRITERIA", () => {
-    it("has 4 default criteria", () => {
-      expect(DEFAULT_CRITERIA).toHaveLength(4);
+    it("propose la grille complète au jury pro et une grille allégée au jury public", () => {
+      expect(DEFAULT_CRITERIA.pro).toHaveLength(9);
+      expect(DEFAULT_CRITERIA.public).toHaveLength(5);
     });
 
-    it("has correct default values", () => {
-      expect(DEFAULT_CRITERIA[0]).toMatchObject({
-        name: "Aspect visuel",
-        coefficient: 1,
-      });
-      expect(DEFAULT_CRITERIA[1]).toMatchObject({
-        name: "Arôme",
-        coefficient: 2,
-      });
-      expect(DEFAULT_CRITERIA[2]).toMatchObject({
-        name: "Goût",
-        coefficient: 2,
-      });
-      expect(DEFAULT_CRITERIA[3]).toMatchObject({
-        name: "Effet",
-        coefficient: 2,
-      });
+    it("ne note jamais l'effet", () => {
+      for (const criterion of [...DEFAULT_CRITERIA.pro, ...DEFAULT_CRITERIA.public]) {
+        expect(criterion.name.toLowerCase()).not.toContain("effet");
+        expect(criterion.description.toLowerCase()).not.toContain("effet");
+      }
+    });
+
+    it("reprend les coefficients de la grille réelle", () => {
+      expect(DEFAULT_CRITERIA.pro.map((c) => c.coefficient)).toEqual([1, 1, 2, 1, 1, 2, 2, 2, 2]);
+      expect(DEFAULT_CRITERIA.public.map((c) => c.coefficient)).toEqual([1, 1, 2, 2, 2]);
     });
 
     it("all criteria have valid coefficients (1-10)", () => {
-      for (const criterion of DEFAULT_CRITERIA) {
+      for (const criterion of [...DEFAULT_CRITERIA.pro, ...DEFAULT_CRITERIA.public]) {
         expect(criterion.coefficient).toBeGreaterThanOrEqual(1);
         expect(criterion.coefficient).toBeLessThanOrEqual(10);
       }
@@ -732,11 +726,15 @@ describe("Criteria Router", () => {
       const result = await caller.initializeDefaultCriteria({ categoryId: "cat-1" });
 
       // Une grille par défaut pour chacun des deux jurys.
-      expect(result.created).toBe(DEFAULT_CRITERIA.length * 2);
+      expect(result.created).toBe(
+        DEFAULT_CRITERIA.pro.length + DEFAULT_CRITERIA.public.length
+      );
       expect(inserted).toHaveLength(1);
       const rows = inserted[0] as { panel: string }[];
-      expect(rows.filter((r) => r.panel === "pro")).toHaveLength(DEFAULT_CRITERIA.length);
-      expect(rows.filter((r) => r.panel === "public")).toHaveLength(DEFAULT_CRITERIA.length);
+      expect(rows.filter((r) => r.panel === "pro")).toHaveLength(DEFAULT_CRITERIA.pro.length);
+      expect(rows.filter((r) => r.panel === "public")).toHaveLength(
+        DEFAULT_CRITERIA.public.length
+      );
     });
 
     it("ne complète que le jury encore sans critère", async () => {
@@ -752,7 +750,7 @@ describe("Criteria Router", () => {
       const caller = await createCaller();
       const result = await caller.initializeDefaultCriteria({ categoryId: "cat-1" });
 
-      expect(result.created).toBe(DEFAULT_CRITERIA.length);
+      expect(result.created).toBe(DEFAULT_CRITERIA.public.length);
       const rows = inserted[0] as { panel: string }[];
       expect(rows.every((r) => r.panel === "public")).toBe(true);
     });

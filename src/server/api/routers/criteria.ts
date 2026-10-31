@@ -335,7 +335,7 @@ export const criteriaRouter = createTRPCRouter({
       }
 
       const criteriaToInsert = panels.flatMap((panel) =>
-        DEFAULT_CRITERIA.map((criterion, index) => ({
+        DEFAULT_CRITERIA[panel].map((criterion, index) => ({
           id: nanoid(),
           categoryId: input.categoryId,
           panel,

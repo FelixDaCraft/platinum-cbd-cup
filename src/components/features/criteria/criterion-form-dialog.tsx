@@ -128,7 +128,7 @@ export function CriterionFormDialog({
               id="name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Ex: Aspect visuel, Arôme..."
+              placeholder="Ex : VISUEL trim, ODEUR puissance…"
               maxLength={100}
             />
           </div>
