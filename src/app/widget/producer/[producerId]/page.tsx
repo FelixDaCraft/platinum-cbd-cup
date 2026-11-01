@@ -114,9 +114,21 @@ export default async function ProducerWidgetPage({
         <>
           {/* Summary */}
           <div style={{ display: "flex", gap: 8, padding: "12px 0" }}>
-            <Stat value={summary.totalDistinctions} label="Distinctions" palette={palette} />
-            <Stat value={summary.totalLabels} label="Médailles" palette={palette} />
-            <Stat value={summary.cupsParticipated} label="Éditions" palette={palette} />
+            <Stat
+              value={summary.totalDistinctions}
+              label={summary.totalDistinctions > 1 ? "Distinctions" : "Distinction"}
+              palette={palette}
+            />
+            <Stat
+              value={summary.totalLabels}
+              label={summary.totalLabels > 1 ? "Labels" : "Label"}
+              palette={palette}
+            />
+            <Stat
+              value={summary.cupsParticipated}
+              label={summary.cupsParticipated > 1 ? "Éditions" : "Édition"}
+              palette={palette}
+            />
           </div>
 
           {/* Per-cup breakdown */}
