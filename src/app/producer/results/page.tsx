@@ -196,63 +196,27 @@ function ProductDetailsInline({
             juryData.detailedScoresAvailable ? (
               <JuryScoresTable
                 juryScores={juryData.juryScores}
-                stats={juryData.stats}
+                stats={{ ...juryData.stats, juryCount: juryData.stats.juryCount ?? 0 }}
                 ratingScale={ratingScale}
               />
             ) : (
               <div className="space-y-4">
-                {/* Stats grid */}
+                {/* Note du jury public : aucune donnée qui permette de compter les jurés */}
                 <div
-                  className="grid grid-cols-4 gap-px"
-                  style={{ backgroundColor: "var(--n-border)" }}
+                  className="p-3 text-center"
+                  style={{ backgroundColor: "var(--n-surface-raised)", border: "1px solid var(--n-border)" }}
                 >
-                  {[
-                    {
-                      label: "JURYS",
-                      value: juryData.stats.juryCount,
-                      color: "var(--n-text-display)",
-                    },
-                    {
-                      label: "MOYENNE",
-                      value:
-                        juryData.stats.averageScore !== null
-                          ? `${convertScoreToScale(juryData.stats.averageScore, ratingScale)?.toFixed(1)}/${maxScale}`
-                          : "N/A",
-                      color: "var(--n-text-display)",
-                    },
-                    {
-                      label: "MIN",
-                      value:
-                        juryData.stats.minScore !== null
-                          ? `${convertScoreToScale(juryData.stats.minScore, ratingScale)?.toFixed(1)}/${maxScale}`
-                          : "N/A",
-                      color: "var(--n-accent)",
-                    },
-                    {
-                      label: "MAX",
-                      value:
-                        juryData.stats.maxScore !== null
-                          ? `${convertScoreToScale(juryData.stats.maxScore, ratingScale)?.toFixed(1)}/${maxScale}`
-                          : "N/A",
-                      color: "var(--n-success)",
-                    },
-                  ].map((stat) => (
-                    <div
-                      key={stat.label}
-                      className="p-3 text-center"
-                      style={{ backgroundColor: "var(--n-surface-raised)" }}
-                    >
-                      <p className="n-label mb-1" style={{ color: "var(--n-text-disabled)" }}>
-                        {stat.label}
-                      </p>
-                      <p
-                        className="n-font-data font-bold text-lg"
-                        style={{ color: stat.color }}
-                      >
-                        {stat.value}
-                      </p>
-                    </div>
-                  ))}
+                  <p className="n-label mb-1" style={{ color: "var(--n-text-disabled)" }}>
+                    MOYENNE DU JURY PUBLIC
+                  </p>
+                  <p
+                    className="n-font-data font-bold text-lg"
+                    style={{ color: "var(--n-text-display)" }}
+                  >
+                    {juryData.stats.averageScore !== null
+                      ? `${convertScoreToScale(juryData.stats.averageScore, ratingScale)?.toFixed(1)}/${maxScale}`
+                      : "N/A"}
+                  </p>
                 </div>
 
                 {/* Criteria averages */}
@@ -296,6 +260,18 @@ function ProductDetailsInline({
                   </div>
                 )}
 
+                {/* Commentaires du jury public, regroupés sans numérotation */}
+                {juryData.publicComments.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="n-label mb-2" style={{ color: "var(--n-text-disabled)" }}>
+                      COMMENTAIRES DU JURY PUBLIC
+                    </div>
+                    <p className="text-sm leading-relaxed" style={{ color: "var(--n-text-primary)" }}>
+                      {juryData.publicComments.map((comment) => `« ${comment} »`).join(" · ")}
+                    </p>
+                  </div>
+                )}
+
                 <div
                   className="px-4 py-3 text-sm"
                   style={{
@@ -305,8 +281,8 @@ function ProductDetailsInline({
                     color: "var(--n-text-secondary)",
                   }}
                 >
-                  Pour les competitions publiques, seuls les resultats synthetises sont
-                  affiches afin de proteger l&apos;anonymat des membres du jury.
+                  Pour le jury public, seuls la note, les moyennes par critère et les
+                  commentaires sont affichés, afin de protéger l&apos;anonymat des jurés.
                 </div>
               </div>
             )

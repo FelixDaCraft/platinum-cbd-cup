@@ -747,6 +747,55 @@ describe("Producer Router", () => {
         expect(pub.criteriaAverages.map((c) => c.criterionId)).toEqual(["c-pub-1"]);
         expect(pub.criteriaAverages[0]?.averageScore).toBe(9);
       });
+
+      it("jury public : note, moyennes par critère et commentaires, sans nombre de jurés ni extrêmes", async () => {
+        await withRatedProduct();
+        const { db } = await import("~/server/db");
+        vi.mocked(db.query.productRatings.findMany).mockResolvedValue([
+          {
+            jury: { panel: "public" },
+            submittedAt: new Date(),
+            comment: "  Zeste d'agrumes très net  ",
+            scores: [{ criterionId: "c-pub-1", score: 9 }],
+          },
+          {
+            jury: { panel: "public" },
+            submittedAt: new Date(),
+            comment: "Arôme puissant",
+            scores: [{ criterionId: "c-pub-1", score: 7 }],
+          },
+          {
+            jury: { panel: "public" },
+            submittedAt: new Date(),
+            comment: "   ",
+            scores: [{ criterionId: "c-pub-1", score: 8 }],
+          },
+        ] as never);
+        const caller = await createCaller();
+
+        const pub = await caller.getMyProductJuryScores({ productId: "prod-1", panel: "public" });
+        // Aucune information qui permette de compter les jurés publics.
+        expect(pub.juryScores).toEqual([]);
+        expect(pub.stats.juryCount).toBeNull();
+        expect(pub.stats.minScore).toBeNull();
+        expect(pub.stats.maxScore).toBeNull();
+        expect(pub.stats.standardDeviation).toBeNull();
+        expect(pub.criteriaAverages[0]?.minScore).toBeNull();
+        expect(pub.criteriaAverages[0]?.maxScore).toBeNull();
+        // La moyenne par critère reste.
+        expect(pub.criteriaAverages[0]?.averageScore).toBe(8);
+        // Commentaires : nettoyés, vides retirés, triés (l'ordre de dépôt ne fuit pas).
+        expect(pub.publicComments).toEqual(["Arôme puissant", "Zeste d'agrumes très net"]);
+      });
+
+      it("jury pro : le détail par juré et ses statistiques restent disponibles", async () => {
+        await withRatedProduct();
+        const caller = await createCaller();
+
+        const pro = await caller.getMyProductJuryScores({ productId: "prod-1", panel: "pro" });
+        expect(pro.stats.juryCount).toBe(1);
+        expect(pro.publicComments).toEqual([]);
+      });
     });
 
     it("refuse la synthèse d'une inscription appartenant à un autre producteur", async () => {

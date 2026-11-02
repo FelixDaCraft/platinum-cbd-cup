@@ -4,6 +4,7 @@
  */
 
 import React from "react";
+import { publicCommentsForDisplay } from "~/lib/results/public-comments";
 import {
   Document,
   Page,
@@ -589,9 +590,24 @@ function createProductPage(
                 borderBottomColor: "#f59e0b",
               },
             },
-            `Commentaires des jurys (${product.juryComments.length})`
+            product.panel === "public"
+              ? "Commentaires du jury public"
+              : `Commentaires des jurys (${product.juryComments.length})`
           ),
-          ...product.juryComments.map((comment, index) =>
+          // Jury public : un seul paragraphe, sans numérotation ni total.
+          ...(product.panel === "public"
+            ? [
+                React.createElement(
+                  Text,
+                  {
+                    key: "public-comments",
+                    style: { fontSize: 7.5, fontFamily: "Helvetica-Oblique", color: "#374151", lineHeight: 1.4, paddingHorizontal: 6, paddingVertical: 3 },
+                  },
+                  product.juryComments.map((comment) => `« ${comment} »`).join("  ·  ")
+                ),
+              ]
+            : []),
+          ...(product.panel === "public" ? [] : product.juryComments).map((comment, index) =>
             React.createElement(
               View,
               {
@@ -1647,9 +1663,14 @@ export async function getProductResultsForPdf(
       ? Math.round(((totalInCategory - categoryRank) / totalInCategory) * 100)
       : null;
 
-  const juryComments = ratingsWithComments
-    .map((r) => r.comment)
-    .filter((c): c is string => c !== null && c.trim().length > 0);
+  // Jury public : commentaires regroupés (nettoyés, dédoublonnés, triés) pour
+  // qu'on ne puisse ni compter les jurés ni les ordonner.
+  const juryComments =
+    panel === "public"
+      ? publicCommentsForDisplay(ratingsWithComments.map((r) => r.comment))
+      : ratingsWithComments
+          .map((r) => r.comment)
+          .filter((c): c is string => c !== null && c.trim().length > 0);
 
   // ------------------------------------------------------------
   // Lab analysis section (optional)

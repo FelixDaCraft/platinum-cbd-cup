@@ -1,4 +1,5 @@
 import { TRPCError } from "@trpc/server";
+import { publicCommentsForDisplay } from "~/lib/results/public-comments";
 import { z } from "zod";
 import { nanoid } from "nanoid";
 import { eq, and, or, count, isNotNull, ne, desc, asc, sql } from "drizzle-orm";
@@ -1437,7 +1438,7 @@ export const producerRouter = createTRPCRouter({
         .map((j) => j.totalScore)
         .filter((s): s is number => s !== null);
 
-      const stats = {
+      const fullStats = {
         juryCount: juryScores.length,
         averageScore:
           validTotalScores.length > 0
@@ -1462,10 +1463,25 @@ export const producerRouter = createTRPCRouter({
             : null,
       };
 
-      // Jury PUBLIC : seulement des statistiques agrégées, aucune note
-      // individuelle — protège l'anonymat des consommateurs et empêche de
-      // remonter à un juré par recoupement.
+      // Jury PUBLIC : le producteur voit sa note, ses moyennes par critère et
+      // les commentaires, mais rien qui permette de compter les jurés publics
+      // ni de remonter à l'un d'eux (ni nombre de notes, ni note minimale ou
+      // maximale, ni écart type, ni note individuelle).
       const isPublicPanel = panel === "public";
+      const stats = isPublicPanel
+        ? {
+            juryCount: null,
+            averageScore: fullStats.averageScore,
+            minScore: null,
+            maxScore: null,
+            standardDeviation: null,
+          }
+        : fullStats;
+      // Commentaires du jury public : nettoyés, sans doublon, triés pour que
+      // l'ordre de dépôt ne se lise pas.
+      const publicComments = isPublicPanel
+        ? publicCommentsForDisplay(juryScores.map((j) => j.comment))
+        : [];
 
       // Calculate per-criterion averages for aggregated view
       const criteriaAverages = panelCriteria.map((criterion) => {
@@ -1478,8 +1494,8 @@ export const producerRouter = createTRPCRouter({
           criterionName: criterion.name,
           coefficient: criterion.coefficient,
           averageScore: scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : null,
-          minScore: scores.length > 0 ? Math.min(...scores) : null,
-          maxScore: scores.length > 0 ? Math.max(...scores) : null,
+          minScore: !isPublicPanel && scores.length > 0 ? Math.min(...scores) : null,
+          maxScore: !isPublicPanel && scores.length > 0 ? Math.max(...scores) : null,
         };
       });
 
@@ -1499,6 +1515,7 @@ export const producerRouter = createTRPCRouter({
         juryScores: isPublicPanel ? [] : juryScores,
         criteriaAverages,
         stats,
+        publicComments,
         // Flag indicating if detailed jury scores are available
         detailedScoresAvailable: !isPublicPanel,
       };
