@@ -1,6 +1,7 @@
 "use client";
 
-import { JURY_PANEL_LABELS, juryPanelEnum, type JuryPanel } from "~/lib/enums";
+import { useTranslations } from "next-intl";
+import { juryPanelEnum, type JuryPanel } from "~/lib/enums";
 
 interface PanelToggleProps {
   value: JuryPanel;
@@ -14,10 +15,11 @@ interface PanelToggleProps {
  * cup en produit deux, qui ne se mélangent jamais.
  */
 export function PanelToggle({ value, onChange, panels = juryPanelEnum }: PanelToggleProps) {
+  const t = useTranslations("resultsCharts");
   return (
     <div
       role="tablist"
-      aria-label="Jury"
+      aria-label={t("panelAria")}
       style={{
         display: "inline-flex",
         border: "1px solid var(--n-border-visible)",
@@ -46,7 +48,7 @@ export function PanelToggle({ value, onChange, panels = juryPanelEnum }: PanelTo
               color: active ? "var(--n-black)" : "var(--n-text-secondary)",
             }}
           >
-            {JURY_PANEL_LABELS[panel]}
+            {panel === "pro" ? t("juryPro") : t("juryPublic")}
           </button>
         );
       })}

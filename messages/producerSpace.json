@@ -22,7 +22,8 @@
     "collapse": "Réduire",
     "skip": "Aller au contenu",
     "loading": "[CHARGEMENT…]",
-    "retry": "RÉESSAYER"
+    "retry": "RÉESSAYER",
+    "uncategorized": "Sans catégorie"
   },
   "en": {
     "metaTitle": "Producer area",
@@ -47,7 +48,8 @@
     "collapse": "Collapse",
     "skip": "Skip to content",
     "loading": "[LOADING…]",
-    "retry": "TRY AGAIN"
+    "retry": "TRY AGAIN",
+    "uncategorized": "Uncategorised"
   },
   "it": {
     "metaTitle": "Area produttore",
@@ -72,7 +74,8 @@
     "collapse": "Riduci",
     "skip": "Vai al contenuto",
     "loading": "[CARICAMENTO…]",
-    "retry": "RIPROVA"
+    "retry": "RIPROVA",
+    "uncategorized": "Senza categoria"
   },
   "de": {
     "metaTitle": "Produzentenbereich",
@@ -97,7 +100,8 @@
     "collapse": "Einklappen",
     "skip": "Zum Inhalt springen",
     "loading": "[WIRD GELADEN…]",
-    "retry": "ERNEUT VERSUCHEN"
+    "retry": "ERNEUT VERSUCHEN",
+    "uncategorized": "Ohne Kategorie"
   },
   "cs": {
     "metaTitle": "Sekce pěstitele",
@@ -122,7 +126,8 @@
     "collapse": "Sbalit",
     "skip": "Přejít na obsah",
     "loading": "[NAČÍTÁNÍ…]",
-    "retry": "ZKUSIT ZNOVU"
+    "retry": "ZKUSIT ZNOVU",
+    "uncategorized": "Bez kategorie"
   },
   "nl": {
     "metaTitle": "Producentenruimte",
@@ -147,7 +152,8 @@
     "collapse": "Inklappen",
     "skip": "Naar de inhoud",
     "loading": "[LADEN…]",
-    "retry": "OPNIEUW PROBEREN"
+    "retry": "OPNIEUW PROBEREN",
+    "uncategorized": "Zonder categorie"
   },
   "es": {
     "metaTitle": "Espacio del productor",
@@ -172,6 +178,7 @@
     "collapse": "Contraer",
     "skip": "Ir al contenido",
     "loading": "[CARGANDO…]",
-    "retry": "REINTENTAR"
+    "retry": "REINTENTAR",
+    "uncategorized": "Sin categoría"
   }
 }

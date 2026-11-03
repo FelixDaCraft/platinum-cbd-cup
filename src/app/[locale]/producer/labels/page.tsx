@@ -1,7 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { useLocale, useTranslations } from "next-intl";
+import { useServerError } from "~/i18n/server-error";
 import { Link } from "~/i18n/navigation";
+import { formatDate as formatLocaleDate, type Locale } from "~/i18n/locales";
 import { toast } from "sonner";
 
 import { api } from "~/trpc/react";
@@ -11,18 +14,23 @@ import {
 } from "~/lib/validations/labels";
 import type { RatingScale } from "~/server/db/schema/cups";
 
-function formatDate(date: Date | string | null | undefined): string {
+function formatDate(date: Date | string | null | undefined, locale: Locale): string {
   if (!date) return "-";
   const dateObj = typeof date === "string" ? new Date(date) : date;
   if (isNaN(dateObj.getTime())) return "-";
-  return new Intl.DateTimeFormat("fr-FR", {
+  return formatLocaleDate(dateObj, locale, {
     day: "2-digit",
     month: "long",
     year: "numeric",
-  }).format(dateObj);
+  });
 }
 
 export default function ProducerLabelsPage() {
+  const t = useTranslations("producerLabels");
+  const tr = useTranslations("producerResults");
+  const tc = useTranslations("producerSpace");
+  const serverError = useServerError();
+  const locale = useLocale() as Locale;
   const {
     data: labels,
     isLoading,
@@ -39,11 +47,11 @@ export default function ProducerLabelsPage() {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      toast.success("Synthese PDF telechargee");
+      toast.success(tr("pdfDownloaded"));
       setDownloadingPdf(null);
     },
     onError: (error) => {
-      toast.error(error.message);
+      toast.error(serverError(error));
       setDownloadingPdf(null);
     },
   });
@@ -59,7 +67,7 @@ export default function ProducerLabelsPage() {
         className="flex items-center justify-center min-h-[400px]"
         style={{ color: "var(--n-text-disabled)" }}
       >
-        <span className="n-font-data text-sm tracking-widest">[LOADING...]</span>
+        <span className="n-font-data text-sm tracking-widest">{tc("loading")}</span>
       </div>
     );
   }
@@ -70,10 +78,10 @@ export default function ProducerLabelsPage() {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] gap-4 text-center">
         <span role="alert" className="n-font-data text-sm tracking-widest" style={{ color: "var(--n-text-secondary)" }}>
-          [ERREUR] VOS LABELS N&apos;ONT PAS PU ÊTRE CHARGÉS
+          {t("error")}
         </span>
         <button type="button" className="n-btn-secondary text-xs" onClick={() => void refetch()}>
-          RÉESSAYER
+          {tc("retry")}
         </button>
       </div>
     );
@@ -84,22 +92,22 @@ export default function ProducerLabelsPage() {
       {/* Header */}
       <div className="flex items-center gap-4">
         <Link href="/producer/dashboard" className="n-btn-ghost text-xs" style={{ padding: "8px 12px" }}>
-          ← RETOUR
+          {tr("back")}
         </Link>
         <div>
           <div className="n-label mb-1" style={{ color: "var(--n-text-disabled)" }}>
-            PRODUCTEUR
+            {tr("eyebrow")}
           </div>
           <h1
             className="n-font-data text-2xl font-bold"
             style={{ color: "var(--n-text-display)" }}
           >
-            MES LABELS
+            {t("title")}
           </h1>
           <p className="n-label mt-1" style={{ color: "var(--n-text-secondary)" }}>
             {labels && labels.length > 0
-              ? `${labels.length} LABEL${labels.length !== 1 ? "S" : ""} OBTENU${labels.length !== 1 ? "S" : ""}`
-              : "VOS RECOMPENSES OBTENUES LORS DES COMPETITIONS"}
+              ? t("count", { count: labels.length })
+              : t("subtitle")}
           </p>
         </div>
       </div>
@@ -114,12 +122,12 @@ export default function ProducerLabelsPage() {
           }}
         >
           <div className="n-label mb-2" style={{ color: "var(--n-text-secondary)" }}>
-            AUCUN LABEL
+            {t("empty")}
           </div>
           <p className="text-sm mb-6" style={{ color: "var(--n-text-disabled)" }}>
-            Participez aux competitions pour remporter des labels.
+            {t("emptyText")}
           </p>
-          <Link href="/cups" className="n-btn-secondary text-xs">DECOUVRIR LES COMPETITIONS</Link>
+          <Link href="/cups" className="n-btn-secondary text-xs">{t("discover")}</Link>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -202,7 +210,7 @@ export default function ProducerLabelsPage() {
                         className="n-label"
                         style={{ color: "var(--n-text-disabled)" }}
                       >
-                        COMPETITION
+                        {t("competition")}
                       </span>
                       <span
                         className="text-sm truncate max-w-[60%] text-right"
@@ -218,18 +226,13 @@ export default function ProducerLabelsPage() {
                           className="n-label"
                           style={{ color: "var(--n-text-disabled)" }}
                         >
-                          CLASSEMENT
+                          {t("ranking")}
                         </span>
                         <span
                           className="n-font-data text-sm"
                           style={{ color: "var(--n-warning)" }}
                         >
-                          {item.categoryRank === 1
-                            ? "1ER"
-                            : item.categoryRank === 2
-                              ? "2EME"
-                              : `${item.categoryRank}EME`}{" "}
-                          DE SA CATEGORIE
+                          {t("rankInCategory", { rank: item.categoryRank })}
                         </span>
                       </div>
                     )}
@@ -239,13 +242,13 @@ export default function ProducerLabelsPage() {
                         className="n-label"
                         style={{ color: "var(--n-text-disabled)" }}
                       >
-                        OBTENU LE
+                        {t("obtainedOn")}
                       </span>
                       <span
                         className="n-font-data text-xs"
                         style={{ color: "var(--n-text-secondary)" }}
                       >
-                        {formatDate(item.obtainedAt)}
+                        {formatDate(item.obtainedAt, locale)}
                       </span>
                     </div>
                   </div>
@@ -257,8 +260,8 @@ export default function ProducerLabelsPage() {
                     disabled={downloadingPdf === item.registrationId}
                   >
                     {downloadingPdf === item.registrationId
-                      ? "[TELECHARGEMENT...]"
-                      : "TELECHARGER LA SYNTHESE PDF"}
+                      ? tr("downloading")
+                      : tr("downloadPdf")}
                   </button>
                 </div>
               </div>

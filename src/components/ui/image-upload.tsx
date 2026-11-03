@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { useTranslations } from "next-intl";
 import { useDropzone } from "react-dropzone";
 import { X, Loader2, ImageIcon, Check } from "lucide-react";
 import { cn } from "~/lib/utils";
@@ -22,13 +23,14 @@ export function ImageUpload({
   value,
   onChange,
   folder = "images",
-  placeholder = "Glissez une image ou cliquez pour sélectionner",
+  placeholder,
   aspectRatio = "video",
   objectFit = "cover",
   maxSize = 5,
   disabled = false,
   className,
 }: ImageUploadProps) {
+  const t = useTranslations("producerComponents.upload");
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -65,26 +67,26 @@ export function ImageUpload({
         const data = await response.json();
 
         if (!response.ok) {
-          throw new Error(data.error || "Erreur lors de l'upload");
+          throw new Error(data.error || t("uploadError"));
         }
 
         onChange(data.url);
 
         if (data.compressionRatio > 0) {
-          setCompressionInfo(`Compressé de ${data.compressionRatio}%`);
+          setCompressionInfo(t("compressed", { ratio: data.compressionRatio }));
         }
 
         // Clear compression info after 3 seconds
         setTimeout(() => setCompressionInfo(null), 3000);
 
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Erreur inconnue");
+        setError(err instanceof Error ? err.message : t("unknownError"));
       } finally {
         setIsUploading(false);
         setUploadProgress(0);
       }
     },
-    [folder, onChange]
+    [folder, onChange, t]
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -103,9 +105,9 @@ export function ImageUpload({
     onDropRejected: (rejections) => {
       const rejection = rejections[0];
       if (rejection?.errors[0]?.code === "file-too-large") {
-        setError(`Fichier trop volumineux. Maximum: ${maxSize}MB`);
+        setError(t("tooLarge", { max: maxSize }));
       } else if (rejection?.errors[0]?.code === "file-invalid-type") {
-        setError("Format non supporté. Utilisez JPG, PNG, WebP ou GIF");
+        setError(t("badFormat"));
       }
     },
   });
@@ -139,13 +141,13 @@ export function ImageUpload({
         <div className={cn("relative rounded-lg overflow-hidden border border-white/20", previewAspectRatioClass)}>
           <img
             src={value}
-            alt="Aperçu de l'image téléversée"
+            alt={t("previewAlt")}
             loading="lazy"
             decoding="async"
             className={cn("w-full h-full", objectFit === "contain" ? "object-contain" : "object-cover")}
             onError={(e) => {
               (e.target as HTMLImageElement).src = "";
-              setError("Impossible de charger l'image");
+              setError(t("loadError"));
             }}
           />
           <div className="absolute inset-0 bg-black/50 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
@@ -157,7 +159,7 @@ export function ImageUpload({
               className="border-white/50 bg-black/50 hover:bg-black/70 text-white"
             >
               <X className="mr-2 h-4 w-4" />
-              Supprimer
+              {t("remove")}
             </Button>
           </div>
           {compressionInfo && (
@@ -193,7 +195,7 @@ export function ImageUpload({
                 />
               </div>
               <p className="text-sm text-muted-foreground">
-                Conversion en WebP...
+                {t("converting")}
               </p>
             </div>
           ) : (
@@ -203,10 +205,10 @@ export function ImageUpload({
               </div>
               <div>
                 <p className="text-sm font-medium">
-                  {isDragActive ? "Déposez l'image ici" : placeholder}
+                  {isDragActive ? t("dropHere") : (placeholder ?? t("placeholder"))}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  JPG, PNG, WebP ou GIF (max {maxSize}MB)
+                  {t("formats", { max: maxSize })}
                 </p>
               </div>
             </div>

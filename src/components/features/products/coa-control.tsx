@@ -2,7 +2,9 @@
 
 import { useRef, useState } from "react";
 import { FileText, Loader2, Upload, X } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { toast } from "sonner";
+import { useServerError } from "~/i18n/server-error";
 
 import { Button } from "~/components/ui/button";
 import { api } from "~/trpc/react";
@@ -21,15 +23,17 @@ export interface CoaControlProps {
  * ou l'autre. Le fichier n'est servi qu'à eux, jamais au jury.
  */
 export function CoaControl({ productId, coaFile, onChanged }: CoaControlProps) {
+  const t = useTranslations("producerComponents.coa");
+  const serverError = useServerError();
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
 
   const removeCoa = api.product.removeCoa.useMutation({
     onSuccess: () => {
-      toast.success("COA retiré");
+      toast.success(t("removed"));
       onChanged();
     },
-    onError: (error) => toast.error(error.message),
+    onError: (error) => toast.error(serverError(error)),
   });
 
   const upload = async (file: File) => {
@@ -40,11 +44,11 @@ export function CoaControl({ productId, coaFile, onChanged }: CoaControlProps) {
       formData.append("productId", productId);
       const response = await fetch("/api/upload/coa", { method: "POST", body: formData });
       const data = (await response.json().catch(() => ({}))) as { error?: string };
-      if (!response.ok) throw new Error(data.error ?? "Échec de l'envoi du COA");
-      toast.success(coaFile ? "COA remplacé" : "COA déposé");
+      if (!response.ok) throw new Error(data.error ?? t("uploadFailed"));
+      toast.success(coaFile ? t("replaced") : t("uploaded"));
       onChanged();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Échec de l'envoi du COA");
+      toast.error(error instanceof Error ? error.message : t("uploadFailed"));
     } finally {
       setUploading(false);
       if (inputRef.current) inputRef.current.value = "";
@@ -68,7 +72,7 @@ export function CoaControl({ productId, coaFile, onChanged }: CoaControlProps) {
       {coaFile ? (
         <>
           <Button variant="ghost" size="sm" className="h-8 px-2" asChild>
-            <a href={coaFile} target="_blank" rel="noopener noreferrer" title="Voir le COA (PDF)">
+            <a href={coaFile} target="_blank" rel="noopener noreferrer" title={t("view")}>
               <FileText className="h-4 w-4 mr-1" />
               COA
             </a>
@@ -79,7 +83,7 @@ export function CoaControl({ productId, coaFile, onChanged }: CoaControlProps) {
             className="h-8 px-2"
             disabled={busy}
             onClick={() => inputRef.current?.click()}
-            title="Remplacer le COA"
+            title={t("replace")}
           >
             {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
           </Button>
@@ -89,7 +93,7 @@ export function CoaControl({ productId, coaFile, onChanged }: CoaControlProps) {
             className="h-8 px-2"
             disabled={busy}
             onClick={() => removeCoa.mutate({ productId })}
-            title="Retirer le COA"
+            title={t("remove")}
           >
             <X className="h-4 w-4" />
           </Button>
@@ -101,7 +105,7 @@ export function CoaControl({ productId, coaFile, onChanged }: CoaControlProps) {
           className="h-8 px-2"
           disabled={busy}
           onClick={() => inputRef.current?.click()}
-          title="Déposer le certificat d'analyse (PDF)"
+          title={t("upload")}
         >
           {uploading ? (
             <Loader2 className="h-4 w-4 mr-1 animate-spin" />

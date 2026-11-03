@@ -1,0 +1,93 @@
+{
+  "fr": {
+    "error": "[ERREUR] VOS LABELS N'ONT PAS PU ÊTRE CHARGÉS",
+    "title": "MES LABELS",
+    "count": "{count, plural, one {# LABEL OBTENU} other {# LABELS OBTENUS}}",
+    "subtitle": "VOS RÉCOMPENSES OBTENUES LORS DES ÉDITIONS",
+    "empty": "AUCUN LABEL",
+    "emptyText": "Participez aux éditions pour remporter des labels.",
+    "discover": "DÉCOUVRIR LES ÉDITIONS",
+    "competition": "ÉDITION",
+    "ranking": "CLASSEMENT",
+    "rankInCategory": "{rank, selectordinal, one {#ER} other {#E}} DE SA CATÉGORIE",
+    "obtainedOn": "OBTENU LE"
+  },
+  "en": {
+    "error": "[ERROR] YOUR LABELS COULD NOT BE LOADED",
+    "title": "MY LABELS",
+    "count": "{count, plural, one {# LABEL WON} other {# LABELS WON}}",
+    "subtitle": "THE AWARDS YOU HAVE WON AT OUR EDITIONS",
+    "empty": "NO LABELS",
+    "emptyText": "Take part in our editions to win labels.",
+    "discover": "DISCOVER THE EDITIONS",
+    "competition": "EDITION",
+    "ranking": "RANKING",
+    "rankInCategory": "{rank, selectordinal, one {#ST} two {#ND} few {#RD} other {#TH}} IN ITS CATEGORY",
+    "obtainedOn": "AWARDED ON"
+  },
+  "it": {
+    "error": "[ERRORE] IMPOSSIBILE CARICARE I TUOI LABEL",
+    "title": "I MIEI LABEL",
+    "count": "{count, plural, one {# LABEL OTTENUTO} other {# LABEL OTTENUTI}}",
+    "subtitle": "I RICONOSCIMENTI OTTENUTI NELLE NOSTRE EDIZIONI",
+    "empty": "NESSUN LABEL",
+    "emptyText": "Partecipa alle edizioni per vincere dei label.",
+    "discover": "SCOPRI LE EDIZIONI",
+    "competition": "EDIZIONE",
+    "ranking": "CLASSIFICA",
+    "rankInCategory": "{rank}° DELLA SUA CATEGORIA",
+    "obtainedOn": "OTTENUTO IL"
+  },
+  "de": {
+    "error": "[FEHLER] IHRE LABELS KONNTEN NICHT GELADEN WERDEN",
+    "title": "MEINE LABELS",
+    "count": "{count, plural, one {# LABEL ERHALTEN} other {# LABELS ERHALTEN}}",
+    "subtitle": "IHRE AUSZEICHNUNGEN AUS UNSEREN AUSGABEN",
+    "empty": "KEINE LABELS",
+    "emptyText": "Nehmen Sie an unseren Ausgaben teil, um Labels zu gewinnen.",
+    "discover": "AUSGABEN ENTDECKEN",
+    "competition": "AUSGABE",
+    "ranking": "PLATZIERUNG",
+    "rankInCategory": "{rank}. SEINER KATEGORIE",
+    "obtainedOn": "ERHALTEN AM"
+  },
+  "cs": {
+    "error": "[CHYBA] VAŠE OCENĚNÍ SE NEPODAŘILO NAČÍST",
+    "title": "MOJE OCENĚNÍ",
+    "count": "{count, plural, one {# ZÍSKANÉ OCENĚNÍ} few {# ZÍSKANÁ OCENĚNÍ} other {# ZÍSKANÝCH OCENĚNÍ}}",
+    "subtitle": "OCENĚNÍ ZÍSKANÁ V NAŠICH ROČNÍCÍCH",
+    "empty": "ŽÁDNÉ OCENĚNÍ",
+    "emptyText": "Zúčastněte se našich ročníků a získejte ocenění.",
+    "discover": "OBJEVTE ROČNÍKY",
+    "competition": "ROČNÍK",
+    "ranking": "UMÍSTĚNÍ",
+    "rankInCategory": "{rank}. VE SVÉ KATEGORII",
+    "obtainedOn": "ZÍSKÁNO"
+  },
+  "nl": {
+    "error": "[FOUT] JE LABELS KONDEN NIET WORDEN GELADEN",
+    "title": "MIJN LABELS",
+    "count": "{count, plural, one {# LABEL BEHAALD} other {# LABELS BEHAALD}}",
+    "subtitle": "DE ONDERSCHEIDINGEN DIE JE IN ONZE EDITIES HEBT BEHAALD",
+    "empty": "GEEN LABELS",
+    "emptyText": "Doe mee aan onze edities om labels te winnen.",
+    "discover": "ONTDEK DE EDITIES",
+    "competition": "EDITIE",
+    "ranking": "RANGSCHIKKING",
+    "rankInCategory": "{rank}E IN ZIJN CATEGORIE",
+    "obtainedOn": "BEHAALD OP"
+  },
+  "es": {
+    "error": "[ERROR] NO SE HAN PODIDO CARGAR TUS SELLOS",
+    "title": "MIS SELLOS",
+    "count": "{count, plural, one {# SELLO OBTENIDO} other {# SELLOS OBTENIDOS}}",
+    "subtitle": "LOS PREMIOS OBTENIDOS EN NUESTRAS EDICIONES",
+    "empty": "SIN SELLOS",
+    "emptyText": "Participa en nuestras ediciones para ganar sellos.",
+    "discover": "DESCUBRIR LAS EDICIONES",
+    "competition": "EDICIÓN",
+    "ranking": "CLASIFICACIÓN",
+    "rankInCategory": "{rank}.º DE SU CATEGORÍA",
+    "obtainedOn": "OBTENIDO EL"
+  }
+}

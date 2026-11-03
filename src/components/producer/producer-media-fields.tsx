@@ -1,6 +1,8 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { toast } from "sonner";
+import { useServerError } from "~/i18n/server-error";
 
 import { Checkbox } from "~/components/ui/checkbox";
 import { ImageUpload } from "~/components/ui/image-upload";
@@ -21,24 +23,26 @@ export interface ProducerMedia {
  * que la case de consentement n'est pas cochée (le serveur refuse aussi).
  */
 export function ProducerMediaFields({ media }: { media: ProducerMedia | null | undefined }) {
+  const t = useTranslations("producerComponents.media");
+  const serverError = useServerError();
   const utils = api.useUtils();
   const consented = !!media?.mediaConsentAt;
 
   const setConsent = api.producer.setMediaConsent.useMutation({
     onSuccess: (_data, { consent }) => {
       void utils.producer.getProfile.invalidate();
-      toast.success(consent ? "Accord enregistré" : "Accord retiré");
+      toast.success(consent ? t("consentSaved") : t("consentRemoved"));
     },
-    onError: (error) => toast.error(error.message),
+    onError: (error) => toast.error(serverError(error)),
   });
 
   const updateMedia = api.producer.updateMedia.useMutation({
     onSuccess: (_data, { field, url }) => {
       void utils.producer.getProfile.invalidate();
-      const label = field === "logo" ? "Logo" : "Photo";
-      toast.success(url ? `${label} enregistré${field === "logo" ? "" : "e"}` : `${label} retiré${field === "logo" ? "" : "e"}`);
+      if (field === "logo") toast.success(url ? t("logoSaved") : t("logoRemoved"));
+      else toast.success(url ? t("photoSaved") : t("photoRemoved"));
     },
-    onError: (error) => toast.error(error.message),
+    onError: (error) => toast.error(serverError(error)),
   });
 
   return (
@@ -55,20 +59,11 @@ export function ProducerMediaFields({ media }: { media: ProducerMedia | null | u
         }}
       >
         <p style={{ color: "var(--n-text-primary)", fontWeight: 500 }}>
-          À quoi serviront ces visuels ?
+          {t("usageTitle")}
         </p>
-        <p>
-          Votre logo et votre photo seront <strong>publiés sur les réseaux sociaux de la
-          Platinum CBD Cup</strong> pour annoncer votre participation à la compétition.
-        </p>
-        <p>
-          Pour la photo, vérifiez que chaque personne visible est d&apos;accord pour
-          apparaître sur nos réseaux.
-        </p>
-        <p>
-          Vous pouvez retirer votre accord à tout moment depuis votre profil : nous
-          n&apos;utiliserons plus vos visuels pour de nouvelles publications.
-        </p>
+        <p>{t.rich("usage1", { b: (chunks) => <strong>{chunks}</strong> })}</p>
+        <p>{t("usage2")}</p>
+        <p>{t("usage3")}</p>
       </div>
 
       <label className="flex items-start gap-3 cursor-pointer">
@@ -76,28 +71,27 @@ export function ProducerMediaFields({ media }: { media: ProducerMedia | null | u
           checked={consented}
           disabled={setConsent.isPending}
           onCheckedChange={(checked) => setConsent.mutate({ consent: checked === true })}
-          aria-label="Accepter la publication de mes visuels"
+          aria-label={t("consentAria")}
           className="mt-0.5"
         />
         <span className="text-sm" style={{ color: "var(--n-text-primary)" }}>
-          J&apos;autorise la Platinum CBD Cup à publier mon logo et ma photo sur ses
-          réseaux sociaux pour communiquer sur ma participation.
+          {t("consent")}
         </span>
       </label>
 
       <div className="grid gap-5 sm:grid-cols-2">
         <div className="space-y-2">
           <div className="n-label" style={{ color: "var(--n-text-disabled)" }}>
-            LOGO
+            {t("logo")}
           </div>
           <p className="text-xs" style={{ color: "var(--n-text-secondary)" }}>
-            Format carré, 400×400 px minimum
+            {t("logoHint")}
           </p>
           <ImageUpload
             value={media?.logo ?? ""}
             onChange={(url) => updateMedia.mutate({ field: "logo", url })}
             folder="producer-logos"
-            placeholder={consented ? "Glissez votre logo ici" : "Cochez la case ci-dessus d'abord"}
+            placeholder={consented ? t("logoDrop") : t("checkFirst")}
             aspectRatio="auto"
             objectFit="contain"
             maxSize={2}
@@ -107,16 +101,16 @@ export function ProducerMediaFields({ media }: { media: ProducerMedia | null | u
 
         <div className="space-y-2">
           <div className="n-label" style={{ color: "var(--n-text-disabled)" }}>
-            PHOTO DE VOUS OU DE VOTRE ÉQUIPE
+            {t("photo")}
           </div>
           <p className="text-xs" style={{ color: "var(--n-text-secondary)" }}>
-            Bien éclairée, format paysage de préférence
+            {t("photoHint")}
           </p>
           <ImageUpload
             value={media?.teamPhoto ?? ""}
             onChange={(url) => updateMedia.mutate({ field: "teamPhoto", url })}
             folder="producer-photos"
-            placeholder={consented ? "Glissez votre photo ici" : "Cochez la case ci-dessus d'abord"}
+            placeholder={consented ? t("photoDrop") : t("checkFirst")}
             aspectRatio="auto"
             objectFit="contain"
             maxSize={8}

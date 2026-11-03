@@ -36,6 +36,14 @@ import serverErrors from "./serverErrors.json";
 import shell from "./shell.json";
 import sponsors from "./sponsors.json";
 import validation from "./validation.json";
+import producerRegistrations from "./producerRegistrations.json";
+import producerResults from "./producerResults.json";
+import resultsCharts from "./resultsCharts.json";
+import producerLabels from "./producerLabels.json";
+import producerProfile from "./producerProfile.json";
+import producerComponents from "./producerComponents.json";
+import gdpr from "./gdpr.json";
+import widget from "./widget.json";
 
 export const catalog = {
   about,
@@ -72,4 +80,12 @@ export const catalog = {
   shell,
   sponsors,
   validation,
+  producerRegistrations,
+  producerResults,
+  resultsCharts,
+  producerLabels,
+  producerProfile,
+  producerComponents,
+  gdpr,
+  widget,
 };

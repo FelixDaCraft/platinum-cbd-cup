@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import { useRouter } from "~/i18n/navigation";
+import { useServerError } from "~/i18n/server-error";
+import { translateValidation } from "~/i18n/validation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
@@ -16,6 +19,9 @@ import {
 import { api } from "~/trpc/react";
 
 export default function CompleteProfilePage() {
+  const t = useTranslations("producerProfile");
+  const tv = useTranslations("validation");
+  const serverError = useServerError();
   const router = useRouter();
   const [pendingProfile, setPendingProfile] = useState<{
     companyName: string;
@@ -35,21 +41,21 @@ export default function CompleteProfilePage() {
     onSuccess: () => {
       void utils.producer.hasProfile.invalidate();
       void utils.producer.getProfile.invalidate();
-      toast.success("Profil producteur créé !");
+      toast.success(t("created"));
       setStep("media");
     },
     onError: (error) => {
       if (error.message.includes("existe deja")) {
-        toast.error("Vous avez déjà un profil producteur");
+        toast.error(t("alreadyExists"));
         router.push("/producer/dashboard");
         return;
       }
       if (error.message.includes("organisateur")) {
-        toast.error("Les organisateurs ne peuvent pas creer de profil producteur");
+        toast.error(t("organizerForbidden"));
         router.push("/cups");
         return;
       }
-      toast.error(error.message || "Erreur lors de la création du profil");
+      toast.error(serverError(error, t("createError")));
     },
   });
 
@@ -93,17 +99,16 @@ export default function CompleteProfilePage() {
         <div className="w-full max-w-2xl n-card">
           <div className="mb-6">
             <div className="n-label mb-1" style={{ color: "var(--n-text-disabled)" }}>
-              PRODUCTEUR · ÉTAPE 2/2
+              {t("step2")}
             </div>
             <h1
               className="n-font-data text-xl font-bold"
               style={{ color: "var(--n-text-display)" }}
             >
-              VOS VISUELS
+              {t("mediaTitle")}
             </h1>
             <p className="text-sm mt-2" style={{ color: "var(--n-text-secondary)" }}>
-              Ajoutez votre logo et une photo de vous ou de votre équipe : nous les
-              utiliserons pour annoncer votre participation.
+              {t("mediaText")}
             </p>
           </div>
 
@@ -118,14 +123,14 @@ export default function CompleteProfilePage() {
               className="n-btn-ghost"
               onClick={() => router.push("/producer/dashboard")}
             >
-              JE LE FERAI PLUS TARD
+              {t("later")}
             </button>
             <button
               type="button"
               className="n-btn-primary"
               onClick={() => router.push("/producer/dashboard")}
             >
-              TERMINER
+              {t("finish")}
             </button>
           </div>
         </div>
@@ -139,18 +144,18 @@ export default function CompleteProfilePage() {
         {/* Header */}
         <div className="mb-6">
           <div className="n-label mb-1" style={{ color: "var(--n-text-disabled)" }}>
-            PRODUCTEUR · ÉTAPE 1/2
+            {t("step1")}
           </div>
           <h1
             className="n-font-data text-xl font-bold"
             style={{ color: "var(--n-text-display)" }}
           >
-            COMPLÉTEZ VOTRE PROFIL
+            {t("completeTitle")}
           </h1>
           <p className="text-sm mt-2" style={{ color: "var(--n-text-secondary)" }}>
             {pendingProfile
-              ? "Vérifiez et confirmez les informations saisies à l'inscription"
-              : "Renseignez les informations de votre entreprise pour finaliser votre inscription"}
+              ? t("completeCheck")
+              : t("completeFill")}
           </p>
         </div>
 
@@ -162,12 +167,12 @@ export default function CompleteProfilePage() {
               className="n-label block"
               style={{ color: "var(--n-text-secondary)" }}
             >
-              NOM DE L&apos;ENTREPRISE
+              {t("companyName")}
             </label>
             <Input
               id="companyName"
               type="text"
-              placeholder="Ma Société SARL"
+              placeholder={t("companyPlaceholder")}
               className="n-font-data"
               aria-invalid={!!errors.companyName}
               {...register("companyName")}
@@ -181,7 +186,7 @@ export default function CompleteProfilePage() {
             />
             {errors.companyName && (
               <p className="n-font-data text-xs" style={{ color: "var(--n-accent)" }}>
-                {errors.companyName.message}
+                {translateValidation(errors.companyName.message, tv)}
               </p>
             )}
           </div>
@@ -193,12 +198,12 @@ export default function CompleteProfilePage() {
               className="n-label block"
               style={{ color: "var(--n-text-secondary)" }}
             >
-              NOM DE LA MARQUE
+              {t("brandName")}
             </label>
             <Input
               id="brandName"
               type="text"
-              placeholder="Ma Marque"
+              placeholder={t("brandPlaceholder")}
               className="n-font-data"
               aria-invalid={!!errors.brandName}
               {...register("brandName")}
@@ -212,7 +217,7 @@ export default function CompleteProfilePage() {
             />
             {errors.brandName && (
               <p className="n-font-data text-xs" style={{ color: "var(--n-accent)" }}>
-                {errors.brandName.message}
+                {translateValidation(errors.brandName.message, tv)}
               </p>
             )}
           </div>
@@ -224,13 +229,13 @@ export default function CompleteProfilePage() {
               className="n-label block"
               style={{ color: "var(--n-text-secondary)" }}
             >
-              TÉLÉPHONE
+              {t("phone")}
             </label>
             <Input
               id="phone"
               type="tel"
               autoComplete="tel"
-              placeholder="06 12 34 56 78"
+              placeholder={t("phonePlaceholder")}
               className="n-font-data"
               aria-invalid={!!errors.phone}
               {...register("phone")}
@@ -242,11 +247,11 @@ export default function CompleteProfilePage() {
             />
             {errors.phone ? (
               <p className="n-font-data text-xs" style={{ color: "var(--n-accent)" }}>
-                {errors.phone.message}
+                {translateValidation(errors.phone.message, tv)}
               </p>
             ) : (
               <p className="text-xs" style={{ color: "var(--n-text-disabled)" }}>
-                Pour vous joindre au sujet de vos échantillons.
+                {t("phoneHint")}
               </p>
             )}
           </div>
@@ -262,8 +267,8 @@ export default function CompleteProfilePage() {
               disabled={isSubmitting || createProfile.isPending}
             >
               {isSubmitting || createProfile.isPending
-                ? "[CREATION EN COURS...]"
-                : "CONTINUER"}
+                ? t("creating")
+                : t("continue")}
             </button>
           </div>
         </form>

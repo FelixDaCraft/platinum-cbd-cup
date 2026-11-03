@@ -1,12 +1,16 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { Link } from "~/i18n/navigation";
 import { toast } from "sonner";
 
 import { api } from "~/trpc/react";
 
 export default function ProducerWidgetPage() {
+  const t = useTranslations("widget");
+  const tr = useTranslations("producerResults");
+  const tc = useTranslations("producerSpace");
   const {
     data: embedData,
     isLoading,
@@ -20,10 +24,10 @@ export default function ProducerWidgetPage() {
     try {
       await navigator.clipboard.writeText(text);
       setCopiedType(type);
-      toast.success("Code copie dans le presse-papier");
+      toast.success(t("copied"));
       setTimeout(() => setCopiedType(null), 2000);
     } catch {
-      toast.error("Erreur lors de la copie");
+      toast.error(t("copyError"));
     }
   };
 
@@ -33,7 +37,7 @@ export default function ProducerWidgetPage() {
         className="flex items-center justify-center min-h-[400px]"
         style={{ color: "var(--n-text-disabled)" }}
       >
-        <span className="n-font-data text-sm tracking-widest">[LOADING...]</span>
+        <span className="n-font-data text-sm tracking-widest">{tc("loading")}</span>
       </div>
     );
   }
@@ -44,10 +48,10 @@ export default function ProducerWidgetPage() {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] gap-4 text-center">
         <span role="alert" className="n-font-data text-sm tracking-widest" style={{ color: "var(--n-text-secondary)" }}>
-          [ERREUR] LE CODE D&apos;INTÉGRATION N&apos;A PAS PU ÊTRE CHARGÉ
+          {t("error")}
         </span>
         <button type="button" className="n-btn-secondary text-xs" onClick={() => void refetch()}>
-          RÉESSAYER
+          {tc("retry")}
         </button>
       </div>
     );
@@ -58,17 +62,17 @@ export default function ProducerWidgetPage() {
       <div className="space-y-6">
         <div className="flex items-center gap-4">
           <Link href="/producer/dashboard" className="n-btn-ghost text-xs" style={{ padding: "8px 12px" }}>
-            ← RETOUR
+            {tr("back")}
           </Link>
           <div>
             <div className="n-label mb-1" style={{ color: "var(--n-text-disabled)" }}>
-              PRODUCTEUR
+              {tr("eyebrow")}
             </div>
             <h1
               className="n-font-data text-2xl font-bold"
               style={{ color: "var(--n-text-display)" }}
             >
-              WIDGET INTEGRABLE
+              {t("title")}
             </h1>
           </div>
         </div>
@@ -80,7 +84,7 @@ export default function ProducerWidgetPage() {
           }}
         >
           <p className="text-sm" style={{ color: "var(--n-text-disabled)" }}>
-            Impossible de charger les donnees du widget.
+            {t("loadError")}
           </p>
         </div>
       </div>
@@ -94,20 +98,20 @@ export default function ProducerWidgetPage() {
       {/* Header */}
       <div className="flex items-center gap-4">
         <Link href="/producer/dashboard" className="n-btn-ghost text-xs" style={{ padding: "8px 12px" }}>
-          ← RETOUR
+          {tr("back")}
         </Link>
         <div>
           <div className="n-label mb-1" style={{ color: "var(--n-text-disabled)" }}>
-            PRODUCTEUR
+            {tr("eyebrow")}
           </div>
           <h1
             className="n-font-data text-2xl font-bold"
             style={{ color: "var(--n-text-display)" }}
           >
-            WIDGET INTEGRABLE
+            {t("title")}
           </h1>
           <p className="text-sm mt-1" style={{ color: "var(--n-text-secondary)" }}>
-            Affichez vos distinctions sur votre site web
+            {t("subtitle")}
           </p>
         </div>
       </div>
@@ -116,10 +120,10 @@ export default function ProducerWidgetPage() {
         {/* Code Section */}
         <div className="n-card">
           <div className="n-label mb-1" style={{ color: "var(--n-text-disabled)" }}>
-            CODE D&apos;INTEGRATION
+            {t("embedCode")}
           </div>
           <p className="text-sm mb-5" style={{ color: "var(--n-text-secondary)" }}>
-            Copiez le code et collez-le sur votre site web
+            {t("embedText")}
           </p>
 
           {/* Tab switcher */}
@@ -159,8 +163,8 @@ export default function ProducerWidgetPage() {
           {/* Description */}
           <p className="text-sm mb-3" style={{ color: "var(--n-text-secondary)" }}>
             {activeTab === "iframe"
-              ? "Methode la plus simple. Copiez ce code et collez-le dans votre page HTML."
-              : "Methode avancee avec plus d'options de personnalisation."}
+              ? t("iframeDesc")
+              : t("scriptDesc")}
           </p>
 
           {/* Code block */}
@@ -182,7 +186,7 @@ export default function ProducerWidgetPage() {
               className="n-btn-secondary absolute top-3 right-3 text-xs"
               style={{ padding: "6px 14px", minHeight: "32px" }}
             >
-              {copiedType === activeTab ? "[COPIE]" : "COPIER"}
+              {copiedType === activeTab ? t("copiedTag") : t("copy")}
             </button>
           </div>
 
@@ -196,7 +200,7 @@ export default function ProducerWidgetPage() {
             }}
           >
             <div className="n-label mb-3" style={{ color: "var(--n-text-disabled)" }}>
-              {activeTab === "iframe" ? "PERSONNALISATION" : "OPTIONS DISPONIBLES"}
+              {activeTab === "iframe" ? t("customization") : t("options")}
             </div>
             {activeTab === "iframe" ? (
               <div className="space-y-2">
@@ -214,7 +218,7 @@ export default function ProducerWidgetPage() {
                     width
                   </span>
                   <span className="text-xs" style={{ color: "var(--n-text-secondary)" }}>
-                    Largeur du widget
+                    {t("width")}
                   </span>
                 </div>
                 <div className="flex items-start gap-3">
@@ -231,16 +235,16 @@ export default function ProducerWidgetPage() {
                     height
                   </span>
                   <span className="text-xs" style={{ color: "var(--n-text-secondary)" }}>
-                    Hauteur du widget. Taille recommandee : 350×400px minimum.
+                    {t("height")}
                   </span>
                 </div>
               </div>
             ) : (
               <div className="space-y-2">
                 {[
-                  { attr: "data-width", desc: "Largeur du widget (defaut : 350)" },
-                  { attr: "data-height", desc: "Hauteur du widget (defaut : 400)" },
-                  { attr: "data-theme", desc: "Theme clair ou sombre (light/dark)" },
+                  { attr: "data-width", desc: t("dataWidth") },
+                  { attr: "data-height", desc: t("dataHeight") },
+                  { attr: "data-theme", desc: t("dataTheme") },
                 ].map(({ attr, desc }) => (
                   <div key={attr} className="flex items-start gap-3">
                     <span
@@ -262,6 +266,9 @@ export default function ProducerWidgetPage() {
                 ))}
               </div>
             )}
+            <p className="text-xs mt-3" style={{ color: "var(--n-text-disabled)" }}>
+              {t("language")}
+            </p>
           </div>
         </div>
 
@@ -270,10 +277,10 @@ export default function ProducerWidgetPage() {
           <div className="flex items-center justify-between mb-5">
             <div>
               <div className="n-label mb-1" style={{ color: "var(--n-text-disabled)" }}>
-                APERCU
+                {t("preview")}
               </div>
               <p className="text-sm" style={{ color: "var(--n-text-secondary)" }}>
-                Voici comment le widget apparaitra sur votre site
+                {t("previewText")}
               </p>
             </div>
             <a
@@ -283,7 +290,7 @@ export default function ProducerWidgetPage() {
               className="n-btn-ghost text-xs"
               style={{ padding: "8px 12px" }}
             >
-              PLEIN ECRAN ↗
+              {t("fullscreen")}
             </a>
           </div>
 
@@ -301,7 +308,7 @@ export default function ProducerWidgetPage() {
               height="400"
               frameBorder="0"
               style={{ borderRadius: "8px" }}
-              title="Apercu du widget"
+              title={t("previewTitle")}
             />
           </div>
         </div>
@@ -310,7 +317,7 @@ export default function ProducerWidgetPage() {
       {/* How it works */}
       <div className="n-card">
         <div className="n-label mb-5" style={{ color: "var(--n-text-disabled)" }}>
-          COMMENT CA MARCHE
+          {t("how")}
         </div>
         <div
           className="grid grid-cols-1 gap-px sm:grid-cols-3"
@@ -319,18 +326,18 @@ export default function ProducerWidgetPage() {
           {[
             {
               step: "01",
-              title: "Copiez le code",
-              desc: "Choisissez la methode d'integration qui vous convient et copiez le code correspondant.",
+              title: t("step1"),
+              desc: t("step1Text"),
             },
             {
               step: "02",
-              title: "Integrez sur votre site",
-              desc: "Collez le code dans le HTML de votre site, la ou vous souhaitez afficher le widget.",
+              title: t("step2"),
+              desc: t("step2Text"),
             },
             {
               step: "03",
-              title: "Mise a jour automatique",
-              desc: "Le widget se met a jour automatiquement lorsque vous obtenez de nouvelles distinctions.",
+              title: t("step3"),
+              desc: t("step3Text"),
             },
           ].map(({ step, title, desc }) => (
             <div

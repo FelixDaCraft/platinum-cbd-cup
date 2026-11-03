@@ -4,6 +4,7 @@
  */
 
 import { z } from "zod";
+import { localizedField } from "~/i18n/locales";
 import { TRPCError } from "@trpc/server";
 import { eq, and, or, isNotNull, lte, desc, inArray, sql } from "drizzle-orm";
 import {
@@ -109,6 +110,7 @@ export const widgetRouter = createTRPCRouter({
               categoryName: categories.name,
               labelId: cupLabels.id,
               labelName: cupLabels.name,
+              labelTranslations: cupLabels.translations,
               labelColor: cupLabels.color,
               labelIcon: cupLabels.icon,
             })
@@ -156,7 +158,11 @@ export const widgetRouter = createTRPCRouter({
               const label = p.labelId
                 ? {
                     id: p.labelId,
-                    name: p.labelName ?? "",
+                    name: localizedField(
+                      { name: p.labelName ?? "", translations: p.labelTranslations },
+                      "name",
+                      ctx.locale
+                    ),
                     color: p.labelColor,
                     icon: p.labelIcon,
                   }

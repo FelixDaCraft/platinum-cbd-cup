@@ -10,6 +10,7 @@ import {
   Legend,
   Tooltip,
 } from "recharts";
+import { useTranslations } from "next-intl";
 import type { RatingScale } from "~/server/db/schema/cups";
 import { convertScoreToScale, getMaxScoreForScale } from "~/lib/validations/labels";
 
@@ -33,10 +34,11 @@ interface ProductRadarChartProps {
  */
 export function ProductRadarChart({
   criteriaScores,
-  productName = "Produit",
+  productName,
   ratingScale = "0-20",
   className,
 }: ProductRadarChartProps) {
+  const t = useTranslations("resultsCharts");
   const maxScale = getMaxScoreForScale(ratingScale);
 
   // Need at least 3 criteria for a radar chart
@@ -44,9 +46,9 @@ export function ProductRadarChart({
     return (
       <div className={`flex items-center justify-center p-8 bg-muted/30 rounded-lg ${className}`}>
         <p className="text-sm text-muted-foreground text-center">
-          Graphique radar non disponible
+          {t("radarUnavailable")}
           <br />
-          <span className="text-xs">(minimum 3 critères requis)</span>
+          <span className="text-xs">{t("radarMin")}</span>
         </p>
       </div>
     );
@@ -79,7 +81,7 @@ export function ProductRadarChart({
             tickCount={5}
           />
           <Radar
-            name="Moyenne catégorie"
+            name={t("categoryAverage")}
             dataKey="average"
             stroke="#6b7280"
             fill="#6b7280"
@@ -87,7 +89,7 @@ export function ProductRadarChart({
             strokeWidth={2}
           />
           <Radar
-            name={productName}
+            name={productName ?? t("product")}
             // Or #d4af37 de la charte Platinum (jeton --chart-1) : l'ambre
             // #f59e0b d'origine venait de CupMetrics et jurait avec le reste
             // de la page de résultats.
@@ -107,7 +109,7 @@ export function ProductRadarChart({
                 <div className="bg-zinc-900 border border-zinc-700 rounded-lg p-3 shadow-lg">
                   <p className="font-medium text-sm mb-2 text-white">{data?.fullName}</p>
                   <p className="text-xs text-zinc-400 mb-1">
-                    Coefficient: {data?.coefficient}
+                    {t("coefficient", { value: data?.coefficient })}
                   </p>
                   {payload.map((entry, index) => (
                     <p key={index} className="text-sm" style={{ color: entry.color }}>

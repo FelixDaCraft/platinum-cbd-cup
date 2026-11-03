@@ -2,6 +2,8 @@
 
 import { useState, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
+import { useLocale, useTranslations } from "next-intl";
+import { useServerError } from "~/i18n/server-error";
 import { Link } from "~/i18n/navigation";
 import { toast } from "sonner";
 import { formatPanelCodes } from "~/lib/panel-codes";
@@ -22,47 +24,48 @@ import {
   convertScoreToScale,
 } from "~/lib/validations/labels";
 import type { RatingScale } from "~/server/db/schema/cups";
+import { formatDate as formatLocaleDate, intlLocale, type Locale } from "~/i18n/locales";
 
 // Product status configuration
 const productStatusConfig = {
   pending: {
-    label: "A ENVOYER",
+    labelKey: "statusPending",
     tagClass: "warning",
     tagStyle: { borderColor: "var(--n-warning)", color: "var(--n-warning)" },
   },
   received: {
-    label: "RECU",
+    labelKey: "statusReceived",
     tagClass: "active",
     tagStyle: { borderColor: "var(--n-interactive)", color: "var(--n-interactive)" },
   },
   rating: {
-    label: "EN NOTATION",
+    labelKey: "statusRating",
     tagClass: "",
     tagStyle: { borderColor: "var(--n-text-secondary)", color: "var(--n-text-secondary)" },
   },
   rated: {
-    label: "NOTE",
+    labelKey: "statusRated",
     tagClass: "success",
     tagStyle: undefined,
   },
 } as const;
 
-function formatCurrency(amountInCents: number, currency = "EUR"): string {
-  return new Intl.NumberFormat("fr-FR", {
+function formatCurrency(amountInCents: number, currency: string, locale: Locale): string {
+  return new Intl.NumberFormat(intlLocale(locale), {
     style: "currency",
     currency,
   }).format(amountInCents / 100);
 }
 
-function formatDate(date: Date | string | null | undefined): string {
+function formatDate(date: Date | string | null | undefined, locale: Locale): string {
   if (!date) return "-";
   const dateObj = typeof date === "string" ? new Date(date) : date;
   if (isNaN(dateObj.getTime())) return "-";
-  return new Intl.DateTimeFormat("fr-FR", {
+  return formatLocaleDate(dateObj, locale, {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
-  }).format(dateObj);
+  });
 }
 
 function calculateProgress(
@@ -87,6 +90,10 @@ function getOverallStatus(products: Array<{ status: string }>): string {
 }
 
 export default function ProducerRegistrationsPage() {
+  const t = useTranslations("producerRegistrations");
+  const tc = useTranslations("producerSpace");
+  const serverError = useServerError();
+  const locale = useLocale() as Locale;
   const searchParams = useSearchParams();
   const filter = searchParams.get("filter");
 
@@ -107,11 +114,11 @@ export default function ProducerRegistrationsPage() {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      toast.success("Synthese PDF telechargee");
+      toast.success(t("pdfDownloaded"));
       setDownloadingPdf(null);
     },
     onError: (error) => {
-      toast.error(error.message);
+      toast.error(serverError(error));
       setDownloadingPdf(null);
     },
   });
@@ -167,7 +174,7 @@ export default function ProducerRegistrationsPage() {
         className="flex items-center justify-center min-h-[400px]"
         style={{ color: "var(--n-text-disabled)" }}
       >
-        <span className="n-font-data text-sm tracking-widest">[LOADING...]</span>
+        <span className="n-font-data text-sm tracking-widest">{tc("loading")}</span>
       </div>
     );
   }
@@ -178,10 +185,10 @@ export default function ProducerRegistrationsPage() {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] gap-4 text-center">
         <span role="alert" className="n-font-data text-sm tracking-widest" style={{ color: "var(--n-text-secondary)" }}>
-          [ERREUR] VOS INSCRIPTIONS N&apos;ONT PAS PU ÊTRE CHARGÉES
+          {t("error")}
         </span>
         <button type="button" className="n-btn-secondary text-xs" onClick={() => void refetch()}>
-          RÉESSAYER
+          {tc("retry")}
         </button>
       </div>
     );
@@ -204,16 +211,16 @@ export default function ProducerRegistrationsPage() {
         <div className="flex items-center justify-between gap-4">
           <div>
             <div className="n-label mb-1" style={{ color: "var(--n-text-disabled)" }}>
-              PRODUCTEUR
+              {t("eyebrow")}
             </div>
             <h1
               className="n-font-data text-2xl font-bold"
               style={{ color: "var(--n-text-display)" }}
             >
-              MES INSCRIPTIONS
+              {t("title")}
             </h1>
             <p className="text-sm mt-1" style={{ color: "var(--n-text-secondary)" }}>
-              Suivez vos inscriptions et le statut de vos produits
+              {t("subtitle")}
             </p>
           </div>
 
@@ -223,7 +230,7 @@ export default function ProducerRegistrationsPage() {
                 className="n-tag"
                 style={{ cursor: "pointer" }}
               >
-                FILTRE: {filter === "active" ? "ACTIVES" : filter.toUpperCase()} ×
+                {t("filter", { filter: filter === "active" ? t("filterActive") : filter.toUpperCase() })}
               </span>
             </Link>
           )}
@@ -232,7 +239,7 @@ export default function ProducerRegistrationsPage() {
         {/* ── Actions requises ── */}
         <section>
           <div className="n-label mb-4" style={{ color: "var(--n-text-disabled)" }}>
-            ACTIONS REQUISES
+            {t("actionsRequired")}
           </div>
           <div
             className="grid grid-cols-1 gap-px sm:grid-cols-3"
@@ -247,7 +254,7 @@ export default function ProducerRegistrationsPage() {
               }}
             >
               <div className="n-label mb-2" style={{ color: "var(--n-text-disabled)" }}>
-                A ENVOYER
+                {t("toSend")}
               </div>
               <div
                 className="n-font-data text-4xl font-bold leading-none mb-2"
@@ -260,8 +267,8 @@ export default function ProducerRegistrationsPage() {
               </div>
               <p className="text-xs" style={{ color: "var(--n-text-secondary)" }}>
                 {productsToSend > 0
-                  ? "Preparez vos colis avec les QR codes"
-                  : "Tous vos echantillons sont envoyes"}
+                  ? t("toSendYes")
+                  : t("toSendNo")}
               </p>
             </div>
 
@@ -276,7 +283,7 @@ export default function ProducerRegistrationsPage() {
                 }}
               >
                 <div className="n-label mb-2" style={{ color: "var(--n-text-disabled)" }}>
-                  RESULTATS
+                  {t("results")}
                 </div>
                 <div
                   className="n-font-data text-4xl font-bold leading-none mb-2"
@@ -291,8 +298,8 @@ export default function ProducerRegistrationsPage() {
                 </div>
                 <p className="text-xs" style={{ color: "var(--n-text-secondary)" }}>
                   {resultsAvailable > 0
-                    ? "Consultez vos scores et labels"
-                    : "Aucun resultat pour le moment"}
+                    ? t("resultsYes")
+                    : t("resultsNo")}
                 </p>
               </div>
             </Link>
@@ -307,7 +314,7 @@ export default function ProducerRegistrationsPage() {
               }}
             >
               <div className="n-label mb-2" style={{ color: "var(--n-text-disabled)" }}>
-                PAIEMENTS
+                {t("payments")}
               </div>
               <div
                 className="n-font-data text-4xl font-bold leading-none mb-2"
@@ -322,8 +329,8 @@ export default function ProducerRegistrationsPage() {
               </div>
               <p className="text-xs" style={{ color: "var(--n-text-secondary)" }}>
                 {pendingPayments.length > 0
-                  ? "Finalisez vos inscriptions"
-                  : "Tous les paiements sont a jour"}
+                  ? t("paymentsYes")
+                  : t("paymentsNo")}
               </p>
             </div>
           </div>
@@ -333,7 +340,7 @@ export default function ProducerRegistrationsPage() {
         {pendingPayments.length > 0 && (
           <section>
             <div className="n-label mb-4" style={{ color: "var(--n-accent)" }}>
-              PAIEMENTS EN ATTENTE
+              {t("pendingPayments")}
             </div>
             <div className="space-y-3">
               {pendingPayments.map((registration) => (
@@ -354,8 +361,7 @@ export default function ProducerRegistrationsPage() {
                       </p>
                       <p className="n-label mt-1" style={{ color: "var(--n-text-disabled)" }}>
                         Platinum CBD Cup ·{" "}
-                        {registration.products.length} PRODUIT
-                        {registration.products.length > 1 ? "S" : ""}
+                        {t("products", { count: registration.products.length })}
                       </p>
                     </div>
                     <div className="flex flex-wrap items-center justify-between gap-3 sm:shrink-0 sm:flex-nowrap sm:justify-end sm:gap-4">
@@ -366,12 +372,13 @@ export default function ProducerRegistrationsPage() {
                         >
                           {formatCurrency(
                             registration.totalAmount,
-                            registration.currency ?? "EUR"
+                            registration.currency ?? "EUR",
+                            locale
                           )}
                         </p>
                       </div>
                       <Link href={`/cups/${registration.cup.id}/register`} className="n-btn-primary text-xs">
-                        FINALISER LE PAIEMENT
+                        {t("finishPayment")}
                       </Link>
                     </div>
                   </div>
@@ -385,7 +392,7 @@ export default function ProducerRegistrationsPage() {
         <section>
           <div className="flex items-center gap-3 mb-4">
             <span className="n-label" style={{ color: "var(--n-text-disabled)" }}>
-              COMPETITIONS EN COURS
+              {t("ongoing")}
             </span>
             {activeCompetitions.length > 0 && (
               <span
@@ -403,12 +410,12 @@ export default function ProducerRegistrationsPage() {
               style={{ border: "1px dashed var(--n-border-visible)", borderRadius: "12px" }}
             >
               <div className="n-label mb-2" style={{ color: "var(--n-text-secondary)" }}>
-                AUCUNE COMPETITION ACTIVE
+                {t("noActive")}
               </div>
               <p className="text-sm mb-6" style={{ color: "var(--n-text-disabled)" }}>
-                Inscrivez-vous a une competition pour commencer.
+                {t("noActiveText")}
               </p>
-              <Link href="/cups" className="n-btn-secondary text-xs">DECOUVRIR LES COMPETITIONS</Link>
+              <Link href="/cups" className="n-btn-secondary text-xs">{t("discover")}</Link>
             </div>
           ) : (
             <div className="space-y-3">
@@ -459,7 +466,7 @@ export default function ProducerRegistrationsPage() {
                                     className="n-tag"
                                     style={statusConf.tagStyle}
                                   >
-                                    {statusConf.label}
+                                    {t(statusConf.labelKey)}
                                   </span>
                                 )}
                               </div>
@@ -468,9 +475,8 @@ export default function ProducerRegistrationsPage() {
                                 style={{ color: "var(--n-text-disabled)" }}
                               >
                                 Platinum CBD Cup ·{" "}
-                                {registration.products.length} PRODUIT
-                                {registration.products.length > 1 ? "S" : ""} ·{" "}
-                                {formatDate(registration.createdAt)}
+                                {t("products", { count: registration.products.length })} ·{" "}
+                                {formatDate(registration.createdAt, locale)}
                               </div>
                               {/* Inscription réglée, cup encore ouverte : un autre
                                   produit passe par une commande complémentaire. */}
@@ -480,7 +486,7 @@ export default function ProducerRegistrationsPage() {
                                   onClick={(e) => e.stopPropagation()}
                                   className="n-btn-secondary text-xs inline-block mt-3"
                                 >
-                                  + AJOUTER UN PRODUIT
+                                  {t("addProduct")}
                                 </Link>
                               )}
                             </div>
@@ -495,7 +501,7 @@ export default function ProducerRegistrationsPage() {
                                 className="n-label mt-1"
                                 style={{ color: "var(--n-text-disabled)" }}
                               >
-                                PROGRESSION
+                                {t("progress")}
                               </div>
                             </div>
                           </div>
@@ -524,7 +530,7 @@ export default function ProducerRegistrationsPage() {
                                   className="n-tag"
                                   style={conf.tagStyle}
                                 >
-                                  {count} {conf.label}
+                                  {count} {t(conf.labelKey)}
                                 </span>
                               );
                             })}
@@ -532,7 +538,7 @@ export default function ProducerRegistrationsPage() {
                               className="n-font-data text-xs ml-auto"
                               style={{ color: "var(--n-text-disabled)" }}
                             >
-                              {isExpanded ? "REDUIRE ▲" : "DETAIL ▼"}
+                              {isExpanded ? t("collapse") : t("expand")}
                             </span>
                           </div>
                         </div>
@@ -547,7 +553,7 @@ export default function ProducerRegistrationsPage() {
                             className="n-label mb-3"
                             style={{ color: "var(--n-text-disabled)" }}
                           >
-                            DETAIL DES PRODUITS
+                            {t("productDetail")}
                           </div>
                           {registration.products.map((product) => {
                             const pConf =
@@ -572,9 +578,9 @@ export default function ProducerRegistrationsPage() {
                                     className="n-label mt-0.5"
                                     style={{ color: "var(--n-text-disabled)" }}
                                   >
-                                    {product.category?.name ?? "SANS CATEGORIE"}
+                                    {product.category?.name ?? t("noCategory")}
                                     {product.receivedAt && (
-                                      <> · RECU LE {formatDate(product.receivedAt)}</>
+                                      <> · {t("receivedOn", { date: formatDate(product.receivedAt, locale) })}</>
                                     )}
                                   </p>
                                 </div>
@@ -601,7 +607,7 @@ export default function ProducerRegistrationsPage() {
                                   )}
                                   {pConf && (
                                     <span className="n-tag" style={pConf.tagStyle}>
-                                      {pConf.label}
+                                      {t(pConf.labelKey)}
                                     </span>
                                   )}
                                 </div>
@@ -623,7 +629,7 @@ export default function ProducerRegistrationsPage() {
           <section>
             <div className="flex items-center gap-3 mb-4">
               <span className="n-label" style={{ color: "var(--n-text-disabled)" }}>
-                HISTORIQUE
+                {t("history")}
               </span>
               <span
                 className="n-tag success"
@@ -646,28 +652,28 @@ export default function ProducerRegistrationsPage() {
                 }}
               >
                 <span className="n-label" style={{ color: "var(--n-text-disabled)" }}>
-                  COMPETITION
+                  {t("colCompetition")}
                 </span>
                 <span
                   className="n-label hidden md:block"
                   style={{ color: "var(--n-text-disabled)" }}
                 >
-                  PRODUITS
+                  {t("colProducts")}
                 </span>
                 <span
                   className="n-label hidden md:block"
                   style={{ color: "var(--n-text-disabled)" }}
                 >
-                  MONTANT
+                  {t("colAmount")}
                 </span>
                 <span
                   className="n-label hidden md:block"
                   style={{ color: "var(--n-text-disabled)" }}
                 >
-                  DATE
+                  {t("colDate")}
                 </span>
                 <span className="n-label" style={{ color: "var(--n-text-disabled)" }}>
-                  ACTIONS
+                  {t("colActions")}
                 </span>
               </div>
 
@@ -705,7 +711,7 @@ export default function ProducerRegistrationsPage() {
                             color: "var(--n-warning)",
                           }}
                         >
-                          {labelsCount} LABEL{labelsCount > 1 ? "S" : ""}
+                          {t("labelsCount", { count: labelsCount })}
                         </span>
                       )}
                     </div>
@@ -721,20 +727,21 @@ export default function ProducerRegistrationsPage() {
                     >
                       {formatCurrency(
                         registration.totalAmount,
-                        registration.currency ?? "EUR"
+                        registration.currency ?? "EUR",
+                        locale
                       )}
                     </span>
                     <span
                       className="n-font-data text-xs hidden md:block"
                       style={{ color: "var(--n-text-secondary)" }}
                     >
-                      {formatDate(registration.createdAt)}
+                      {formatDate(registration.createdAt, locale)}
                     </span>
                     <div className="flex items-center gap-2 shrink-0">
                       {hasResults && (
                         <>
                           <Link href="/producer/results" className="n-btn-ghost text-xs" style={{ padding: "8px 12px" }}>
-                            RESULTATS
+                            {t("results")}
                           </Link>
                           <button
                             className="n-btn-secondary text-xs"
@@ -754,7 +761,7 @@ export default function ProducerRegistrationsPage() {
                           className="n-btn-ghost text-xs"
                           style={{ padding: "8px 12px" }}
                         >
-                          FACTURE
+                          {t("invoice")}
                         </a>
                       )}
                     </div>
@@ -775,12 +782,12 @@ export default function ProducerRegistrationsPage() {
             }}
           >
             <div className="n-label mb-2" style={{ color: "var(--n-text-secondary)" }}>
-              AUCUNE INSCRIPTION
+              {t("empty")}
             </div>
             <p className="text-sm mb-6" style={{ color: "var(--n-text-disabled)" }}>
-              Vous n&apos;avez pas encore participe a une competition.
+              {t("emptyText")}
             </p>
-            <Link href="/cups" className="n-btn-secondary text-xs">DECOUVRIR LES COMPETITIONS</Link>
+            <Link href="/cups" className="n-btn-secondary text-xs">{t("discover")}</Link>
           </div>
         )}
       </div>

@@ -11,6 +11,8 @@ import {
   scoreFor,
 } from "~/server/db/panel-columns";
 import { juryPanelEnum } from "~/lib/enums";
+import { localizedField } from "~/i18n/locales";
+import { translatorFor } from "~/i18n/translator";
 
 import {
   createTRPCRouter,
@@ -406,6 +408,7 @@ export const producerRouter = createTRPCRouter({
         productId: schema.products.id,
         productName: schema.products.name,
         categoryName: schema.categories.name,
+        categoryTranslations: schema.categories.translations,
         // Le label est décerné sur le classement public : c'est ce score et ce
         // rang qui l'accompagnent. Les éditions antérieures à jury pro unique
         // n'ont de résultat que côté pro, d'où le repli.
@@ -414,6 +417,7 @@ export const producerRouter = createTRPCRouter({
         disqualified: schema.products.disqualified,
         labelId: schema.cupLabels.id,
         labelName: schema.cupLabels.name,
+        labelTranslations: schema.cupLabels.translations,
         labelColor: schema.cupLabels.color,
         cupId: schema.cups.id,
         cupName: schema.cups.name,
@@ -456,12 +460,14 @@ export const producerRouter = createTRPCRouter({
     return productsWithLabels.map((p) => ({
       id: p.productId,
       productName: p.productName,
-      categoryName: p.categoryName ?? "Sans catégorie",
+      categoryName: p.categoryName
+        ? localizedField({ name: p.categoryName, translations: p.categoryTranslations }, "name", ctx.locale)
+        : translatorFor(ctx.locale, "producerSpace")("uncategorized"),
       finalScore: p.finalScore ? parseFloat(p.finalScore) : null,
       categoryRank: p.categoryRank,
       label: {
         id: p.labelId,
-        name: p.labelName,
+        name: localizedField({ name: p.labelName, translations: p.labelTranslations }, "name", ctx.locale),
         color: p.labelColor,
       },
       cup: {
@@ -491,6 +497,7 @@ export const producerRouter = createTRPCRouter({
         productId: schema.products.id,
         productName: schema.products.name,
         categoryName: schema.categories.name,
+        categoryTranslations: schema.categories.translations,
         finalScorePro: schema.products.finalScorePro,
         finalScorePublic: schema.products.finalScorePublic,
         categoryRankPro: schema.products.categoryRankPro,
@@ -498,6 +505,7 @@ export const producerRouter = createTRPCRouter({
         disqualified: schema.products.disqualified,
         labelId: schema.cupLabels.id,
         labelName: schema.cupLabels.name,
+        labelTranslations: schema.cupLabels.translations,
         labelColor: schema.cupLabels.color,
         cupId: schema.cups.id,
         cupName: schema.cups.name,
@@ -565,14 +573,20 @@ export const producerRouter = createTRPCRouter({
       cupMap.get(p.cupId)!.products.push({
         id: p.productId,
         name: p.productName,
-        categoryName: p.categoryName ?? "Sans catégorie",
+        categoryName: p.categoryName
+          ? localizedField({ name: p.categoryName, translations: p.categoryTranslations }, "name", ctx.locale)
+          : translatorFor(ctx.locale, "producerSpace")("uncategorized"),
         results: panelResults(p),
         disqualified: p.disqualified,
         // Disqualified products never carry a label.
         label:
           p.disqualified || !p.labelId
             ? null
-            : { id: p.labelId, name: p.labelName!, color: p.labelColor! },
+            : {
+                id: p.labelId,
+                name: localizedField({ name: p.labelName!, translations: p.labelTranslations }, "name", ctx.locale),
+                color: p.labelColor!,
+              },
         registrationId: p.registrationId,
       });
     }
@@ -756,11 +770,13 @@ export const producerRouter = createTRPCRouter({
       const products = registration.products.map((p) => ({
         id: p.id,
         name: p.name,
-        categoryName: p.category?.name ?? "Sans categorie",
+        categoryName: p.category
+          ? localizedField(p.category, "name", ctx.locale)
+          : translatorFor(ctx.locale, "producerSpace")("uncategorized"),
         results: panelResults(p),
         label: p.label
           ? {
-              name: p.label.name,
+              name: localizedField(p.label, "name", ctx.locale),
               color: p.label.color,
             }
           : null,
@@ -1288,7 +1304,7 @@ export const producerRouter = createTRPCRouter({
 
         return {
           criterionId: criterion.id,
-          criterionName: criterion.name,
+          criterionName: localizedField(criterion, "name", ctx.locale),
           coefficient: criterion.coefficient,
           productScore: productData && productData.count > 0
             ? productData.total / productData.count
@@ -1302,7 +1318,7 @@ export const producerRouter = createTRPCRouter({
       return {
         productId: product.id,
         productName: product.name,
-        categoryName: product.category.name,
+        categoryName: localizedField(product.category, "name", ctx.locale),
         panel,
         availablePanels,
         finalScore: scoreFor(product, panel),
@@ -1403,7 +1419,7 @@ export const producerRouter = createTRPCRouter({
           const score = rating.scores.find((cs) => cs.criterionId === criterion.id);
           return {
             criterionId: criterion.id,
-            criterionName: criterion.name,
+            criterionName: localizedField(criterion, "name", ctx.locale),
             coefficient: criterion.coefficient,
             score: score?.score ?? null, // Keep in original scale
             rawScore: score?.score ?? null,
@@ -1425,7 +1441,7 @@ export const producerRouter = createTRPCRouter({
 
         return {
           juryId: `jury-${index + 1}`,
-          juryLabel: `Jury #${index + 1}`,
+          juryLabel: translatorFor(ctx.locale, "resultsCharts")("juryN", { n: index + 1 }),
           submittedAt: rating.submittedAt,
           totalScore: juryTotalScore,
           criteria: criteriaData,
@@ -1491,7 +1507,7 @@ export const producerRouter = createTRPCRouter({
 
         return {
           criterionId: criterion.id,
-          criterionName: criterion.name,
+          criterionName: localizedField(criterion, "name", ctx.locale),
           coefficient: criterion.coefficient,
           averageScore: scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : null,
           minScore: !isPublicPanel && scores.length > 0 ? Math.min(...scores) : null,
@@ -1502,7 +1518,7 @@ export const producerRouter = createTRPCRouter({
       return {
         productId: product.id,
         productName: product.name,
-        categoryName: product.category.name,
+        categoryName: localizedField(product.category, "name", ctx.locale),
         ratingScale: cup.ratingScale,
         panel,
         availablePanels,

@@ -1,7 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { useLocale, useTranslations } from "next-intl";
+import { useServerError } from "~/i18n/server-error";
 import { Link } from "~/i18n/navigation";
+import { formatDate as formatLocaleDate, type Locale } from "~/i18n/locales";
 import { toast } from "sonner";
 
 import { api } from "~/trpc/react";
@@ -13,15 +16,15 @@ import type { RatingScale } from "~/server/db/schema/cups";
 import { ProductRadarChart, JuryScoresTable, PanelToggle } from "~/components/features/results";
 import type { JuryPanel } from "~/lib/enums";
 
-function formatDate(date: Date | string | null | undefined): string {
+function formatDate(date: Date | string | null | undefined, locale: Locale): string {
   if (!date) return "-";
   const dateObj = typeof date === "string" ? new Date(date) : date;
   if (isNaN(dateObj.getTime())) return "-";
-  return new Intl.DateTimeFormat("fr-FR", {
+  return formatLocaleDate(dateObj, locale, {
     day: "2-digit",
     month: "long",
     year: "numeric",
-  }).format(dateObj);
+  });
 }
 
 // Inline product details component
@@ -32,6 +35,8 @@ function ProductDetailsInline({
   productId: string;
   ratingScale: RatingScale;
 }) {
+  const t = useTranslations("producerResults");
+  const tc = useTranslations("producerSpace");
   // Jury affiché ; non choisi, le serveur prend le premier qui a noté le produit.
   const [panel, setPanel] = useState<JuryPanel | undefined>(undefined);
 
@@ -53,7 +58,7 @@ function ProductDetailsInline({
     return (
       <div className="py-8 text-center">
         <span className="n-font-data text-sm" style={{ color: "var(--n-text-disabled)" }}>
-          [LOADING...]
+          {tc("loading")}
         </span>
       </div>
     );
@@ -72,7 +77,7 @@ function ProductDetailsInline({
         {/* Criteria */}
         <div className="space-y-4">
           <div className="n-label" style={{ color: "var(--n-text-disabled)" }}>
-            ANALYSE PAR CRITERE
+            {t("criteriaAnalysis")}
           </div>
 
           {criteriaData ? (
@@ -113,13 +118,13 @@ function ProductDetailsInline({
                           {criterion.criterionName}
                         </span>
                         <span className="n-label" style={{ color: "var(--n-text-disabled)" }}>
-                          COEF. {criterion.coefficient}
+                          {t("coef", { value: criterion.coefficient })}
                         </span>
                       </div>
                       <div className="flex items-center gap-4 shrink-0">
                         <div className="text-right">
                           <p className="n-label" style={{ color: "var(--n-text-disabled)" }}>
-                            MOY. CAT.
+                            {t("catAvg")}
                           </p>
                           <p
                             className="n-font-data text-xs"
@@ -127,12 +132,12 @@ function ProductDetailsInline({
                           >
                             {avgScoreConverted !== null
                               ? `${avgScoreConverted.toFixed(1)}/${maxScale}`
-                              : "N/A"}
+                              : t("na")}
                           </p>
                         </div>
                         <div className="text-right">
                           <p className="n-label" style={{ color: "var(--n-text-disabled)" }}>
-                            VOUS
+                            {t("you")}
                           </p>
                           <p
                             className="n-font-data text-sm font-bold"
@@ -140,7 +145,7 @@ function ProductDetailsInline({
                           >
                             {productScoreConverted !== null
                               ? `${productScoreConverted.toFixed(1)}/${maxScale}`
-                              : "N/A"}
+                              : t("na")}
                           </p>
                         </div>
                         <div
@@ -179,8 +184,8 @@ function ProductDetailsInline({
               style={{ color: "var(--n-text-disabled)" }}
             >
               {criteriaError
-                ? "[ERREUR] Analyse par critere indisponible"
-                : "Aucune donnee disponible"}
+                ? t("criteriaError")
+                : t("noData")}
             </p>
           )}
         </div>
@@ -188,8 +193,7 @@ function ProductDetailsInline({
         {/* Jury Scores */}
         <div className="space-y-4">
           <div className="n-label" style={{ color: "var(--n-text-disabled)" }}>
-            NOTES DES JURYS{" "}
-            {juryData?.detailedScoresAvailable ? "(ANONYMISEES)" : "(SYNTHESE)"}
+            {juryData?.detailedScoresAvailable ? t("juryScoresAnon") : t("juryScoresSummary")}
           </div>
 
           {juryData ? (
@@ -207,7 +211,7 @@ function ProductDetailsInline({
                   style={{ backgroundColor: "var(--n-surface-raised)", border: "1px solid var(--n-border)" }}
                 >
                   <p className="n-label mb-1" style={{ color: "var(--n-text-disabled)" }}>
-                    MOYENNE DU JURY PUBLIC
+                    {t("publicAverage")}
                   </p>
                   <p
                     className="n-font-data font-bold text-lg"
@@ -215,7 +219,7 @@ function ProductDetailsInline({
                   >
                     {juryData.stats.averageScore !== null
                       ? `${convertScoreToScale(juryData.stats.averageScore, ratingScale)?.toFixed(1)}/${maxScale}`
-                      : "N/A"}
+                      : t("na")}
                   </p>
                 </div>
 
@@ -226,7 +230,7 @@ function ProductDetailsInline({
                       className="n-label mb-2"
                       style={{ color: "var(--n-text-disabled)" }}
                     >
-                      MOYENNES PAR CRITERE
+                      {t("criteriaAverages")}
                     </div>
                     {juryData.criteriaAverages.map((criterion) => {
                       const avgConverted =
@@ -252,7 +256,7 @@ function ProductDetailsInline({
                           >
                             {avgConverted !== null
                               ? `${avgConverted.toFixed(1)}/${maxScale}`
-                              : "N/A"}
+                              : t("na")}
                           </span>
                         </div>
                       );
@@ -264,10 +268,10 @@ function ProductDetailsInline({
                 {juryData.publicComments.length > 0 && (
                   <div className="space-y-2">
                     <div className="n-label mb-2" style={{ color: "var(--n-text-disabled)" }}>
-                      COMMENTAIRES DU JURY PUBLIC
+                      {t("publicComments")}
                     </div>
                     <p className="text-sm leading-relaxed" style={{ color: "var(--n-text-primary)" }}>
-                      {juryData.publicComments.map((comment) => `« ${comment} »`).join(" · ")}
+                      {juryData.publicComments.map((comment) => t("quote", { text: comment })).join(" · ")}
                     </p>
                   </div>
                 )}
@@ -281,8 +285,7 @@ function ProductDetailsInline({
                     color: "var(--n-text-secondary)",
                   }}
                 >
-                  Pour le jury public, seuls la note, les moyennes par critère et les
-                  commentaires sont affichés, afin de protéger l&apos;anonymat des jurés.
+                  {t("publicNotice")}
                 </div>
               </div>
             )
@@ -293,8 +296,8 @@ function ProductDetailsInline({
               style={{ color: "var(--n-text-disabled)" }}
             >
               {juryError
-                ? "[ERREUR] Notes des jurys indisponibles"
-                : "Aucune note de jury disponible"}
+                ? t("juryError")
+                : t("noJuryScores")}
             </p>
           )}
         </div>
@@ -304,6 +307,10 @@ function ProductDetailsInline({
 }
 
 export default function ProducerResultsPage() {
+  const t = useTranslations("producerResults");
+  const tc = useTranslations("producerSpace");
+  const serverError = useServerError();
+  const locale = useLocale() as Locale;
   const {
     data: cups,
     isLoading,
@@ -322,11 +329,11 @@ export default function ProducerResultsPage() {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      toast.success("Synthese PDF telechargee");
+      toast.success(t("pdfDownloaded"));
       setDownloadingPdf(null);
     },
     onError: (error) => {
-      toast.error(error.message);
+      toast.error(serverError(error));
       setDownloadingPdf(null);
     },
   });
@@ -360,7 +367,7 @@ export default function ProducerResultsPage() {
         className="flex items-center justify-center min-h-[400px]"
         style={{ color: "var(--n-text-disabled)" }}
       >
-        <span className="n-font-data text-sm tracking-widest">[LOADING...]</span>
+        <span className="n-font-data text-sm tracking-widest">{tc("loading")}</span>
       </div>
     );
   }
@@ -371,10 +378,10 @@ export default function ProducerResultsPage() {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] gap-4 text-center">
         <span role="alert" className="n-font-data text-sm tracking-widest" style={{ color: "var(--n-text-secondary)" }}>
-          [ERREUR] VOS RÉSULTATS N&apos;ONT PAS PU ÊTRE CHARGÉS
+          {t("error")}
         </span>
         <button type="button" className="n-btn-secondary text-xs" onClick={() => void refetch()}>
-          RÉESSAYER
+          {tc("retry")}
         </button>
       </div>
     );
@@ -389,23 +396,21 @@ export default function ProducerResultsPage() {
       {/* Header */}
       <div className="flex items-center gap-4">
         <Link href="/producer/dashboard" className="n-btn-ghost text-xs" style={{ padding: "8px 12px" }}>
-          ← RETOUR
+          {t("back")}
         </Link>
         <div>
           <div className="n-label mb-1" style={{ color: "var(--n-text-disabled)" }}>
-            PRODUCTEUR
+            {t("eyebrow")}
           </div>
           <h1
             className="n-font-data text-2xl font-bold"
             style={{ color: "var(--n-text-display)" }}
           >
-            MES RESULTATS
+            {t("title")}
           </h1>
           {cups && cups.length > 0 && (
             <p className="n-label mt-1" style={{ color: "var(--n-text-secondary)" }}>
-              {cups.length} COMPETITION{cups.length !== 1 ? "S" : ""} · {totalProducts}{" "}
-              PRODUIT{totalProducts !== 1 ? "S" : ""} · {totalLabels} LABEL
-              {totalLabels !== 1 ? "S" : ""}
+              {t("summary", { cups: cups.length, products: totalProducts, labels: totalLabels })}
             </p>
           )}
         </div>
@@ -421,14 +426,13 @@ export default function ProducerResultsPage() {
           }}
         >
           <div className="n-label mb-2" style={{ color: "var(--n-text-secondary)" }}>
-            AUCUN RESULTAT
+            {t("empty")}
           </div>
           <p className="text-sm mb-6" style={{ color: "var(--n-text-disabled)" }}>
-            Vos resultats apparaitront ici une fois que les organisateurs auront publie les
-            resultats.
+            {t("emptyText")}
           </p>
           <Link href="/producer/registrations" className="n-btn-secondary text-xs">
-            VOIR MES INSCRIPTIONS
+            {t("seeRegistrations")}
           </Link>
         </div>
       ) : (
@@ -455,7 +459,7 @@ export default function ProducerResultsPage() {
                       className="n-label mt-1"
                       style={{ color: "var(--n-text-disabled)" }}
                     >
-                      RESULTATS PUBLIES LE {formatDate(cup.resultsPublishedAt)}
+                      {t("publishedOn", { date: formatDate(cup.resultsPublishedAt, locale) })}
                     </div>
                   </div>
                   <div className="flex items-center gap-4 shrink-0">
@@ -464,14 +468,14 @@ export default function ProducerResultsPage() {
                         className="n-font-data text-sm"
                         style={{ color: "var(--n-text-primary)" }}
                       >
-                        {cup.products.length} PRODUIT{cup.products.length !== 1 ? "S" : ""}
+                        {t("products", { count: cup.products.length })}
                       </p>
                       {labelsCount > 0 && (
                         <p
                           className="n-font-data text-sm"
                           style={{ color: "var(--n-warning)" }}
                         >
-                          {labelsCount} LABEL{labelsCount !== 1 ? "S" : ""}
+                          {t("labels", { count: labelsCount })}
                         </p>
                       )}
                     </div>
@@ -553,11 +557,11 @@ export default function ProducerResultsPage() {
                                     color: "var(--n-accent)",
                                   }}
                                 >
-                                  DISQUALIFIÉ
+                                  {t("disqualified")}
                                 </span>
                               ) : (
                                 <>
-                                                                    {product.label && (
+                                  {product.label && (
                                     <span
                                       className="n-tag"
                                       style={{
@@ -580,13 +584,11 @@ export default function ProducerResultsPage() {
                                           className="n-label"
                                           style={{ color: "var(--n-text-disabled)" }}
                                         >
-                                          {panel === "pro" ? "JURY PRO" : "JURY PUBLIC"}
+                                          {panel === "pro" ? t("juryPro") : t("juryPublic")}
                                           {result.categoryRank !== null && (
                                             <span style={{ color: "var(--n-warning)" }}>
                                               {" · "}
-                                              {result.categoryRank === 1
-                                                ? "1ER"
-                                                : `${result.categoryRank}EME`}
+                                              {t("rank", { rank: result.categoryRank })}
                                             </span>
                                           )}
                                         </p>
@@ -650,8 +652,8 @@ export default function ProducerResultsPage() {
                           disabled={downloadingPdf === cup.products[0]!.registrationId}
                         >
                           {downloadingPdf === cup.products[0]!.registrationId
-                            ? "[TELECHARGEMENT...]"
-                            : "TELECHARGER LA SYNTHESE PDF"}
+                            ? t("downloading")
+                            : t("downloadPdf")}
                         </button>
                       </div>
                     )}

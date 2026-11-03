@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { useRouter } from "~/i18n/navigation";
+import { useServerError } from "~/i18n/server-error";
+import { translateValidation } from "~/i18n/validation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
@@ -18,6 +21,10 @@ import {
   type ProducerProfileUpdateInput,
 } from "~/lib/validations/producer";
 export default function ProducerProfilePage() {
+  const t = useTranslations("producerProfile");
+  const tc = useTranslations("producerSpace");
+  const tv = useTranslations("validation");
+  const serverError = useServerError();
   const router = useRouter();
   const utils = api.useUtils();
   const {
@@ -40,10 +47,10 @@ export default function ProducerProfilePage() {
   const updateProfile = api.producer.updateProfile.useMutation({
     onSuccess: () => {
       void utils.producer.getProfile.invalidate();
-      toast.success("Profil mis a jour avec succes");
+      toast.success(t("updated"));
     },
     onError: (error) => {
-      toast.error(error.message || "Erreur lors de la mise a jour");
+      toast.error(serverError(error, t("updateError")));
     },
   });
 
@@ -51,10 +58,10 @@ export default function ProducerProfilePage() {
     api.producer.updateNotificationPreferences.useMutation({
       onSuccess: () => {
         void utils.producer.getProfile.invalidate();
-        toast.success("Preferences de notification mises a jour");
+        toast.success(t("notificationsUpdated"));
       },
       onError: (error) => {
-        toast.error(error.message || "Erreur lors de la mise a jour");
+        toast.error(serverError(error, t("updateError")));
       },
     });
 
@@ -98,7 +105,7 @@ export default function ProducerProfilePage() {
         className="flex items-center justify-center min-h-[400px]"
         style={{ color: "var(--n-text-disabled)" }}
       >
-        <span className="n-font-data text-sm tracking-widest">[LOADING...]</span>
+        <span className="n-font-data text-sm tracking-widest">{tc("loading")}</span>
       </div>
     );
   }
@@ -109,10 +116,10 @@ export default function ProducerProfilePage() {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] gap-4 text-center">
         <span role="alert" className="n-font-data text-sm tracking-widest" style={{ color: "var(--n-text-secondary)" }}>
-          [ERREUR] VOTRE PROFIL N&apos;A PAS PU ÊTRE CHARGÉ
+          {t("error")}
         </span>
         <button type="button" className="n-btn-secondary text-xs" onClick={() => void refetch()}>
-          RÉESSAYER
+          {tc("retry")}
         </button>
       </div>
     );
@@ -123,13 +130,13 @@ export default function ProducerProfilePage() {
       {/* Header */}
       <div>
         <div className="n-label mb-1" style={{ color: "var(--n-text-disabled)" }}>
-          PRODUCTEUR
+          {t("eyebrow")}
         </div>
         <h1 className="n-font-data text-2xl font-bold" style={{ color: "var(--n-text-display)" }}>
-          MON PROFIL
+          {t("title")}
         </h1>
         <p className="text-sm mt-1" style={{ color: "var(--n-text-secondary)" }}>
-          Gerez les informations de votre entreprise
+          {t("subtitle")}
         </p>
       </div>
 
@@ -139,10 +146,10 @@ export default function ProducerProfilePage() {
         <div className="lg:col-span-2">
           <div className="n-card">
             <div className="n-label mb-1" style={{ color: "var(--n-text-disabled)" }}>
-              INFORMATIONS ENTREPRISE
+              {t("companyInfo")}
             </div>
             <p className="text-sm mb-6" style={{ color: "var(--n-text-secondary)" }}>
-              Ces informations seront affichees sur vos inscriptions
+              {t("companyInfoText")}
             </p>
 
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
@@ -154,12 +161,12 @@ export default function ProducerProfilePage() {
                     className="n-label block"
                     style={{ color: "var(--n-text-secondary)" }}
                   >
-                    NOM DE L&apos;ENTREPRISE *
+                    {t("required", { label: t("companyName") })}
                   </label>
                   <Input
                     id="companyName"
                     type="text"
-                    placeholder="Ma Societe SARL"
+                    placeholder={t("companyPlaceholder")}
                     className="n-font-data"
                     aria-invalid={!!errors.companyName}
                     {...register("companyName")}
@@ -176,7 +183,7 @@ export default function ProducerProfilePage() {
                       className="n-font-data text-xs"
                       style={{ color: "var(--n-accent)" }}
                     >
-                      {errors.companyName.message}
+                      {translateValidation(errors.companyName.message, tv)}
                     </p>
                   )}
                 </div>
@@ -188,12 +195,12 @@ export default function ProducerProfilePage() {
                     className="n-label block"
                     style={{ color: "var(--n-text-secondary)" }}
                   >
-                    NOM DE LA MARQUE *
+                    {t("required", { label: t("brandName") })}
                   </label>
                   <Input
                     id="brandName"
                     type="text"
-                    placeholder="Ma Marque"
+                    placeholder={t("brandPlaceholder")}
                     className="n-font-data"
                     aria-invalid={!!errors.brandName}
                     {...register("brandName")}
@@ -210,7 +217,7 @@ export default function ProducerProfilePage() {
                       className="n-font-data text-xs"
                       style={{ color: "var(--n-accent)" }}
                     >
-                      {errors.brandName.message}
+                      {translateValidation(errors.brandName.message, tv)}
                     </p>
                   )}
                 </div>
@@ -224,7 +231,7 @@ export default function ProducerProfilePage() {
                     className="n-label block"
                     style={{ color: "var(--n-text-secondary)" }}
                   >
-                    SIRET (OPTIONNEL)
+                    {t("siret")}
                   </label>
                   <Input
                     id="siret"
@@ -247,11 +254,11 @@ export default function ProducerProfilePage() {
                       className="n-font-data text-xs"
                       style={{ color: "var(--n-accent)" }}
                     >
-                      {errors.siret.message}
+                      {translateValidation(errors.siret.message, tv)}
                     </p>
                   ) : (
                     <p className="n-label" style={{ color: "var(--n-text-disabled)" }}>
-                      14 CHIFFRES (ENTREPRISES FRANCAISES)
+                      {t("siretHint")}
                     </p>
                   )}
                 </div>
@@ -263,13 +270,13 @@ export default function ProducerProfilePage() {
                     className="n-label block"
                     style={{ color: "var(--n-text-secondary)" }}
                   >
-                    TÉLÉPHONE *
+                    {t("required", { label: t("phone") })}
                   </label>
                   <Input
                     id="phone"
                     type="tel"
                     autoComplete="tel"
-                    placeholder="06 12 34 56 78"
+                    placeholder={t("phonePlaceholder")}
                     className="n-font-data"
                     aria-invalid={!!errors.phone}
                     {...register("phone")}
@@ -286,11 +293,11 @@ export default function ProducerProfilePage() {
                       className="n-font-data text-xs"
                       style={{ color: "var(--n-accent)" }}
                     >
-                      {errors.phone.message}
+                      {translateValidation(errors.phone.message, tv)}
                     </p>
                   ) : (
                     <p className="n-label" style={{ color: "var(--n-text-disabled)" }}>
-                      POUR VOUS JOINDRE AU SUJET DE VOS ÉCHANTILLONS
+                      {t("phoneHintUpper")}
                     </p>
                   )}
                 </div>
@@ -302,12 +309,12 @@ export default function ProducerProfilePage() {
                     className="n-label block"
                     style={{ color: "var(--n-text-secondary)" }}
                   >
-                    SITE WEB (OPTIONNEL)
+                    {t("website")}
                   </label>
                   <Input
                     id="website"
                     type="url"
-                    placeholder="https://www.exemple.com"
+                    placeholder={t("websitePlaceholder")}
                     className="n-font-data"
                     aria-invalid={!!errors.website}
                     {...register("website")}
@@ -324,7 +331,7 @@ export default function ProducerProfilePage() {
                       className="n-font-data text-xs"
                       style={{ color: "var(--n-accent)" }}
                     >
-                      {errors.website.message}
+                      {translateValidation(errors.website.message, tv)}
                     </p>
                   )}
                 </div>
@@ -336,13 +343,13 @@ export default function ProducerProfilePage() {
                     className="n-label block"
                     style={{ color: "var(--n-text-secondary)" }}
                   >
-                    INSTAGRAM (OPTIONNEL)
+                    {t("instagram")}
                   </label>
                   <Input
                     id="instagram"
                     type="text"
                     autoComplete="off"
-                    placeholder="@votremarque"
+                    placeholder={t("instagramPlaceholder")}
                     className="n-font-data"
                     aria-invalid={!!errors.instagram}
                     aria-describedby="instagram-hint"
@@ -360,11 +367,11 @@ export default function ProducerProfilePage() {
                       className="n-font-data text-xs"
                       style={{ color: "var(--n-accent)" }}
                     >
-                      {errors.instagram.message}
+                      {translateValidation(errors.instagram.message, tv)}
                     </p>
                   ) : (
                     <p id="instagram-hint" className="n-label" style={{ color: "var(--n-text-disabled)" }}>
-                      POUR ÊTRE IDENTIFIÉ SUR LES PUBLICATIONS DE LA CUP
+                      {t("instagramHint")}
                     </p>
                   )}
                 </div>
@@ -376,7 +383,7 @@ export default function ProducerProfilePage() {
                   className="n-btn-primary"
                   disabled={!isDirty || updateProfile.isPending}
                 >
-                  {updateProfile.isPending ? "[ENREGISTREMENT...]" : "ENREGISTRER"}
+                  {updateProfile.isPending ? t("saving") : t("save")}
                 </button>
               </div>
             </form>
@@ -385,7 +392,7 @@ export default function ProducerProfilePage() {
           {/* Visuels repris sur les réseaux sociaux */}
           <div className="n-card mt-6">
             <div className="n-label mb-4" style={{ color: "var(--n-text-disabled)" }}>
-              VISUELS RÉSEAUX SOCIAUX
+              {t("socialVisuals")}
             </div>
             <ProducerMediaFields media={profile} />
           </div>
@@ -396,7 +403,7 @@ export default function ProducerProfilePage() {
           {/* Notifications */}
           <div className="n-card">
             <div className="n-label mb-4" style={{ color: "var(--n-text-disabled)" }}>
-              NOTIFICATIONS
+              {t("notifications")}
             </div>
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -404,10 +411,10 @@ export default function ProducerProfilePage() {
                   className="text-sm font-medium mb-0.5"
                   style={{ color: "var(--n-text-primary)" }}
                 >
-                  Statut des produits
+                  {t("productStatus")}
                 </p>
                 <p className="n-label" style={{ color: "var(--n-text-disabled)" }}>
-                  EMAIL LORS DES CHANGEMENTS DE STATUT
+                  {t("productStatusHint")}
                 </p>
               </div>
               <Switch
@@ -428,12 +435,12 @@ export default function ProducerProfilePage() {
       {/* Account Info */}
       <div className="n-card">
         <div className="n-label mb-4" style={{ color: "var(--n-text-disabled)" }}>
-          INFORMATIONS DU COMPTE
+          {t("account")}
         </div>
         <div className="grid gap-6 sm:grid-cols-2">
           <div>
             <div className="n-label mb-1" style={{ color: "var(--n-text-disabled)" }}>
-              EMAIL
+              {t("email")}
             </div>
             <p className="n-font-data text-sm" style={{ color: "var(--n-text-primary)" }}>
               {profile?.email ?? "-"}
@@ -441,7 +448,7 @@ export default function ProducerProfilePage() {
           </div>
           <div>
             <div className="n-label mb-1" style={{ color: "var(--n-text-disabled)" }}>
-              NOM
+              {t("name")}
             </div>
             <p className="n-font-data text-sm" style={{ color: "var(--n-text-primary)" }}>
               {profile?.name ?? "-"}
@@ -456,19 +463,19 @@ export default function ProducerProfilePage() {
         style={{ borderColor: "var(--n-accent)", borderWidth: "1px" }}
       >
         <div className="n-label mb-1" style={{ color: "var(--n-text-disabled)" }}>
-          COMPTE
+          {t("accountShort")}
         </div>
         <h3
           className="text-sm font-medium mb-1"
           style={{ color: "var(--n-text-primary)" }}
         >
-          Deconnexion
+          {t("logoutTitle")}
         </h3>
         <p className="text-sm mb-4" style={{ color: "var(--n-text-secondary)" }}>
-          Se deconnecter de votre compte
+          {t("logoutText")}
         </p>
         <button className="n-btn-destructive" onClick={handleLogout}>
-          SE DECONNECTER
+          {t("logout")}
         </button>
       </div>
 

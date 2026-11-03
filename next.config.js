@@ -79,8 +79,10 @@ const config = {
   async headers() {
     return [
       {
-        // All routes except /widget — deny framing
-        source: "/((?!widget).*)",
+        // All routes except /widget (and its localized forms /en/widget…) — deny framing.
+        // Un visiteur étranger est redirigé de /widget/… vers /de/widget/… :
+        // sans cette exception, l'iframe du producteur serait refusée.
+        source: "/((?!(?:(?:en|it|de|cs|nl|es)/)?widget(?:/|$)).*)",
         headers: [
           {
             key: "X-Content-Type-Options",
@@ -136,6 +138,28 @@ const config = {
       {
         // Widget routes — allow embedding from any origin
         source: "/widget/:path*",
+        headers: [
+          {
+            key: "X-Content-Type-Options",
+            value: "nosniff",
+          },
+          {
+            key: "Referrer-Policy",
+            value: "strict-origin-when-cross-origin",
+          },
+          {
+            key: "Permissions-Policy",
+            value: "camera=(), microphone=(), geolocation=()",
+          },
+          {
+            key: "Content-Security-Policy",
+            value: "frame-ancestors *",
+          },
+        ],
+      },
+      {
+        // Widget routes, localized form (/en/widget/…) — allow embedding too
+        source: "/:locale(en|it|de|cs|nl|es)/widget/:path*",
         headers: [
           {
             key: "X-Content-Type-Options",

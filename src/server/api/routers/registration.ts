@@ -831,12 +831,14 @@ export const registrationRouter = createTRPCRouter({
             category: {
               columns: {
                 name: true,
+                translations: true,
               },
             },
             label: {
               columns: {
                 name: true,
                 color: true,
+                translations: true,
               },
             },
           },
@@ -849,11 +851,18 @@ export const registrationRouter = createTRPCRouter({
     // connaître ni les codes de ses produits (il pourrait les souffler à un
     // juré) ni leurs notes. Masquer à l'écran ne suffit pas : la réponse de
     // l'API se lit dans le navigateur.
-    return registrations.map((reg) => ({
+    return registrations.map((reg) => {
+      // Catégories et labels dans la langue de la page du producteur.
+      const products = reg.products.map((p) => ({
+        ...p,
+        category: p.category ? localizeRow(p.category, ctx.locale) : p.category,
+        label: p.label ? localizeRow(p.label, ctx.locale) : p.label,
+      }));
+      return {
       ...reg,
       products: reg.cup.resultsPublishedAt
-        ? reg.products
-        : reg.products.map((p) => ({
+        ? products
+        : products.map((p) => ({
             ...p,
             anonymousCodePro: null,
             anonymousCodePublic: null,
@@ -863,7 +872,8 @@ export const registrationRouter = createTRPCRouter({
             categoryRankPublic: null,
           })),
       productCount: reg.products.length,
-    }));
+      };
+    });
   }),
 
   /**

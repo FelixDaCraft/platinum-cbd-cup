@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { TRPCError } from "@trpc/server";
-import { JURY_PANEL_LABELS } from "~/lib/enums";
+import { getTranslations } from "next-intl/server";
+import { localizePath, type Locale } from "~/i18n/locales";
 
 import { api } from "~/trpc/server";
 
@@ -15,27 +16,25 @@ import { api } from "~/trpc/server";
 
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = {
-  title: "Distinctions Platinum CBD Cup",
-  robots: { index: false, follow: false },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("widget.embed");
+  return {
+    title: t("metaTitle"),
+    robots: { index: false, follow: false },
+  };
+}
 
 const GOLD = "#d4af37";
-
-const RANK_LABELS: Record<number, string> = {
-  1: "1er",
-  2: "2e",
-  3: "3e",
-};
 
 export default async function ProducerWidgetPage({
   params,
   searchParams,
 }: {
-  params: Promise<{ producerId: string }>;
+  params: Promise<{ locale: string; producerId: string }>;
   searchParams: Promise<{ theme?: string }>;
 }) {
-  const { producerId } = await params;
+  const { producerId, locale } = await params;
+  const t = await getTranslations("widget.embed");
   const { theme } = await searchParams;
   const isDark = theme === "dark";
 
@@ -52,7 +51,7 @@ export default async function ProducerWidgetPage({
     return (
       <Frame palette={palette}>
         <p style={{ margin: 0, fontSize: 13, color: palette.muted, textAlign: "center" }}>
-          {notFound ? "Producteur introuvable." : "Distinctions indisponibles pour le moment."}
+          {notFound ? t("notFound") : t("unavailable")}
         </p>
       </Frame>
     );
@@ -108,7 +107,7 @@ export default async function ProducerWidgetPage({
 
       {summary.totalDistinctions === 0 ? (
         <p style={{ margin: "24px 0", fontSize: 13, color: palette.muted, textAlign: "center" }}>
-          Aucune distinction publiée pour le moment.
+          {t("none")}
         </p>
       ) : (
         <>
@@ -116,17 +115,17 @@ export default async function ProducerWidgetPage({
           <div style={{ display: "flex", gap: 8, padding: "12px 0" }}>
             <Stat
               value={summary.totalDistinctions}
-              label={summary.totalDistinctions > 1 ? "Distinctions" : "Distinction"}
+              label={t("distinctions", { count: summary.totalDistinctions })}
               palette={palette}
             />
             <Stat
               value={summary.totalLabels}
-              label={summary.totalLabels > 1 ? "Labels" : "Label"}
+              label={t("labels", { count: summary.totalLabels })}
               palette={palette}
             />
             <Stat
               value={summary.cupsParticipated}
-              label={summary.cupsParticipated > 1 ? "Éditions" : "Édition"}
+              label={t("editions", { count: summary.cupsParticipated })}
               palette={palette}
             />
           </div>
@@ -178,7 +177,7 @@ export default async function ProducerWidgetPage({
                     >
                       {product.name}
                       <span style={{ color: palette.muted }}>
-                        {` · ${JURY_PANEL_LABELS[product.panel]}`}
+                        {` · ${product.panel === "pro" ? t("juryPro") : t("juryPublic")}`}
                       </span>
                     </span>
                     <span
@@ -193,7 +192,7 @@ export default async function ProducerWidgetPage({
                       }}
                     >
                       {product.label?.name ??
-                        (product.rank ? RANK_LABELS[product.rank] ?? `${product.rank}e` : "—")}
+                        (product.rank ? t("rank", { rank: product.rank }) : "—")}
                     </span>
                   </div>
                 ))}
@@ -205,7 +204,7 @@ export default async function ProducerWidgetPage({
 
       {/* Attribution — also the link back to the competition */}
       <a
-        href="https://platinumcbdcup.eu"
+        href={`https://platinumcbdcup.eu${localizePath("/", locale as Locale).replace(/^\/$/, "")}`}
         target="_blank"
         rel="noopener noreferrer"
         style={{
@@ -221,7 +220,7 @@ export default async function ProducerWidgetPage({
           textAlign: "center",
         }}
       >
-        Vérifié par Platinum CBD Cup
+        {t("verified")}
       </a>
     </Frame>
   );

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Download, QrCode, Loader2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 import { Button } from "~/components/ui/button";
 import {
@@ -25,6 +26,7 @@ export function QRCodeDisplay({
   productName,
   anonymousCode,
 }: QRCodeDisplayProps) {
+  const t = useTranslations("producerComponents.qr");
   const [open, setOpen] = useState(false);
 
   const { data, isLoading, error } = api.product.getQRCode.useQuery(
@@ -48,14 +50,14 @@ export function QRCodeDisplay({
       <DialogTrigger asChild>
         <Button variant="ghost" size="icon" className="h-8 w-8">
           <QrCode className="h-4 w-4" />
-          <span className="sr-only">Voir QR Code</span>
+          <span className="sr-only">{t("show")}</span>
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>QR Code - {anonymousCode ?? productName}</DialogTitle>
+          <DialogTitle>{t("title", { code: anonymousCode ?? productName })}</DialogTitle>
           <DialogDescription>
-            Ce QR code permet d&apos;identifier le produit lors de la réception du colis.
+            {t("description")}
           </DialogDescription>
         </DialogHeader>
 
@@ -68,7 +70,7 @@ export function QRCodeDisplay({
 
           {error && (
             <div className="flex h-64 w-64 items-center justify-center rounded-lg border bg-destructive/10 text-destructive">
-              <p className="text-sm">Erreur: {error.message}</p>
+              <p className="text-sm">{t("error", { message: error.message })}</p>
             </div>
           )}
 
@@ -77,7 +79,7 @@ export function QRCodeDisplay({
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={data.qrCodeDataUrl}
-                alt={`QR Code pour ${anonymousCode ?? productName}`}
+                alt={t("alt", { code: anonymousCode ?? productName })}
                 width={256}
                 height={256}
                 decoding="async"
@@ -93,7 +95,7 @@ export function QRCodeDisplay({
 
               <Button onClick={handleDownload} className="w-full gap-2">
                 <Download className="h-4 w-4" />
-                Télécharger le QR Code
+                {t("download")}
               </Button>
             </>
           )}

@@ -11,6 +11,8 @@ import {
   TrendingDown,
   Minus,
 } from "lucide-react";
+import { useLocale, useTranslations } from "next-intl";
+import { intlLocale, type Locale } from "~/i18n/locales";
 import type { RatingScale } from "~/server/db/schema/cups";
 import { convertScoreToScale, getMaxScoreForScale } from "~/lib/validations/labels";
 
@@ -55,14 +57,16 @@ export function JuryScoresTable({
   ratingScale,
   className,
 }: JuryScoresTableProps) {
+  const t = useTranslations("resultsCharts");
+  const locale = useLocale() as Locale;
   const [expandedJury, setExpandedJury] = useState<string | null>(null);
   const maxScale = getMaxScoreForScale(ratingScale);
 
   // Format score from percentage to scale (e.g., "7.5/10")
   const formatScore = (score: number | null) => {
-    if (score === null) return "N/A";
+    if (score === null) return t("na");
     const converted = convertScoreToScale(score, ratingScale);
-    return converted !== null ? `${converted.toFixed(1)}/${maxScale}` : "N/A";
+    return converted !== null ? `${converted.toFixed(1)}/${maxScale}` : t("na");
   };
 
   // Format just the numeric value (for diffs)
@@ -73,7 +77,8 @@ export function JuryScoresTable({
 
   const formatDate = (date: Date | null | string) => {
     if (!date) return "-";
-    return new Intl.DateTimeFormat("fr-FR", {
+    return new Intl.DateTimeFormat(intlLocale(locale), {
+      timeZone: "Europe/Paris",
       day: "2-digit",
       month: "2-digit",
       year: "numeric",
@@ -99,7 +104,7 @@ export function JuryScoresTable({
     return (
       <div className={`flex items-center justify-center p-8 bg-muted/30 rounded-lg ${className}`}>
         <p className="text-sm text-muted-foreground">
-          Aucune note de jury soumise pour ce produit
+          {t("noScores")}
         </p>
       </div>
     );
@@ -110,19 +115,19 @@ export function JuryScoresTable({
       {/* Stats Summary - Compact */}
       <div className="grid grid-cols-4 gap-3 mb-4">
         <div className="p-2 rounded-lg bg-muted/30 text-center">
-          <p className="text-[10px] text-muted-foreground uppercase">Jurys</p>
+          <p className="text-[10px] text-muted-foreground uppercase">{t("juries")}</p>
           <p className="text-lg font-bold">{stats.juryCount}</p>
         </div>
         <div className="p-2 rounded-lg bg-muted/30 text-center">
-          <p className="text-[10px] text-muted-foreground uppercase">Moyenne</p>
+          <p className="text-[10px] text-muted-foreground uppercase">{t("average")}</p>
           <p className="text-lg font-bold">{formatScore(stats.averageScore)}</p>
         </div>
         <div className="p-2 rounded-lg bg-muted/30 text-center">
-          <p className="text-[10px] text-muted-foreground uppercase">Min</p>
+          <p className="text-[10px] text-muted-foreground uppercase">{t("min")}</p>
           <p className="text-lg font-bold text-red-500">{formatScore(stats.minScore)}</p>
         </div>
         <div className="p-2 rounded-lg bg-muted/30 text-center">
-          <p className="text-[10px] text-muted-foreground uppercase">Max</p>
+          <p className="text-[10px] text-muted-foreground uppercase">{t("max")}</p>
           <p className="text-lg font-bold text-green-500">{formatScore(stats.maxScore)}</p>
         </div>
       </div>
@@ -199,7 +204,7 @@ export function JuryScoresTable({
                         >
                           <span>
                             {criterion.criterionName}
-                            <span className="text-muted-foreground ml-1">(coef. {criterion.coefficient})</span>
+                            <span className="text-muted-foreground ml-1">{t("coef", { value: criterion.coefficient })}</span>
                           </span>
                           <div className="flex items-center gap-2">
                             <Badge
@@ -212,7 +217,7 @@ export function JuryScoresTable({
                               }
                               className="text-[10px] h-5"
                             >
-                              {criterion.rawScore !== null ? `${criterion.rawScore}/${maxScale}` : "N/A"}
+                              {criterion.rawScore !== null ? `${criterion.rawScore}/${maxScale}` : t("na")}
                             </Badge>
                           </div>
                         </div>
@@ -222,7 +227,7 @@ export function JuryScoresTable({
 
                   {jury.comment && (
                     <div className="mt-2 p-2 rounded bg-background/50 text-xs text-muted-foreground">
-                      <span className="font-medium text-foreground">Commentaire: </span>
+                      <span className="font-medium text-foreground">{t("comment")}</span>
                       {jury.comment}
                     </div>
                   )}
