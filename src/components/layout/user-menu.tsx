@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter, usePathname } from "next/navigation";
-import Link from "next/link";
+import { Link, usePathname, useRouter } from "~/i18n/navigation";
 import { LogOut, User, Loader2, Building2, Package, Star } from "lucide-react";
 import { toast } from "sonner";
 

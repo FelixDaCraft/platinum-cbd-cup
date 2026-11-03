@@ -1,6 +1,7 @@
-import { pgTable, text, timestamp, integer, index, check } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, integer, index, check, jsonb } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 import { generateId } from "./id";
+import type { Translations } from "~/i18n/locales";
 import { categories } from "./categories";
 import type { JuryPanel } from "./juries";
 
@@ -28,6 +29,11 @@ export const ratingCriteria = pgTable(
     panel: text("panel").notNull().$type<JuryPanel>().default("pro"),
     name: text("name").notNull(), // "Aspect visuel", "Arôme", "Goût", etc.
     description: text("description"), // Detailed description for juries
+    /**
+     * Traductions par langue (`{ en: { name: "…" } }`), repli sur la
+     * colonne française. Voir localizedField et scripts/import-translations.ts.
+     */
+    translations: jsonb("translations").$type<Translations<"name" | "description">>().notNull().default({}),
     coefficient: integer("coefficient").notNull().default(1), // Weight 1-10
     sortOrder: integer("sort_order").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

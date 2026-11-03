@@ -191,6 +191,29 @@ export const streetCSS = `
   .shell .topbar .btn{ padding: 11px 12px; font-size: 11px; letter-spacing: .04em; }
 }
 
+/* ── Coquille : sélecteur de langue ───────────────────────── */
+.st-lang{ position: relative; flex: none; }
+.st-lang-toggle{ display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 12px;
+  background: transparent; color: var(--st-ink); border: 1px solid var(--st-control); border-radius: 0; cursor: pointer;
+  font-family: var(--st-display); font-weight: 600; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; }
+.st-lang-toggle:hover{ border-color: var(--st-gold); color: var(--st-gold-hi); }
+.st-lang-toggle[aria-expanded="true"]{ border-color: var(--st-gold); color: var(--st-gold); }
+.st-lang-toggle[aria-expanded="true"] svg{ transform: rotate(180deg); }
+.st-lang-toggle svg{ transition: transform .25s var(--st-ease); }
+.st-lang-menu{ position: absolute; right: 0; top: calc(100% + 10px); z-index: 60; min-width: 200px; margin: 0; padding: 6px 0;
+  list-style: none; background: var(--st-night); border: 2px solid var(--st-rule); }
+.st-lang-menu[hidden]{ display: none; }
+.st-lang-menu a{ display: flex; align-items: center; gap: 14px; padding: 11px 16px; color: var(--st-ink); text-decoration: none;
+  font-size: 15px; }
+.st-lang-menu a:hover{ color: var(--st-gold-hi); }
+.st-lang-menu a[aria-current="true"]{ color: var(--st-gold); }
+.st-lang-code{ width: 2.4em; font-family: var(--st-display); font-weight: 600; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--st-ink-3); }
+.st-lang-menu a[aria-current="true"] .st-lang-code{ color: var(--st-gold); }
+@media (max-width: 880px){
+  .shell .topbar .st-lang{ margin-left: auto; }
+  .st-lang-toggle{ min-height: 38px; font-size: 11px; }
+}
+
 /* ── Coquille : pied de page ───────────────────────────────── */
 .shell .footer.st-footer{ display: block; padding: 0 var(--pad-x) 40px; border-top: 0; color: var(--st-ink-2); font-size: 15px; }
 .st-footer-inner{ max-width: var(--st-max); margin: 0 auto; display: flex; flex-direction: column; gap: 48px; }

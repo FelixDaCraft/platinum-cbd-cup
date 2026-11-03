@@ -1,5 +1,12 @@
 import type { db as Database } from "~/server/db";
 import type { LegalDocumentSlug } from "~/server/db/schema/legal-documents";
+import type { ContentTranslations, Locale } from "~/i18n/locales";
+import { REGLEMENT_TRANSLATIONS } from "~/lib/legal/reglement-translations";
+import {
+  tiptapFingerprint,
+  translateTiptap,
+  type TipTapNode,
+} from "~/lib/legal/tiptap-translate";
 import {
   DEFAULT_REGLEMENT_CONTENT,
   DEFAULT_REGLEMENT_LEDE,
@@ -15,9 +22,14 @@ export interface LegalDocumentView {
   updatedAt: Date;
   /** false tant que l'organisateur n'a rien enregistré (texte par défaut). */
   isCustom: boolean;
+  /** Traductions enregistrées (voir scripts/import-translations.ts). */
+  translations: ContentTranslations;
 }
 
-const DEFAULTS: Record<LegalDocumentSlug, Omit<LegalDocumentView, "slug" | "isCustom">> = {
+const DEFAULTS: Record<
+  LegalDocumentSlug,
+  Omit<LegalDocumentView, "slug" | "isCustom" | "translations">
+> = {
   reglement: {
     title: DEFAULT_REGLEMENT_TITLE,
     lede: DEFAULT_REGLEMENT_LEDE,
@@ -42,7 +54,74 @@ export async function getLegalDocument(
       content: row.content,
       updatedAt: row.updatedAt,
       isCustom: true,
+      translations: row.translations ?? {},
     };
   }
-  return { slug, ...DEFAULTS[slug], isCustom: false };
+  return { slug, ...DEFAULTS[slug], isCustom: false, translations: {} };
+}
+
+export interface LocalizedLegalDocument {
+  title: string;
+  lede: string | null;
+  content: Record<string, unknown>;
+  /**
+   * `translated` : texte dans la langue demandée (ou français demandé) ;
+   * `french` : pas de traduction à jour, le texte français est affiché.
+   */
+  status: "translated" | "french";
+}
+
+/**
+ * Version d'un document légal dans une langue, par ordre de préférence :
+ * 1. la traduction enregistrée en base, si elle a été faite sur le texte
+ *    français actuel (même empreinte) ;
+ * 2. la traduction fournie avec le code (reglement-translations.ts), si le
+ *    texte français est celui qu'elle traduit ;
+ * 3. sinon le texte français, signalé comme tel : une traduction périmée
+ *    d'un texte contractuel serait pire que pas de traduction.
+ */
+export function localizeLegalDocument(
+  doc: LegalDocumentView,
+  locale: Locale
+): LocalizedLegalDocument {
+  const french: LocalizedLegalDocument = {
+    title: doc.title,
+    lede: doc.lede,
+    content: doc.content,
+    status: locale === "fr" ? "translated" : "french",
+  };
+  if (locale === "fr") return french;
+
+  const fingerprint = tiptapFingerprint(doc.content as TipTapNode);
+
+  const stored = doc.translations[locale];
+  if (
+    stored?.content &&
+    Object.keys(stored.content).length > 0 &&
+    stored.sourceFingerprint === fingerprint
+  ) {
+    return {
+      title: stored.title?.trim() || doc.title,
+      lede: stored.lede?.trim() || doc.lede,
+      content: stored.content,
+      status: "translated",
+    };
+  }
+
+  if (doc.slug === "reglement") {
+    const bundled = REGLEMENT_TRANSLATIONS[locale];
+    if (bundled.sourceFingerprint === fingerprint) {
+      const content = translateTiptap(doc.content as TipTapNode, bundled.texts, locale);
+      if (content) {
+        return {
+          title: bundled.title,
+          lede: bundled.lede,
+          content: content as Record<string, unknown>,
+          status: "translated",
+        };
+      }
+    }
+  }
+
+  return french;
 }

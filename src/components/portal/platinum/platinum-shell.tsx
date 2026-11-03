@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
+import { useTranslations } from "next-intl";
+import { Link, usePathname } from "~/i18n/navigation";
 import { MobileBottomNav } from "~/components/portal/mobile/mobile-bottom-nav";
 import { Instagram } from "lucide-react";
 import { StreetDefs } from "~/components/portal/street/street";
@@ -10,6 +10,7 @@ import { ScrollReveal } from "~/components/portal/street/scroll-reveal";
 import { useSession } from "~/lib/auth-client";
 import { currentEdition } from "./edition";
 import { accountHref, isNavActive, PORTAL_NAV } from "./nav";
+import { LanguageSwitcher } from "./language-switcher";
 
 // ---------------------------------------------------------------------------
 // PlatinumShell
@@ -25,20 +26,21 @@ interface PlatinumShellProps {
   liveStatus?: "live" | "idle";
 }
 
+/** Libellés : espace de messages `nav`. */
 const FOOTER_LINKS = [
-  { href: "/about", label: "Le concours" },
-  { href: "/cups", label: "Participer" },
-  { href: "/palmares", label: "Palmarès" },
-  { href: "/archives", label: "Éditions" },
-  { href: "/reglement", label: "Règlement" },
-  { href: "/articles", label: "Articles" },
-  { href: "/press", label: "Presse" },
-  { href: "/sponsors", label: "Partenaires" },
-  { href: "/contact", label: "Contact" },
-  { href: "/activate", label: "Activer un code juré" },
-  { href: "/mentions-legales", label: "Mentions légales" },
-  { href: "/confidentialite", label: "Confidentialité" },
-];
+  { href: "/about", label: "about" },
+  { href: "/cups", label: "participate" },
+  { href: "/palmares", label: "palmares" },
+  { href: "/archives", label: "editions" },
+  { href: "/reglement", label: "rules" },
+  { href: "/articles", label: "articles" },
+  { href: "/press", label: "press" },
+  { href: "/sponsors", label: "partners" },
+  { href: "/contact", label: "contact" },
+  { href: "/activate", label: "activateJury" },
+  { href: "/mentions-legales", label: "legal" },
+  { href: "/confidentialite", label: "privacy" },
+] as const;
 
 /** Réseaux sociaux de la cup ; ajouter ici les prochains comptes. */
 const SOCIAL_LINKS = [
@@ -61,6 +63,8 @@ export function PlatinumShell({ children, liveStatus = "idle" }: PlatinumShellPr
   const { year } = currentEdition();
   const role = (session?.user as { role?: string } | undefined)?.role;
   const isLive = liveStatus === "live";
+  const t = useTranslations("shell");
+  const tNav = useTranslations("nav");
 
   return (
     <div className="shell">
@@ -68,11 +72,11 @@ export function PlatinumShell({ children, liveStatus = "idle" }: PlatinumShellPr
       <ScrollReveal />
       {/* Lien d'évitement : premier élément focalisable de la page. */}
       <a href="#contenu-principal" className="skip-link">
-        Aller au contenu
+        {t("skipToContent")}
       </a>
 
       <header className="topbar">
-        <Link href="/" className="brand" aria-label="Platinum CBD Cup — Accueil">
+        <Link href="/" className="brand" aria-label={t("homeAria")}>
           <span className="brand-mark">
             <img
               src="/brand/platinum-cbd-cup-logo.png"
@@ -85,7 +89,7 @@ export function PlatinumShell({ children, liveStatus = "idle" }: PlatinumShellPr
           <span className="brand-name">Platinum CBD Cup</span>
         </Link>
 
-        <nav className="nav" aria-label="Navigation principale">
+        <nav className="nav" aria-label={t("mainNav")}>
           {PORTAL_NAV.map((entry) => {
             const active = isNavActive(entry, pathname);
             return (
@@ -96,23 +100,29 @@ export function PlatinumShell({ children, liveStatus = "idle" }: PlatinumShellPr
                 aria-current={active ? "page" : undefined}
                 data-hide-below={entry.hideBelow}
               >
-                {entry.label}
+                {tNav(entry.label)}
               </Link>
             );
           })}
         </nav>
 
+        {/* Hors de .topbar-right, masqué sous 880 px : le sélecteur reste
+            visible sur mobile, à droite du logo. */}
+        <Suspense fallback={null}>
+          <LanguageSwitcher />
+        </Suspense>
+
         <div className="topbar-right">
           <Link href={accountHref(role)} className="topbar-link">
-            {session?.user ? "Mon espace" : "Se connecter"}
+            {session?.user ? tNav("mySpace") : tNav("signIn")}
           </Link>
           {isLive ? (
             <Link href="/cups" className="btn accent">
-              Inscrire mes produits
+              {tNav("registerProducts")}
             </Link>
           ) : (
             <Link href="/palmares" className="btn ghost">
-              Voir le palmarès
+              {tNav("seePalmares")}
             </Link>
           )}
         </div>
@@ -131,20 +141,17 @@ export function PlatinumShell({ children, liveStatus = "idle" }: PlatinumShellPr
           <div className="st-footer-top">
             <div className="st-footer-brand">
               <span className="st-footer-name">Platinum CBD Cup</span>
-              <p className="st-footer-tag">
-                Le concours européen du CBD. Chaque produit est noté à l&apos;aveugle par un
-                jury professionnel et par un jury public, depuis 2023.
-              </p>
+              <p className="st-footer-tag">{t("footerTag")}</p>
             </div>
             <div className="st-footer-links">
-              <nav className="st-footer-nav" aria-label="Liens du pied de page">
+              <nav className="st-footer-nav" aria-label={t("footerNav")}>
                 {FOOTER_LINKS.map((link) => (
                   <Link key={link.href} href={link.href}>
-                    {link.label}
+                    {tNav(link.label)}
                   </Link>
                 ))}
               </nav>
-              <ul className="st-footer-social" aria-label="Réseaux sociaux">
+              <ul className="st-footer-social" aria-label={t("social")}>
                 {SOCIAL_LINKS.map(({ href, label, handle, Icon }) => (
                   <li key={href}>
                     <a href={href} target="_blank" rel="noopener noreferrer">
@@ -160,7 +167,7 @@ export function PlatinumShell({ children, liveStatus = "idle" }: PlatinumShellPr
             </div>
           </div>
           <div className="st-footer-base">
-            <span suppressHydrationWarning>© {year} Association Platinum CBD</span>
+            <span suppressHydrationWarning>{t("copyright", { year })}</span>
           </div>
         </div>
       </footer>

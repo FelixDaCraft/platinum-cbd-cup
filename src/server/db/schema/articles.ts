@@ -1,3 +1,4 @@
+import type { ContentTranslations } from "~/i18n/locales";
 import { pgTable, text, timestamp, jsonb, unique, boolean, index, check } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 import { users } from "./auth";
@@ -60,6 +61,8 @@ export const articles = pgTable(
     slug: text("slug").notNull(),
     excerpt: text("excerpt"),
     content: jsonb("content").$type<Record<string, unknown>>().notNull(), // TipTap JSON content
+    /** Traductions par langue (titre, chapeau, corps TipTap), repli sur le français. */
+    translations: jsonb("translations").$type<ContentTranslations>().notNull().default({}),
     coverImage: text("cover_image"),
     category: text("category"),
     categoryColor: text("category_color"), // Custom color override for category badge

@@ -1,13 +1,27 @@
-import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import createIntlMiddleware from "next-intl/middleware";
+import { routing } from "~/i18n/routing";
+import {
+  isLocalizedRoute,
+  localeFromPathname,
+  localizePath,
+  negotiateLocale,
+  stripLocale,
+} from "~/i18n/locales";
 
 /**
  * Single-tenant auth middleware for Platinum CBD Cup.
  *
  * No subdomain parsing, no portal rewrites, no context headers — this app
- * is the portal. Only responsibility: redirect unauthenticated users away
- * from protected paths to `/login`.
+ * is the portal. Responsibilities: redirect unauthenticated users away
+ * from protected paths to `/login`, then hand localized paths to next-intl
+ * (langue dans l'URL, cookie NEXT_LOCALE, détection Accept-Language).
+ *
+ * Les règles d'accès portent sur le chemin SANS préfixe de langue :
+ * `/en/producer` est protégé exactement comme `/producer`.
  */
+
+const handleI18nRouting = createIntlMiddleware(routing);
 
 /**
  * Path prefixes that require an authenticated session.
@@ -94,38 +108,49 @@ function isWidgetPath(pathname: string): boolean {
  * it to let a profile-less producer through to `/producer/complete-profile`
  * while redirecting them there from anywhere else.
  */
-function next(request: NextRequest) {
+function next(request: NextRequest, barePathname: string) {
   const headers = new Headers(request.headers);
-  headers.set("x-pathname", request.nextUrl.pathname);
+  headers.set("x-pathname", barePathname);
 
-  if (!CSP_NONCE_OBSERVATION || isWidgetPath(request.nextUrl.pathname)) {
-    return NextResponse.next({ request: { headers } });
+  let scriptSrc: string | null = null;
+  if (CSP_NONCE_OBSERVATION && !isWidgetPath(barePathname)) {
+    // Les tirets sont retirés par simple hygiène — un nonce est transporté en
+    // base64 dans l'en-tête et le tiret y est légal, mais une valeur sans
+    // séparateur évite toute question d'échappement. Restent 122 bits d'aléa,
+    // très au-delà des 128 bits d'entropie recommandés par le CSP Level 3 pour
+    // un usage à requête unique.
+    const nonce = crypto.randomUUID().replace(/-/g, "");
+    scriptSrc = buildNonceScriptSrc(nonce);
+    // En-tête de REQUÊTE : c'est celui-là, et lui seul, que Next.js lit pour
+    // décider de poser `nonce=` sur les scripts qu'il émet.
+    headers.set("content-security-policy", scriptSrc);
   }
 
-  // Les tirets sont retirés par simple hygiène — un nonce est transporté en
-  // base64 dans l'en-tête et le tiret y est légal, mais une valeur sans
-  // séparateur évite toute question d'échappement. Restent 122 bits d'aléa,
-  // très au-delà des 128 bits d'entropie recommandés par le CSP Level 3 pour
-  // un usage à requête unique.
-  const nonce = crypto.randomUUID().replace(/-/g, "");
-  const scriptSrc = buildNonceScriptSrc(nonce);
+  let response: NextResponse;
+  if (isLocalizedRoute(barePathname)) {
+    // next-intl négocie avec son propre algorithme, qui retombe sur le
+    // français pour une langue inconnue ; on lui présente la langue déjà
+    // choisie par negotiateLocale (anglais pour un visiteur polonais, etc.).
+    headers.set("accept-language", negotiateLocale(request.headers.get("accept-language")));
+    // next-intl recopie les en-têtes de cette requête sur sa réécriture :
+    // le nonce et x-pathname arrivent donc jusqu'aux composants serveur.
+    response = handleI18nRouting(new NextRequest(request, { headers }));
+  } else {
+    response = NextResponse.next({ request: { headers } });
+  }
 
-  // En-tête de REQUÊTE : c'est celui-là, et lui seul, que Next.js lit pour
-  // décider de poser `nonce=` sur les scripts qu'il émet.
-  headers.set("content-security-policy", scriptSrc);
-
-  const response = NextResponse.next({ request: { headers } });
   // En-tête de RÉPONSE, en mode signalement : rien n'est bloqué, donc aucun
   // risque de page blanche. La CSP appliquée reste celle de next.config.js.
-  response.headers.set("Content-Security-Policy-Report-Only", scriptSrc);
+  if (scriptSrc) response.headers.set("Content-Security-Policy-Report-Only", scriptSrc);
   return response;
 }
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const barePathname = stripLocale(pathname);
 
-  if (!isProtectedPath(pathname)) {
-    return next(request);
+  if (!isProtectedPath(barePathname)) {
+    return next(request, barePathname);
   }
 
   // better-auth session cookie — secure (HTTPS) and non-secure (dev HTTP) names
@@ -134,12 +159,18 @@ export function middleware(request: NextRequest) {
     request.cookies.get("better-auth.session_token");
 
   if (!sessionToken) {
-    const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("callbackUrl", pathname);
+    // La page de connexion s'affiche dans la langue de la page demandée ; le
+    // retour (callbackUrl) est donné sans préfixe, la page de connexion le
+    // reconstruit dans la langue courante.
+    const loginPath = isLocalizedRoute(barePathname)
+      ? localizePath("/login", localeFromPathname(pathname))
+      : "/login";
+    const loginUrl = new URL(loginPath, request.url);
+    loginUrl.searchParams.set("callbackUrl", barePathname + request.nextUrl.search);
     return NextResponse.redirect(loginUrl);
   }
 
-  return next(request);
+  return next(request, barePathname);
 }
 
 export const config = {
@@ -153,9 +184,11 @@ export const config = {
      * - /models/        (Three.js GLB / GLTF assets)
      * - favicon.ico
      * - sw.js           (service worker)
+     * - /uploads/        (fichiers téléversés, servis par leur propre route)
+     * - fichiers à extension (robots.txt, sitemap.xml, manifest.json…)
      * - static image files at any depth
      * - .glb / .gltf    (3D models served from anywhere under public/)
      */
-    "/((?!api/|_next/static|_next/image|fonts/|models/|favicon.ico|sw\\.js|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|glb|gltf)$).*)",
+    "/((?!api/|_next/static|_next/image|fonts/|models/|uploads/|favicon.ico|sw\\.js|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|glb|gltf|txt|xml|json|webmanifest|js|css|pdf|woff2?|ttf)$).*)",
   ],
 };

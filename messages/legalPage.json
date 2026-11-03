@@ -1,0 +1,9 @@
+{
+  "fr": { "edition": "Informations légales", "updated": "Dernière mise à jour : {date}", "toc": "Sommaire" },
+  "en": { "edition": "Legal information", "updated": "Last updated: {date}", "toc": "Contents" },
+  "it": { "edition": "Informazioni legali", "updated": "Ultimo aggiornamento: {date}", "toc": "Indice" },
+  "de": { "edition": "Rechtliche Hinweise", "updated": "Zuletzt aktualisiert: {date}", "toc": "Inhalt" },
+  "cs": { "edition": "Právní informace", "updated": "Poslední aktualizace: {date}", "toc": "Obsah" },
+  "nl": { "edition": "Juridische informatie", "updated": "Laatst bijgewerkt: {date}", "toc": "Inhoud" },
+  "es": { "edition": "Información legal", "updated": "Última actualización: {date}", "toc": "Índice" }
+}

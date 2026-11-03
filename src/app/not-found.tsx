@@ -1,5 +1,5 @@
 import { PlatinumShell } from "~/components/portal/platinum";
-import PortalNotFound from "./(portal)/not-found";
+import PortalNotFound from "./[locale]/(portal)/not-found";
 
 /**
  * 404 racine.

@@ -1,3 +1,4 @@
+import type { ContentTranslations } from "~/i18n/locales";
 import { pgTable, text, timestamp, jsonb, check } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { users } from "./auth";
@@ -21,6 +22,12 @@ export const legalDocuments = pgTable(
     lede: text("lede"),
     /** Corps au format TipTap (JSON), comme les articles. */
     content: jsonb("content").$type<Record<string, unknown>>().notNull(),
+    /**
+     * Traductions par langue : titre, chapeau et corps TipTap. La version
+     * française (colonnes ci-dessus) fait foi ; repli sur elle si une langue
+     * manque.
+     */
+    translations: jsonb("translations").$type<ContentTranslations>().notNull().default({}),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     updatedBy: text("updated_by").references(() => users.id, { onDelete: "set null" }),
   },

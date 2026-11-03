@@ -4,7 +4,8 @@
 // ---------------------------------------------------------------------------
 
 type NavEntry = {
-  label: string;
+  /** Clé du libellé dans l'espace de messages `nav`. */
+  label: "about" | "participate" | "palmares" | "editions" | "press";
   href: string;
   /** Préfixe de chemin qui rend l'entrée active. */
   match: string;
@@ -16,11 +17,11 @@ type NavEntry = {
 };
 
 export const PORTAL_NAV: NavEntry[] = [
-  { label: "Le concours", href: "/about", match: "/about", hideBelow: 960 },
-  { label: "Participer", href: "/cups", match: "/cups" },
-  { label: "Palmarès", href: "/palmares", match: "/palmares" },
-  { label: "Éditions", href: "/archives", match: "/archives" },
-  { label: "Presse", href: "/press", match: "/press", hideBelow: 1024 },
+  { label: "about", href: "/about", match: "/about", hideBelow: 960 },
+  { label: "participate", href: "/cups", match: "/cups" },
+  { label: "palmares", href: "/palmares", match: "/palmares" },
+  { label: "editions", href: "/archives", match: "/archives" },
+  { label: "press", href: "/press", match: "/press", hideBelow: 1024 },
 ];
 
 export function isNavActive(entry: { match: string }, pathname: string): boolean {

@@ -1,0 +1,58 @@
+{
+  "fr": {
+    "skipToContent": "Aller au contenu", "homeAria": "Platinum CBD Cup — Accueil",
+    "mainNav": "Navigation principale", "mobileNav": "Navigation principale mobile",
+    "footerNav": "Liens du pied de page", "social": "Réseaux sociaux",
+    "footerTag": "Le concours européen du CBD. Chaque produit est noté à l'aveugle par un jury professionnel et par un jury public, depuis 2023.",
+    "copyright": "© {year} Association Platinum CBD",
+    "languageLabel": "Langue : {language}. Changer de langue"
+  },
+  "en": {
+    "skipToContent": "Skip to content", "homeAria": "Platinum CBD Cup — Home",
+    "mainNav": "Main navigation", "mobileNav": "Main mobile navigation",
+    "footerNav": "Footer links", "social": "Social media",
+    "footerTag": "The European CBD competition. Every product is judged blind by a professional jury and a public jury, since 2023.",
+    "copyright": "© {year} Association Platinum CBD",
+    "languageLabel": "Language: {language}. Change language"
+  },
+  "it": {
+    "skipToContent": "Vai al contenuto", "homeAria": "Platinum CBD Cup — Home",
+    "mainNav": "Navigazione principale", "mobileNav": "Navigazione principale mobile",
+    "footerNav": "Link a piè di pagina", "social": "Social network",
+    "footerTag": "Il concorso europeo del CBD. Dal 2023 ogni prodotto viene valutato alla cieca da una giuria professionale e da una giuria popolare.",
+    "copyright": "© {year} Association Platinum CBD",
+    "languageLabel": "Lingua: {language}. Cambia lingua"
+  },
+  "de": {
+    "skipToContent": "Zum Inhalt springen", "homeAria": "Platinum CBD Cup — Startseite",
+    "mainNav": "Hauptnavigation", "mobileNav": "Mobile Hauptnavigation",
+    "footerNav": "Links in der Fußzeile", "social": "Soziale Netzwerke",
+    "footerTag": "Der europäische CBD-Wettbewerb. Seit 2023 wird jedes Produkt blind von einer Fachjury und einer Publikumsjury bewertet.",
+    "copyright": "© {year} Association Platinum CBD",
+    "languageLabel": "Sprache: {language}. Sprache wechseln"
+  },
+  "cs": {
+    "skipToContent": "Přejít na obsah", "homeAria": "Platinum CBD Cup — Úvod",
+    "mainNav": "Hlavní navigace", "mobileNav": "Hlavní mobilní navigace",
+    "footerNav": "Odkazy v zápatí", "social": "Sociální sítě",
+    "footerTag": "Evropská soutěž CBD. Od roku 2023 hodnotí každý produkt naslepo odborná porota i veřejná porota.",
+    "copyright": "© {year} Association Platinum CBD",
+    "languageLabel": "Jazyk: {language}. Změnit jazyk"
+  },
+  "nl": {
+    "skipToContent": "Naar de inhoud", "homeAria": "Platinum CBD Cup — Home",
+    "mainNav": "Hoofdnavigatie", "mobileNav": "Mobiele hoofdnavigatie",
+    "footerNav": "Links in de voettekst", "social": "Sociale media",
+    "footerTag": "De Europese CBD-wedstrijd. Sinds 2023 wordt elk product blind beoordeeld door een vakjury en een publieksjury.",
+    "copyright": "© {year} Association Platinum CBD",
+    "languageLabel": "Taal: {language}. Taal wijzigen"
+  },
+  "es": {
+    "skipToContent": "Ir al contenido", "homeAria": "Platinum CBD Cup — Inicio",
+    "mainNav": "Navegación principal", "mobileNav": "Navegación principal móvil",
+    "footerNav": "Enlaces del pie de página", "social": "Redes sociales",
+    "footerTag": "El concurso europeo de CBD. Desde 2023, cada producto es evaluado a ciegas por un jurado profesional y un jurado popular.",
+    "copyright": "© {year} Association Platinum CBD",
+    "languageLabel": "Idioma: {language}. Cambiar idioma"
+  }
+}

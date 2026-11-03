@@ -1,0 +1,58 @@
+{
+  "fr": {
+    "home": "Accueil", "about": "Le concours", "participate": "Participer", "palmares": "Palmarès",
+    "editions": "Éditions", "press": "Presse", "rules": "Règlement", "articles": "Articles",
+    "partners": "Partenaires", "contact": "Contact", "activateJury": "Activer un code juré",
+    "legal": "Mentions légales", "privacy": "Confidentialité", "mySpace": "Mon espace",
+    "signIn": "Se connecter", "login": "Connexion", "registerProducts": "Inscrire mes produits",
+    "seePalmares": "Voir le palmarès"
+  },
+  "en": {
+    "home": "Home", "about": "The competition", "participate": "Take part", "palmares": "Winners",
+    "editions": "Editions", "press": "Press", "rules": "Rules", "articles": "Articles",
+    "partners": "Partners", "contact": "Contact", "activateJury": "Activate a juror code",
+    "legal": "Legal notice", "privacy": "Privacy", "mySpace": "My account",
+    "signIn": "Sign in", "login": "Sign in", "registerProducts": "Enter my products",
+    "seePalmares": "See the winners"
+  },
+  "it": {
+    "home": "Home", "about": "Il concorso", "participate": "Partecipa", "palmares": "Albo d'oro",
+    "editions": "Edizioni", "press": "Stampa", "rules": "Regolamento", "articles": "Articoli",
+    "partners": "Partner", "contact": "Contatti", "activateJury": "Attiva un codice giurato",
+    "legal": "Note legali", "privacy": "Privacy", "mySpace": "Il mio spazio",
+    "signIn": "Accedi", "login": "Accedi", "registerProducts": "Iscrivi i miei prodotti",
+    "seePalmares": "Vedi l'albo d'oro"
+  },
+  "de": {
+    "home": "Start", "about": "Der Wettbewerb", "participate": "Teilnehmen", "palmares": "Gewinner",
+    "editions": "Ausgaben", "press": "Presse", "rules": "Reglement", "articles": "Artikel",
+    "partners": "Partner", "contact": "Kontakt", "activateJury": "Jury-Code aktivieren",
+    "legal": "Impressum", "privacy": "Datenschutz", "mySpace": "Mein Bereich",
+    "signIn": "Anmelden", "login": "Anmelden", "registerProducts": "Produkte anmelden",
+    "seePalmares": "Gewinner ansehen"
+  },
+  "cs": {
+    "home": "Domů", "about": "Soutěž", "participate": "Zúčastnit se", "palmares": "Vítězové",
+    "editions": "Ročníky", "press": "Tisk", "rules": "Pravidla", "articles": "Články",
+    "partners": "Partneři", "contact": "Kontakt", "activateJury": "Aktivovat kód porotce",
+    "legal": "Právní informace", "privacy": "Ochrana osobních údajů", "mySpace": "Můj účet",
+    "signIn": "Přihlásit se", "login": "Přihlášení", "registerProducts": "Přihlásit produkty",
+    "seePalmares": "Zobrazit vítěze"
+  },
+  "nl": {
+    "home": "Home", "about": "De wedstrijd", "participate": "Deelnemen", "palmares": "Winnaars",
+    "editions": "Edities", "press": "Pers", "rules": "Reglement", "articles": "Artikelen",
+    "partners": "Partners", "contact": "Contact", "activateJury": "Jurycode activeren",
+    "legal": "Juridische informatie", "privacy": "Privacy", "mySpace": "Mijn account",
+    "signIn": "Inloggen", "login": "Inloggen", "registerProducts": "Producten inschrijven",
+    "seePalmares": "Bekijk de winnaars"
+  },
+  "es": {
+    "home": "Inicio", "about": "El concurso", "participate": "Participar", "palmares": "Palmarés",
+    "editions": "Ediciones", "press": "Prensa", "rules": "Reglamento", "articles": "Artículos",
+    "partners": "Patrocinadores", "contact": "Contacto", "activateJury": "Activar un código de jurado",
+    "legal": "Aviso legal", "privacy": "Privacidad", "mySpace": "Mi espacio",
+    "signIn": "Iniciar sesión", "login": "Acceder", "registerProducts": "Inscribir mis productos",
+    "seePalmares": "Ver el palmarés"
+  }
+}

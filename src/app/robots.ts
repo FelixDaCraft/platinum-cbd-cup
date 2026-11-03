@@ -3,7 +3,7 @@ import type { MetadataRoute } from "next";
 // L'URL de base était recopiée ici, dans sitemap.ts et dans les pages du
 // portail. Le jour où le domaine change, une copie oubliée annonce aux
 // robots un plan de site hébergé ailleurs : on passe par le point unique.
-import { baseUrl, canonical } from "./(portal)/_lib/seo";
+import { baseUrl, canonical } from "./[locale]/(portal)/_lib/seo";
 
 /**
  * Static robots.txt for the single-tenant app.

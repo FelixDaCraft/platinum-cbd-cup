@@ -1,0 +1,156 @@
+{
+  "fr": {
+    "ordinal": "{n, selectordinal, one {#re} other {#e}} édition",
+    "status": {
+      "upcoming": "Inscriptions dès le {date}", "openUntil": "Inscriptions ouvertes jusqu'au {date}",
+      "open": "Inscriptions ouvertes", "closedRatingFrom": "Inscriptions closes · notation dès le {date}",
+      "closed": "Inscriptions closes", "rating": "Notation à l'aveugle en cours", "done": "Édition terminée"
+    },
+    "range": { "between": "Du {start} au {end}", "until": "Jusqu'au {date}", "from": "À partir du {date}", "on": "Le {date}", "onAt": "Le {date}, {place}" },
+    "steps": { "registration": "Inscriptions", "rating": "Notation à l'aveugle", "ceremony": "Cérémonie et palmarès" },
+    "stepTag": { "done": "Terminé", "current": "En cours", "next": "À venir" },
+    "calendarAria": "Calendrier de l'édition {year}",
+    "places": {
+      "full": "Complet",
+      "low": "{count, plural, one {Plus qu'# place} other {Plus que # places}}",
+      "remaining": "{count, plural, one {# place restante} other {# places restantes}}"
+    },
+    "tier": { "andAbove": "{min} et plus", "between": "{min} à {max}" },
+    "free": "Gratuit",
+    "categoriesAndPrices": "Catégories et tarifs {year}", "categoriesTitle": "Catégories {year}",
+    "pricesLede": "Tarif par produit inscrit. Plusieurs catégories en une seule commande.",
+    "criteriaPrefix": "{panel} : "
+  },
+  "en": {
+    "ordinal": "{n, selectordinal, one {#st} two {#nd} few {#rd} other {#th}} edition",
+    "status": {
+      "upcoming": "Entries open on {date}", "openUntil": "Entries open until {date}",
+      "open": "Entries open", "closedRatingFrom": "Entries closed · judging starts on {date}",
+      "closed": "Entries closed", "rating": "Blind judging under way", "done": "Edition completed"
+    },
+    "range": { "between": "From {start} to {end}", "until": "Until {date}", "from": "From {date}", "on": "On {date}", "onAt": "On {date}, {place}" },
+    "steps": { "registration": "Entries", "rating": "Blind judging", "ceremony": "Ceremony and winners" },
+    "stepTag": { "done": "Completed", "current": "Under way", "next": "Coming up" },
+    "calendarAria": "{year} edition calendar",
+    "places": {
+      "full": "Full",
+      "low": "{count, plural, one {Only # spot left} other {Only # spots left}}",
+      "remaining": "{count, plural, one {# spot left} other {# spots left}}"
+    },
+    "tier": { "andAbove": "{min} and above", "between": "{min} to {max}" },
+    "free": "Free",
+    "categoriesAndPrices": "{year} categories and fees", "categoriesTitle": "{year} categories",
+    "pricesLede": "Fee per product entered. Several categories in a single order.",
+    "criteriaPrefix": "{panel}: "
+  },
+  "it": {
+    "ordinal": "{n}ª edizione",
+    "status": {
+      "upcoming": "Iscrizioni dal {date}", "openUntil": "Iscrizioni aperte fino al {date}",
+      "open": "Iscrizioni aperte", "closedRatingFrom": "Iscrizioni chiuse · valutazione dal {date}",
+      "closed": "Iscrizioni chiuse", "rating": "Valutazione alla cieca in corso", "done": "Edizione conclusa"
+    },
+    "range": { "between": "Dal {start} al {end}", "until": "Fino al {date}", "from": "Dal {date}", "on": "Il {date}", "onAt": "Il {date}, {place}" },
+    "steps": { "registration": "Iscrizioni", "rating": "Valutazione alla cieca", "ceremony": "Cerimonia e albo d'oro" },
+    "stepTag": { "done": "Concluso", "current": "In corso", "next": "Prossimamente" },
+    "calendarAria": "Calendario dell'edizione {year}",
+    "places": {
+      "full": "Esaurito",
+      "low": "{count, plural, one {Ultimo posto disponibile} other {Solo # posti disponibili}}",
+      "remaining": "{count, plural, one {# posto disponibile} other {# posti disponibili}}"
+    },
+    "tier": { "andAbove": "{min} e oltre", "between": "da {min} a {max}" },
+    "free": "Gratuito",
+    "categoriesAndPrices": "Categorie e quote {year}", "categoriesTitle": "Categorie {year}",
+    "pricesLede": "Quota per prodotto iscritto. Più categorie in un solo ordine.",
+    "criteriaPrefix": "{panel}: "
+  },
+  "de": {
+    "ordinal": "{n}. Ausgabe",
+    "status": {
+      "upcoming": "Anmeldung ab dem {date}", "openUntil": "Anmeldung offen bis zum {date}",
+      "open": "Anmeldung offen", "closedRatingFrom": "Anmeldung geschlossen · Bewertung ab dem {date}",
+      "closed": "Anmeldung geschlossen", "rating": "Blindbewertung läuft", "done": "Ausgabe abgeschlossen"
+    },
+    "range": { "between": "Vom {start} bis zum {end}", "until": "Bis zum {date}", "from": "Ab dem {date}", "on": "Am {date}", "onAt": "Am {date}, {place}" },
+    "steps": { "registration": "Anmeldung", "rating": "Blindbewertung", "ceremony": "Preisverleihung und Gewinner" },
+    "stepTag": { "done": "Abgeschlossen", "current": "Läuft", "next": "Demnächst" },
+    "calendarAria": "Kalender der Ausgabe {year}",
+    "places": {
+      "full": "Ausgebucht",
+      "low": "{count, plural, one {Nur noch # Platz} other {Nur noch # Plätze}}",
+      "remaining": "{count, plural, one {# Platz frei} other {# Plätze frei}}"
+    },
+    "tier": { "andAbove": "ab {min}", "between": "{min} bis {max}" },
+    "free": "Kostenlos",
+    "categoriesAndPrices": "Kategorien und Gebühren {year}", "categoriesTitle": "Kategorien {year}",
+    "pricesLede": "Gebühr pro angemeldetem Produkt. Mehrere Kategorien in einer Bestellung.",
+    "criteriaPrefix": "{panel}: "
+  },
+  "cs": {
+    "ordinal": "{n}. ročník",
+    "status": {
+      "upcoming": "Přihlášky od {date}", "openUntil": "Přihlášky otevřeny do {date}",
+      "open": "Přihlášky otevřeny", "closedRatingFrom": "Přihlášky uzavřeny · hodnocení od {date}",
+      "closed": "Přihlášky uzavřeny", "rating": "Probíhá hodnocení naslepo", "done": "Ročník ukončen"
+    },
+    "range": { "between": "Od {start} do {end}", "until": "Do {date}", "from": "Od {date}", "on": "{date}", "onAt": "{date}, {place}" },
+    "steps": { "registration": "Přihlášky", "rating": "Hodnocení naslepo", "ceremony": "Slavnostní vyhlášení" },
+    "stepTag": { "done": "Ukončeno", "current": "Probíhá", "next": "Připravujeme" },
+    "calendarAria": "Kalendář ročníku {year}",
+    "places": {
+      "full": "Obsazeno",
+      "low": "{count, plural, one {Zbývá poslední # místo} few {Zbývají jen # místa} other {Zbývá jen # míst}}",
+      "remaining": "{count, plural, one {Zbývá # místo} few {Zbývají # místa} other {Zbývá # míst}}"
+    },
+    "tier": { "andAbove": "{min} a více", "between": "{min} až {max}" },
+    "free": "Zdarma",
+    "categoriesAndPrices": "Kategorie a poplatky {year}", "categoriesTitle": "Kategorie {year}",
+    "pricesLede": "Poplatek za každý přihlášený produkt. Více kategorií v jedné objednávce.",
+    "criteriaPrefix": "{panel}: "
+  },
+  "nl": {
+    "ordinal": "{n}e editie",
+    "status": {
+      "upcoming": "Inschrijving vanaf {date}", "openUntil": "Inschrijving open tot {date}",
+      "open": "Inschrijving open", "closedRatingFrom": "Inschrijving gesloten · beoordeling vanaf {date}",
+      "closed": "Inschrijving gesloten", "rating": "Blinde beoordeling loopt", "done": "Editie afgelopen"
+    },
+    "range": { "between": "Van {start} tot {end}", "until": "Tot {date}", "from": "Vanaf {date}", "on": "Op {date}", "onAt": "Op {date}, {place}" },
+    "steps": { "registration": "Inschrijving", "rating": "Blinde beoordeling", "ceremony": "Prijsuitreiking en winnaars" },
+    "stepTag": { "done": "Afgerond", "current": "Loopt", "next": "Binnenkort" },
+    "calendarAria": "Kalender van de editie {year}",
+    "places": {
+      "full": "Volzet",
+      "low": "{count, plural, one {Nog maar # plaats} other {Nog maar # plaatsen}}",
+      "remaining": "{count, plural, one {# plaats vrij} other {# plaatsen vrij}}"
+    },
+    "tier": { "andAbove": "{min} en hoger", "between": "{min} tot {max}" },
+    "free": "Gratis",
+    "categoriesAndPrices": "Categorieën en tarieven {year}", "categoriesTitle": "Categorieën {year}",
+    "pricesLede": "Tarief per ingeschreven product. Meerdere categorieën in één bestelling.",
+    "criteriaPrefix": "{panel}: "
+  },
+  "es": {
+    "ordinal": "{n}.ª edición",
+    "status": {
+      "upcoming": "Inscripciones a partir del {date}", "openUntil": "Inscripciones abiertas hasta el {date}",
+      "open": "Inscripciones abiertas", "closedRatingFrom": "Inscripciones cerradas · evaluación a partir del {date}",
+      "closed": "Inscripciones cerradas", "rating": "Evaluación a ciegas en curso", "done": "Edición finalizada"
+    },
+    "range": { "between": "Del {start} al {end}", "until": "Hasta el {date}", "from": "A partir del {date}", "on": "El {date}", "onAt": "El {date}, {place}" },
+    "steps": { "registration": "Inscripciones", "rating": "Evaluación a ciegas", "ceremony": "Ceremonia y palmarés" },
+    "stepTag": { "done": "Finalizado", "current": "En curso", "next": "Próximamente" },
+    "calendarAria": "Calendario de la edición {year}",
+    "places": {
+      "full": "Completo",
+      "low": "{count, plural, one {Solo queda # plaza} other {Solo quedan # plazas}}",
+      "remaining": "{count, plural, one {Queda # plaza} other {Quedan # plazas}}"
+    },
+    "tier": { "andAbove": "{min} o más", "between": "de {min} a {max}" },
+    "free": "Gratuito",
+    "categoriesAndPrices": "Categorías y tarifas {year}", "categoriesTitle": "Categorías {year}",
+    "pricesLede": "Tarifa por producto inscrito. Varias categorías en un solo pedido.",
+    "criteriaPrefix": "{panel}: "
+  }
+}

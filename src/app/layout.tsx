@@ -2,15 +2,17 @@ import "~/styles/globals.css";
 
 import { type Metadata, type Viewport } from "next";
 import { headers } from "next/headers";
+import { getLocale } from "next-intl/server";
 import { Geist, Geist_Mono, Hanken_Grotesk } from "next/font/google";
 
 // L'URL de base était recopiée ici aussi (metadataBase, openGraph.url et les
 // deux images de partage en dur sur platinumcbdcup.eu) : sur un
 // environnement de préproduction, les cartes de partage pointaient vers la
 // production. Même point unique que robots.ts, sitemap.ts et les pages.
-import { baseUrl, canonical, OG_IMAGE_PAR_DEFAUT } from "./(portal)/_lib/seo";
+import { baseUrl, canonical, OG_IMAGE_PAR_DEFAUT } from "./[locale]/(portal)/_lib/seo";
 
 import { Providers } from "~/components/providers";
+import { locales, type Locale } from "~/i18n/locales";
 
 // NOTE: do NOT set `export const dynamic = "force-dynamic"` here. The root
 // layout itself has no DB call, so forcing it dynamic propagates that
@@ -74,8 +76,8 @@ const PORTAL_THEME: PortalThemeConfig = {
   customCss: null,
   cssVariables: generateCssVariables(THEME_CONFIG),
   defaultLocale: "fr",
-  enabledLocales: ["fr"],
-  showLanguageSelector: false,
+  enabledLocales: [...locales],
+  showLanguageSelector: true,
   headerStyle: "classic",
   headerTransparent: false,
   showPersonasBar: false,
@@ -269,6 +271,9 @@ export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   const nonce = await lireNonce();
+  // Langue posée par le segment [locale] (via le middleware) ; le back-office,
+  // hors de ce segment, reste en français.
+  const locale = (await getLocale()) as Locale;
   const styleString = generateStyleString(PORTAL_THEME.cssVariables);
 
   // CSS variables only. Heading + body fonts are owned by the Platinum
@@ -285,7 +290,7 @@ ${PORTAL_THEME.customCss ? sanitizeCustomCss(PORTAL_THEME.customCss) : ""}
 
   return (
     <html
-      lang="fr"
+      lang={locale}
       suppressHydrationWarning
       className={`${geist.variable} ${hanken.variable} ${geistMono.variable}`}
     >
@@ -326,11 +331,8 @@ ${PORTAL_THEME.customCss ? sanitizeCustomCss(PORTAL_THEME.customCss) : ""}
         <div className="matrix" aria-hidden="true" />
 
         <Providers nonce={nonce}>
-          <div
-            id="portal-root"
-            lang="fr"
-          >
-            <PortalProvider value={PORTAL_CONTEXT}>{children}</PortalProvider>
+          <div id="portal-root">
+            <PortalProvider value={{ ...PORTAL_CONTEXT, locale }}>{children}</PortalProvider>
           </div>
         </Providers>
       </body>

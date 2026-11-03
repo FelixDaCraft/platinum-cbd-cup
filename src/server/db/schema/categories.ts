@@ -1,6 +1,7 @@
-import { pgTable, text, timestamp, integer, index, check } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, integer, index, check, jsonb } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 import { generateId } from "./id";
+import type { Translations } from "~/i18n/locales";
 import { cups } from "./cups";
 import { ratingCriteria } from "./rating-criteria";
 
@@ -19,6 +20,11 @@ export const categories = pgTable(
       .references(() => cups.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     description: text("description"),
+    /**
+     * Traductions par langue (`{ en: { name: "…" } }`), repli sur la
+     * colonne française. Voir localizedField et scripts/import-translations.ts.
+     */
+    translations: jsonb("translations").$type<Translations<"name" | "description">>().notNull().default({}),
     sortOrder: integer("sort_order").notNull().default(0),
     // Pricing override (null = use cup's default price)
     priceOverride: integer("price_override"), // Price in cents, nullable

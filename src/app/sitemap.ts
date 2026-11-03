@@ -5,7 +5,8 @@ import { db } from "~/server/db";
 // Même point unique que robots.ts et que les pages du portail : une copie
 // locale de l'URL de base finit par diverger, et un plan de site qui pointe
 // vers l'ancien domaine se traduit par autant d'URL mortes à l'indexation.
-import { canonical } from "./(portal)/_lib/seo";
+import { languageAlternates, localizedCanonical } from "./[locale]/(portal)/_lib/seo";
+import { locales } from "~/i18n/locales";
 
 // Query the DB at request time, not at build time — avoids connecting to a
 // placeholder DB during `next build`. Le rendu reste dynamique pour cette
@@ -63,75 +64,77 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const [cups, articles, sponsors] = await getIndexableContent();
 
   // Static pages
+  // Les `url` ci-dessous sont des chemins ; ils sont rendus absolus, une fois
+  // par langue, au moment de l'assemblage final.
   const staticPages: MetadataRoute.Sitemap = [
     {
-      url: canonical(),
+      url: "/",
       lastModified: now,
       changeFrequency: "daily",
       priority: 1,
     },
     {
-      url: canonical("/cups"),
+      url: "/cups",
       lastModified: now,
       changeFrequency: "daily",
       priority: 0.9,
     },
     {
-      url: canonical("/about"),
+      url: "/about",
       lastModified: now,
       changeFrequency: "monthly",
       priority: 0.7,
     },
     {
-      url: canonical("/sponsors"),
+      url: "/sponsors",
       lastModified: now,
       changeFrequency: "weekly",
       priority: 0.7,
     },
     {
-      url: canonical("/articles"),
+      url: "/articles",
       lastModified: now,
       changeFrequency: "daily",
       priority: 0.8,
     },
     {
-      url: canonical("/archives"),
+      url: "/archives",
       lastModified: now,
       changeFrequency: "weekly",
       priority: 0.5,
     },
     {
-      url: canonical("/press"),
+      url: "/press",
       lastModified: now,
       changeFrequency: "weekly",
       priority: 0.6,
     },
     {
-      url: canonical("/palmares"),
+      url: "/palmares",
       lastModified: now,
       changeFrequency: "weekly",
       priority: 0.6,
     },
     {
-      url: canonical("/contact"),
+      url: "/contact",
       lastModified: now,
       changeFrequency: "monthly",
       priority: 0.5,
     },
     {
-      url: canonical("/reglement"),
+      url: "/reglement",
       lastModified: now,
       changeFrequency: "yearly",
       priority: 0.5,
     },
     {
-      url: canonical("/mentions-legales"),
+      url: "/mentions-legales",
       lastModified: now,
       changeFrequency: "yearly",
       priority: 0.3,
     },
     {
-      url: canonical("/confidentialite"),
+      url: "/confidentialite",
       lastModified: now,
       changeFrequency: "yearly",
       priority: 0.3,
@@ -139,30 +142,34 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   ];
 
   const cupPages: MetadataRoute.Sitemap = cups.map((cup) => ({
-    url: canonical(`/cups/${cup.id}`),
+    url: `/cups/${cup.id}`,
     lastModified: cup.updatedAt ?? now,
     changeFrequency: "daily" as const,
     priority: 0.8,
   }));
 
   const articlePages: MetadataRoute.Sitemap = articles.map((article) => ({
-    url: canonical(`/articles/${article.slug}`),
+    url: `/articles/${article.slug}`,
     lastModified: article.updatedAt ?? now,
     changeFrequency: "weekly" as const,
     priority: 0.7,
   }));
 
   const sponsorPages: MetadataRoute.Sitemap = sponsors.map((sponsor) => ({
-    url: canonical(`/sponsors/${sponsor.id}`),
+    url: `/sponsors/${sponsor.id}`,
     lastModified: sponsor.updatedAt ?? now,
     changeFrequency: "monthly" as const,
     priority: 0.5,
   }));
 
-  return [
-    ...staticPages,
-    ...cupPages,
-    ...articlePages,
-    ...sponsorPages,
-  ];
+  // Une entrée par page ET par langue, chacune annonçant ses équivalents
+  // (balises xhtml:link hreflang) : c'est la forme que Google attend pour un
+  // site dont chaque langue a sa propre URL.
+  return [...staticPages, ...cupPages, ...articlePages, ...sponsorPages].flatMap((entry) =>
+    locales.map((locale) => ({
+      ...entry,
+      url: localizedCanonical(entry.url, locale),
+      alternates: { languages: languageAlternates(entry.url) },
+    }))
+  );
 }

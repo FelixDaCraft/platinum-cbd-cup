@@ -1,6 +1,7 @@
-import { pgTable, text, timestamp, integer, boolean, real, index } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, integer, boolean, real, index, jsonb } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { generateId } from "./id";
+import type { Translations } from "~/i18n/locales";
 import { cups } from "./cups";
 
 /**
@@ -36,6 +37,11 @@ export const cupLabels = pgTable(
     color: text("color"), // Hex color like "#FFD700" for badge display
     icon: text("icon"), // URL to icon image or emoji (e.g., "🏆", "/icons/gold.svg")
     condition: text("condition"), // Human-readable condition text (e.g., "Score ≥ 17/20")
+    /**
+     * Traductions par langue (`{ en: { name: "…" } }`), repli sur la
+     * colonne française. Voir localizedField et scripts/import-translations.ts.
+     */
+    translations: jsonb("translations").$type<Translations<"name" | "condition">>().notNull().default({}),
     isPublic: boolean("is_public").notNull().default(true), // Visible on public portal
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

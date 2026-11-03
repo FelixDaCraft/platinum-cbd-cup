@@ -1,0 +1,9 @@
+{
+  "fr": { "pro": "Jury pro", "public": "Jury public", "proLong": "Jury professionnel", "publicLong": "Jury public" },
+  "en": { "pro": "Pro jury", "public": "Public jury", "proLong": "Professional jury", "publicLong": "Public jury" },
+  "it": { "pro": "Giuria pro", "public": "Giuria popolare", "proLong": "Giuria professionale", "publicLong": "Giuria popolare" },
+  "de": { "pro": "Fachjury", "public": "Publikumsjury", "proLong": "Fachjury", "publicLong": "Publikumsjury" },
+  "cs": { "pro": "Odborná porota", "public": "Veřejná porota", "proLong": "Odborná porota", "publicLong": "Veřejná porota" },
+  "nl": { "pro": "Vakjury", "public": "Publieksjury", "proLong": "Vakjury", "publicLong": "Publieksjury" },
+  "es": { "pro": "Jurado pro", "public": "Jurado popular", "proLong": "Jurado profesional", "publicLong": "Jurado popular" }
+}

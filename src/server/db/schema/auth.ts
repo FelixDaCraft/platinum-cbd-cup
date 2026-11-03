@@ -34,6 +34,10 @@ export const users = pgTable(
     // pré-remplissent « Compléter mon profil », sur n'importe quel appareil.
     pendingCompanyName: text("pending_company_name"),
     pendingBrandName: text("pending_brand_name"),
+    // Langue du site lors de la dernière visite de l'espace personnel (ou de
+    // l'inscription) : celle des e-mails envoyés hors requête (résultats,
+    // rappels). null = jamais renseignée → français.
+    locale: text("locale"),
     // GDPR: Account deletion request
     deletionRequestedAt: timestamp("deletion_requested_at", { withTimezone: true }),
     deletionScheduledFor: timestamp("deletion_scheduled_for", { withTimezone: true }),

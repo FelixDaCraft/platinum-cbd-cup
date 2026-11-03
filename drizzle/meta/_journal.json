@@ -134,6 +134,13 @@
       "when": 1793106072076,
       "tag": "0018_instagram_producteur",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1793665358292,
+      "tag": "0019_traductions",
+      "breakpoints": true
     }
   ]
 }

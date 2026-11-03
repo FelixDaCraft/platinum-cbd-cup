@@ -1,7 +1,7 @@
 "use client";
 
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { useRouter } from "next/navigation";
+import { useRouter } from "~/i18n/navigation";
 
 /**
  * Post-rating choice modal — Nothing design system.

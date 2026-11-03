@@ -1,0 +1,86 @@
+{
+  "fr": {
+    "title": "Deux jurys,<br></br>deux palmarès",
+    "lede": "Les échantillons sont anonymisés, avec un code différent pour chaque jury. Personne ne voit ni la marque, ni l'origine, ni le prix.",
+    "proWord": "Pro", "proTitle": "Le classement des experts",
+    "proText": "Producteurs, sommeliers, analystes : chaque juré note le visuel (manucure, trichomes, propreté), l'odeur (puissance, qualité, originalité) et le goût (qualité, fidélité à l'odeur, persistance). Il en sort un classement et un podium par catégorie.",
+    "sampleLabel": "Étiquette d'échantillon", "sampleFlag": "Exemple",
+    "proCode": "Code jury pro", "publicCode": "Code jury public",
+    "sampleNote": "Le même produit, deux codes : aucun juré ne peut le relier d'un jury à l'autre.",
+    "publicWord": "Public", "publicTitle": "Les labels et le Prix du public",
+    "publicText": "Des consommateurs notent chez eux, à partir d'un coffret d'échantillons, sur une grille allégée : l'aspect, puis la puissance et l'originalité de l'odeur et du goût. Leur note décerne le Prix du public et les labels.",
+    "publicTextWithTiers": "Des consommateurs notent chez eux, à partir d'un coffret d'échantillons, sur une grille allégée : l'aspect, puis la puissance et l'originalité de l'odeur et du goût. Leur note décerne le Prix du public et les labels :"
+  },
+  "en": {
+    "title": "Two juries,<br></br>two sets of winners",
+    "lede": "Samples are anonymised, with a different code for each jury. Nobody sees the brand, the origin or the price.",
+    "proWord": "Pro", "proTitle": "The experts' ranking",
+    "proText": "Growers, sommeliers, analysts: each juror scores the look (trim, trichomes, cleanliness), the smell (intensity, quality, originality) and the taste (quality, faithfulness to the smell, persistence). The result is a ranking and a podium for each category.",
+    "sampleLabel": "Sample label", "sampleFlag": "Example",
+    "proCode": "Pro jury code", "publicCode": "Public jury code",
+    "sampleNote": "Same product, two codes: no juror can link it from one jury to the other.",
+    "publicWord": "Public", "publicTitle": "The labels and the Public Choice Award",
+    "publicText": "Consumers score at home, from a box of samples, on a simplified grid: the look, then the intensity and originality of the smell and taste. Their scores award the Public Choice Award and the labels.",
+    "publicTextWithTiers": "Consumers score at home, from a box of samples, on a simplified grid: the look, then the intensity and originality of the smell and taste. Their scores award the Public Choice Award and the labels:"
+  },
+  "it": {
+    "title": "Due giurie,<br></br>due albi d'oro",
+    "lede": "I campioni sono anonimi, con un codice diverso per ogni giuria. Nessuno vede il marchio, l'origine o il prezzo.",
+    "proWord": "Pro", "proTitle": "La classifica degli esperti",
+    "proText": "Produttori, sommelier, analisti: ogni giurato valuta l'aspetto (manicure, tricomi, pulizia), l'odore (intensità, qualità, originalità) e il gusto (qualità, coerenza con l'odore, persistenza). Ne risultano una classifica e un podio per categoria.",
+    "sampleLabel": "Etichetta del campione", "sampleFlag": "Esempio",
+    "proCode": "Codice giuria pro", "publicCode": "Codice giuria popolare",
+    "sampleNote": "Lo stesso prodotto, due codici: nessun giurato può collegarlo da una giuria all'altra.",
+    "publicWord": "Pubblico", "publicTitle": "I label e il Premio del pubblico",
+    "publicText": "I consumatori valutano a casa, a partire da un cofanetto di campioni, su una griglia semplificata: l'aspetto, poi l'intensità e l'originalità dell'odore e del gusto. Il loro voto assegna il Premio del pubblico e i label.",
+    "publicTextWithTiers": "I consumatori valutano a casa, a partire da un cofanetto di campioni, su una griglia semplificata: l'aspetto, poi l'intensità e l'originalità dell'odore e del gusto. Il loro voto assegna il Premio del pubblico e i label:"
+  },
+  "de": {
+    "title": "Zwei Jurys,<br></br>zwei Siegerlisten",
+    "lede": "Die Proben werden anonymisiert, mit einem eigenen Code für jede Jury. Niemand sieht Marke, Herkunft oder Preis.",
+    "proWord": "Pro", "proTitle": "Die Rangliste der Fachleute",
+    "proText": "Produzenten, Sommeliers, Analytiker: Jedes Jurymitglied bewertet die Optik (Trim, Trichome, Sauberkeit), den Geruch (Intensität, Qualität, Originalität) und den Geschmack (Qualität, Übereinstimmung mit dem Geruch, Nachhall). Daraus entstehen eine Rangliste und ein Podium pro Kategorie.",
+    "sampleLabel": "Probenetikett", "sampleFlag": "Beispiel",
+    "proCode": "Code Fachjury", "publicCode": "Code Publikumsjury",
+    "sampleNote": "Ein Produkt, zwei Codes: Kein Jurymitglied kann es von einer Jury zur anderen zuordnen.",
+    "publicWord": "Publikum", "publicTitle": "Die Labels und der Publikumspreis",
+    "publicText": "Konsumentinnen und Konsumenten bewerten zu Hause anhand einer Probenbox auf einem vereinfachten Bogen: die Optik, dann Intensität und Originalität von Geruch und Geschmack. Ihre Bewertung vergibt den Publikumspreis und die Labels.",
+    "publicTextWithTiers": "Konsumentinnen und Konsumenten bewerten zu Hause anhand einer Probenbox auf einem vereinfachten Bogen: die Optik, dann Intensität und Originalität von Geruch und Geschmack. Ihre Bewertung vergibt den Publikumspreis und die Labels:"
+  },
+  "cs": {
+    "title": "Dvě poroty,<br></br>dvoje výsledky",
+    "lede": "Vzorky jsou anonymizované, každá porota má vlastní kód. Nikdo nevidí značku, původ ani cenu.",
+    "proWord": "Pro", "proTitle": "Žebříček odborníků",
+    "proText": "Pěstitelé, someliéři, analytici: každý porotce hodnotí vzhled (manikúra, trichomy, čistota), vůni (intenzita, kvalita, originalita) a chuť (kvalita, soulad s vůní, dochuť). Výsledkem je žebříček a stupně vítězů v každé kategorii.",
+    "sampleLabel": "Štítek vzorku", "sampleFlag": "Příklad",
+    "proCode": "Kód odborné poroty", "publicCode": "Kód veřejné poroty",
+    "sampleNote": "Stejný produkt, dva kódy: žádný porotce ho nemůže propojit mezi porotami.",
+    "publicWord": "Veřejnost", "publicTitle": "Ocenění a Cena veřejnosti",
+    "publicText": "Spotřebitelé hodnotí doma z balíčku vzorků podle zjednodušeného hodnoticího listu: vzhled, poté intenzitu a originalitu vůně a chuti. Jejich hodnocení uděluje Cenu veřejnosti a ocenění.",
+    "publicTextWithTiers": "Spotřebitelé hodnotí doma z balíčku vzorků podle zjednodušeného hodnoticího listu: vzhled, poté intenzitu a originalitu vůně a chuti. Jejich hodnocení uděluje Cenu veřejnosti a ocenění:"
+  },
+  "nl": {
+    "title": "Twee jury's,<br></br>twee ranglijsten",
+    "lede": "De monsters worden geanonimiseerd, met een andere code voor elke jury. Niemand ziet het merk, de herkomst of de prijs.",
+    "proWord": "Pro", "proTitle": "De ranglijst van de experts",
+    "proText": "Telers, sommeliers, analisten: elk jurylid beoordeelt het uiterlijk (trim, trichomen, zuiverheid), de geur (intensiteit, kwaliteit, originaliteit) en de smaak (kwaliteit, trouw aan de geur, afdronk). Dat levert per categorie een ranglijst en een podium op.",
+    "sampleLabel": "Monsteretiket", "sampleFlag": "Voorbeeld",
+    "proCode": "Code vakjury", "publicCode": "Code publieksjury",
+    "sampleNote": "Hetzelfde product, twee codes: geen enkel jurylid kan het van de ene jury aan de andere koppelen.",
+    "publicWord": "Publiek", "publicTitle": "De labels en de Publieksprijs",
+    "publicText": "Consumenten beoordelen thuis, met een box monsters, op een vereenvoudigd formulier: het uiterlijk, daarna de intensiteit en originaliteit van geur en smaak. Hun score bepaalt de Publieksprijs en de labels.",
+    "publicTextWithTiers": "Consumenten beoordelen thuis, met een box monsters, op een vereenvoudigd formulier: het uiterlijk, daarna de intensiteit en originaliteit van geur en smaak. Hun score bepaalt de Publieksprijs en de labels:"
+  },
+  "es": {
+    "title": "Dos jurados,<br></br>dos palmarés",
+    "lede": "Las muestras se anonimizan, con un código distinto para cada jurado. Nadie ve la marca, el origen ni el precio.",
+    "proWord": "Pro", "proTitle": "La clasificación de los expertos",
+    "proText": "Productores, sumilleres, analistas: cada miembro del jurado puntúa el aspecto (manicura, tricomas, limpieza), el olor (intensidad, calidad, originalidad) y el sabor (calidad, fidelidad al olor, persistencia). El resultado es una clasificación y un podio por categoría.",
+    "sampleLabel": "Etiqueta de la muestra", "sampleFlag": "Ejemplo",
+    "proCode": "Código jurado pro", "publicCode": "Código jurado popular",
+    "sampleNote": "El mismo producto, dos códigos: ningún miembro del jurado puede relacionarlo de un jurado a otro.",
+    "publicWord": "Público", "publicTitle": "Los sellos y el Premio del público",
+    "publicText": "Los consumidores puntúan en casa, a partir de una caja de muestras, con una ficha simplificada: el aspecto y, después, la intensidad y la originalidad del olor y del sabor. Su nota otorga el Premio del público y los sellos.",
+    "publicTextWithTiers": "Los consumidores puntúan en casa, a partir de una caja de muestras, con una ficha simplificada: el aspecto y, después, la intensidad y la originalidad del olor y del sabor. Su nota otorga el Premio del público y los sellos:"
+  }
+}
