@@ -7,6 +7,9 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Eye, EyeOff, Check, X, Loader2, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
+import { useLocale, useTranslations } from "next-intl";
+import { localizePath, type Locale } from "~/i18n/locales";
+import { translateValidation, registerValidationMessages } from "~/i18n/validation";
 import { z } from "zod";
 
 import { signUp } from "~/lib/auth-client";
@@ -31,7 +34,19 @@ const juryRegisterSchema = z
 
 type JuryRegisterInput = z.infer<typeof juryRegisterSchema>;
 
+registerValidationMessages({
+  "Email invalide": "emailInvalid",
+  "Le nom doit contenir au moins 2 caractères": "nameMin2",
+});
+
 function JuryRegisterContent() {
+  const t = useTranslations("juryRegister");
+  const ta = useTranslations("activate");
+  const tl = useTranslations("auth.login");
+  const tr = useTranslations("auth.register");
+  const tj = useTranslations("juryInvite");
+  const tv = useTranslations("validation");
+  const locale = useLocale() as Locale;
   const router = useRouter();
   const searchParams = useSearchParams();
   const organization = useOrganization();
@@ -90,7 +105,7 @@ function JuryRegisterContent() {
   const onSubmit = useCallback(
     async (data: JuryRegisterInput) => {
       if (!invitationCode || !codeValidation?.valid) {
-        toast.error("Code d'invitation invalide");
+        toast.error(ta("invalidText"));
         return;
       }
 
@@ -106,6 +121,7 @@ function JuryRegisterContent() {
           email: data.email,
           password: data.password,
           name: data.name,
+          callbackURL: localizePath("/", locale),
         });
 
         if (result.error) {
@@ -119,24 +135,24 @@ function JuryRegisterContent() {
             errorMessage.includes("already") ||
             errorMessage.includes("exists")
           ) {
-            toast.error("Cet email est déjà utilisé. Connectez-vous pour activer votre code.");
+            toast.error(t("exists"));
             router.push(
               `/login?callbackUrl=${encodeURIComponent(`/activate?code=${invitationCode}`)}`
             );
             return;
           }
 
-          toast.error("Une erreur est survenue. Veuillez réessayer.");
+          toast.error(tr("errorGeneric"));
           return;
         }
 
-        toast.success("Inscription réussie ! Vérifiez votre email pour activer votre compte.");
+        toast.success(t("success"));
         router.push("/login?registered=true&intent=jury");
       } catch {
-        toast.error("Erreur de connexion. Vérifiez votre connexion internet.");
+        toast.error(tl("errorNetwork"));
       }
     },
-    [router, invitationCode, codeValidation]
+    [router, invitationCode, codeValidation, locale, t, ta, tl, tr]
   );
 
   const checkCriteria = useCallback(
@@ -147,23 +163,26 @@ function JuryRegisterContent() {
   // Code absent de l'URL
   if (!invitationCode) {
     return (
-      <JuryCodeProblem title="Code manquant">
-        Un code d&apos;invitation est nécessaire pour s&apos;inscrire en tant que
-        juré.
-      </JuryCodeProblem>
+      <JuryCodeProblem title={t("missingTitle")}>{t("missingText")}</JuryCodeProblem>
     );
   }
 
   // Validation du code en cours
   if (isValidatingCode) {
-    return <JuryPending label="Validation du code…" />;
+    return <JuryPending label={ta("checking")} />;
   }
 
   // Code refusé
   if (!codeValidation?.valid) {
     return (
-      <JuryCodeProblem title="Code invalide">
-        {codeValidation?.message ?? "Ce code d'invitation n'est pas valide ou a expiré."}
+      <JuryCodeProblem title={ta("invalidTitle")}>
+        {codeValidation?.reason === "expired"
+          ? ta("expiredText")
+          : codeValidation?.reason === "already_activated"
+            ? ta("usedText")
+            : codeValidation?.reason === "revoked"
+              ? ta("revokedText")
+              : t("invalidText")}
       </JuryCodeProblem>
     );
   }
@@ -171,16 +190,13 @@ function JuryRegisterContent() {
   return (
     <div className="pg pg--form auth-page">
       <header className="pg-head">
-        <p className="eyebrow">Jury</p>
-        <h1 className="display">Inscription du jury</h1>
+        <p className="eyebrow">{t("eyebrow")}</p>
+        <h1 className="display">{t("title")}</h1>
         <p className="pg-lede">
-          Créez votre compte pour rejoindre{" "}
-          {codeValidation.cup?.name ? (
-            <strong style={{ color: "var(--fg)" }}>{codeValidation.cup.name}</strong>
-          ) : (
-            organization.name
-          )}
-          .
+          {t.rich("lede", {
+            name: codeValidation.cup?.name ?? organization.name,
+            b: (c) => <strong style={{ color: "var(--fg)" }}>{c}</strong>,
+          })}
         </p>
       </header>
 
@@ -188,14 +204,14 @@ function JuryRegisterContent() {
         {/* Rappel du code validé */}
         <div className="notice is-success" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <p style={{ margin: 0, fontWeight: 600 }}>
-            Code valide :{" "}
+            {t("validCode")}{" "}
             <span style={{ fontFamily: "var(--mono)", letterSpacing: ".04em" }}>
               {invitationCode}
             </span>
           </p>
           {codeValidation.categories && codeValidation.categories.length > 0 && (
             <p style={{ margin: 0, fontSize: 15, color: "var(--fg-2)" }}>
-              Catégories : {codeValidation.categories.map((c) => c.name).join(", ")}
+              {t("categoriesList", { list: codeValidation.categories.map((c) => c.name).join(", ") })}
             </p>
           )}
         </div>
@@ -212,13 +228,13 @@ function JuryRegisterContent() {
         >
           <div className="field">
             <label htmlFor="email" className="field-label">
-              Email
+              {tl("email")}
             </label>
             <input
               id="email"
               type="email"
               className="field-input"
-              placeholder="vous@exemple.com"
+              placeholder={tl("emailPlaceholder")}
               autoComplete="email"
               aria-invalid={!!errors.email}
               aria-describedby={errors.email ? "email-error" : undefined}
@@ -227,20 +243,20 @@ function JuryRegisterContent() {
             />
             {errors.email && (
               <p id="email-error" className="field-error" style={{ margin: 0 }}>
-                {errors.email.message}
+                {translateValidation(errors.email.message, tv)}
               </p>
             )}
           </div>
 
           <div className="field">
             <label htmlFor="name" className="field-label">
-              Votre nom
+              {tr("name")}
             </label>
             <input
               id="name"
               type="text"
               className="field-input"
-              placeholder="Jean Dupont"
+              placeholder={tr("namePlaceholder")}
               autoComplete="name"
               aria-invalid={!!errors.name}
               aria-describedby={errors.name ? "name-error" : undefined}
@@ -249,7 +265,7 @@ function JuryRegisterContent() {
             />
             {errors.name && (
               <p id="name-error" className="field-error" style={{ margin: 0 }}>
-                {errors.name.message}
+                {translateValidation(errors.name.message, tv)}
               </p>
             )}
           </div>
@@ -263,7 +279,7 @@ function JuryRegisterContent() {
                 id="password"
                 type={showPassword ? "text" : "password"}
                 className="field-input"
-                placeholder="Votre mot de passe"
+                placeholder={tj("passwordPlaceholder")}
                 autoComplete="new-password"
                 aria-invalid={!!errors.password}
                 aria-describedby="password-criteria password-error"
@@ -273,7 +289,7 @@ function JuryRegisterContent() {
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                aria-label={showPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+                aria-label={showPassword ? tl("hidePassword") : tl("showPassword")}
                 className="pw-toggle"
               >
                 {showPassword ? (
@@ -285,7 +301,7 @@ function JuryRegisterContent() {
             </div>
             {errors.password && (
               <p id="password-error" className="field-error" style={{ margin: 0 }}>
-                {errors.password.message}
+                {translateValidation(errors.password.message, tv)}
               </p>
             )}
 
@@ -295,7 +311,7 @@ function JuryRegisterContent() {
                 const isValid = checkCriteria(criterion.regex);
                 return (
                   <div
-                    key={criterion.label}
+                    key={criterion.key}
                     style={{
                       display: "flex",
                       alignItems: "center",
@@ -309,7 +325,7 @@ function JuryRegisterContent() {
                     ) : (
                       <X className="h-4 w-4" style={{ flexShrink: 0 }} aria-hidden="true" />
                     )}
-                    <span>{criterion.label}</span>
+                    <span>{tv(`criteria.${criterion.key}`)}</span>
                   </div>
                 );
               })}
@@ -325,7 +341,7 @@ function JuryRegisterContent() {
                 id="confirmPassword"
                 type={showConfirmPassword ? "text" : "password"}
                 className="field-input"
-                placeholder="Confirmez votre mot de passe"
+                placeholder={tv("confirmRequired")}
                 autoComplete="new-password"
                 aria-invalid={!!errors.confirmPassword}
                 aria-describedby={errors.confirmPassword ? "confirm-password-error" : undefined}
@@ -335,7 +351,7 @@ function JuryRegisterContent() {
               <button
                 type="button"
                 onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                aria-label={showConfirmPassword ? "Masquer la confirmation" : "Afficher la confirmation"}
+                aria-label={showConfirmPassword ? tr("hideConfirm") : tr("showConfirm")}
                 className="pw-toggle"
               >
                 {showConfirmPassword ? (
@@ -347,7 +363,7 @@ function JuryRegisterContent() {
             </div>
             {errors.confirmPassword && (
               <p id="confirm-password-error" className="field-error" style={{ margin: 0 }}>
-                {errors.confirmPassword.message}
+                {translateValidation(errors.confirmPassword.message, tv)}
               </p>
             )}
           </div>
@@ -362,23 +378,23 @@ function JuryRegisterContent() {
               {isSubmitting ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                  Inscription…
+                  {tr("submitting")}
                 </>
               ) : (
-                "Créer mon compte de juré"
+                tj("submit")
               )}
             </button>
           </div>
         </form>
 
         <p className="form-foot">
-          Déjà un compte ?{" "}
+          {tr("haveAccount")}{" "}
           {/* La page /login lit `callbackUrl`, pas `redirect` : le lien
               renvoyait l'utilisateur au tableau de bord au lieu du code. */}
           <Link
             href={`/login?callbackUrl=${encodeURIComponent(`/activate?code=${invitationCode}`)}`}
           >
-            Se connecter
+            {tl("submit")}
           </Link>
         </p>
       </div>
@@ -388,10 +404,12 @@ function JuryRegisterContent() {
 
 /** Code absent ou refusé : explication et retour à l'accueil. */
 function JuryCodeProblem({ title, children }: { title: string; children: ReactNode }) {
+  const t = useTranslations("juryRegister");
+  const ta = useTranslations("activate");
   return (
     <div className="pg pg--form auth-page">
       <header className="pg-head">
-        <p className="eyebrow">Jury</p>
+        <p className="eyebrow">{t("eyebrow")}</p>
         <h1 className="display">{title}</h1>
       </header>
       <div className="notice is-error" role="alert" style={{ display: "flex", gap: 12 }}>
@@ -404,7 +422,7 @@ function JuryCodeProblem({ title, children }: { title: string; children: ReactNo
       </div>
       <div className="form-actions" style={{ marginTop: 24 }}>
         <Link href="/" className="btn accent">
-          Retour à l&apos;accueil
+          {ta("backHome")}
         </Link>
       </div>
     </div>
@@ -430,8 +448,9 @@ function JuryPending({ label }: { label: string }) {
  * Creates a user account for jury participation with an invitation code
  */
 export default function PortalJuryRegisterPage() {
+  const t = useTranslations("activate");
   return (
-    <Suspense fallback={<JuryPending label="Chargement…" />}>
+    <Suspense fallback={<JuryPending label={t("loading")} />}>
       <JuryRegisterContent />
     </Suspense>
   );

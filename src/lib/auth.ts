@@ -19,6 +19,8 @@ import {
   sendEmail,
 } from "~/server/services/email";
 import { passwordSchema } from "~/lib/validations/auth";
+import { emailLocale, emailLocaleFromRequest } from "~/server/services/email/locale";
+import { translatorFor } from "~/i18n/translator";
 import * as schema from "~/server/db/schema";
 
 /**
@@ -183,10 +185,18 @@ export const auth = betterAuth({
         required: false,
         input: true,
       },
+      // Langue des e-mails envoyés hors requête. Posée par le serveur
+      // (databaseHooks ci-dessous, puis à chaque visite de l'espace
+      // personnel), jamais par le client.
+      locale: {
+        type: "string",
+        required: false,
+        input: false,
+      },
     },
     changeEmail: {
       enabled: true,
-      sendChangeEmailVerification: async ({ user, newEmail, url }) => {
+      sendChangeEmailVerification: async ({ user, newEmail, url }, request) => {
         if (env.NODE_ENV === "development") {
           console.log("\n[Auth] sendChangeEmailVerification CALLED");
           console.log("[Auth] User:", user.email);
@@ -194,6 +204,8 @@ export const auth = betterAuth({
           console.log("[Auth] URL:", url);
         }
 
+        const locale = emailLocaleFromRequest(url, request, (user as { locale?: string | null }).locale);
+        const t = translatorFor(locale, "emails.changeEmail");
         const result = await sendEmail({
           scope: "Auth Change Email",
           // Better Auth crée le jeton sur l'adresse ACTUELLE : c'est le
@@ -201,16 +213,23 @@ export const auth = betterAuth({
           // la nouvelle adresse. Envoyer au `newEmail` permettrait à une
           // session volée de rebinder le compte sans trace côté victime.
           to: user.email,
-          subject: "Confirmez le changement d'adresse email - Platinum CBD Cup",
+          subject: t("subject"),
           html: renderEmailLayout({
-            title: "Confirmez le changement d'adresse email",
+            locale,
+            title: t("title"),
             body:
               renderParagraph(
-                `Une demande a été faite pour remplacer l'adresse email de votre compte par <strong>${escapeHtml(newEmail)}</strong>. Cliquez sur le bouton ci-dessous pour approuver ce changement :`
+                escapeHtml(t("intro", { email: "\u0000" })).replace(
+                  "\u0000",
+                  `<strong>${escapeHtml(newEmail)}</strong>`
+                )
               ) +
-              renderButton(url, "Confirmer le changement") +
+              renderButton(url, t("button")) +
               renderParagraph(
-                "Si vous n'êtes pas à l'origine de cette demande, <strong>ne cliquez pas</strong> sur le bouton : votre adresse email reste inchangée. Changez votre mot de passe par précaution, quelqu'un pourrait avoir accès à votre session."
+                escapeHtml(t("warning", { strong: "\u0001" })).replace(
+                  "\u0001",
+                  `<strong>${escapeHtml(t("warningStrong"))}</strong>`
+                )
               ),
           }),
         });
@@ -233,27 +252,26 @@ export const auth = betterAuth({
     // caractères. La complexité est vérifiée par `enforcePasswordPolicy`.
     minPasswordLength: 12,
     resetPasswordTokenExpiresIn: 3600,
-    sendResetPassword: async ({ user, url }) => {
+    sendResetPassword: async ({ user, url }, request) => {
       if (env.NODE_ENV === "development") {
         console.log("\n[Auth] sendResetPassword CALLED");
         console.log("[Auth] User:", user.email);
         console.log("[Auth] URL:", url);
       }
 
+      const locale = emailLocaleFromRequest(url, request, (user as { locale?: string | null }).locale);
+      const t = translatorFor(locale, "emails.resetPassword");
       const result = await sendEmail({
         scope: "Auth Reset Password",
         to: user.email,
-        subject: "Réinitialisez votre mot de passe - Platinum CBD Cup",
+        subject: t("subject"),
         html: renderEmailLayout({
-          title: "Réinitialisation de mot de passe",
+          locale,
+          title: t("title"),
           body:
-            renderParagraph(
-              "Vous avez demandé à réinitialiser votre mot de passe. Cliquez sur le bouton ci-dessous pour choisir un nouveau mot de passe :"
-            ) +
-            renderButton(url, "Réinitialiser mon mot de passe") +
-            renderParagraph(
-              "Ce lien expire dans 1 heure. Si vous n'avez pas demandé cette réinitialisation, vous pouvez ignorer cet email en toute sécurité."
-            ),
+            renderParagraph(escapeHtml(t("intro"))) +
+            renderButton(url, t("button")) +
+            renderParagraph(escapeHtml(t("expiry"))),
         }),
       });
 
@@ -293,27 +311,26 @@ export const auth = betterAuth({
     // bienvenue s'est perdu. La page /login propose en plus un renvoi manuel.
     sendOnSignIn: true,
     autoSignInAfterVerification: true,
-    sendVerificationEmail: async ({ user, url }) => {
+    sendVerificationEmail: async ({ user, url }, request) => {
       if (env.NODE_ENV === "development") {
         console.log("\n[Auth] sendVerificationEmail CALLED");
         console.log("[Auth] User:", user.email);
         console.log("[Auth] URL:", url);
       }
 
+      const locale = emailLocaleFromRequest(url, request, (user as { locale?: string | null }).locale);
+      const t = translatorFor(locale, "emails.verify");
       const result = await sendEmail({
         scope: "Auth Verification",
         to: user.email,
-        subject: "Confirmez votre inscription - Platinum CBD Cup",
+        subject: t("subject"),
         html: renderEmailLayout({
-          title: "Bienvenue sur Platinum CBD Cup !",
+          locale,
+          title: t("title"),
           body:
-            renderParagraph(
-              "Merci de vous être inscrit. Cliquez sur le bouton ci-dessous pour confirmer votre adresse email et activer votre compte :"
-            ) +
-            renderButton(url, "Confirmer mon email") +
-            renderParagraph(
-              "Si vous n'avez pas créé de compte sur Platinum CBD Cup, vous pouvez ignorer cet email en toute sécurité."
-            ),
+            renderParagraph(escapeHtml(t("intro"))) +
+            renderButton(url, t("button")) +
+            renderParagraph(escapeHtml(t("ignore"))),
         }),
       });
 
@@ -321,6 +338,30 @@ export const auth = betterAuth({
         if (env.NODE_ENV === "development") return;
         throw new Error(`Failed to send verification email: ${result.error}`);
       }
+    },
+  },
+  databaseHooks: {
+    user: {
+      create: {
+        /**
+         * Langue du compte à sa création : celle de la page d'inscription
+         * (callbackURL préfixé), sinon cookie ou navigateur. Sert aux
+         * e-mails envoyés plus tard hors requête (résultats, rappels).
+         */
+        before: async (user, ctx) => {
+          const callbackURL = (ctx?.body as { callbackURL?: unknown } | undefined)?.callbackURL;
+          const headers = ctx?.headers ?? ctx?.request?.headers;
+          const locale = emailLocale({
+            url:
+              typeof callbackURL === "string"
+                ? `http://local/?callbackURL=${encodeURIComponent(callbackURL)}`
+                : null,
+            cookieHeader: headers?.get("cookie"),
+            acceptLanguage: headers?.get("accept-language"),
+          });
+          return { data: { ...user, locale } };
+        },
+      },
     },
   },
   session: {

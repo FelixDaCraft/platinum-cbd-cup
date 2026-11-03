@@ -5,12 +5,17 @@ import { useSearchParams } from "next/navigation";
 import { Link, useRouter } from "~/i18n/navigation";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { useLocale, useTranslations } from "next-intl";
+import { formatDate, type Locale } from "~/i18n/locales";
+import { useServerError } from "~/i18n/server-error";
 
 import { api } from "~/trpc/react";
 import { authClient } from "~/lib/auth-client";
-import { getErrorMessage } from "../_lib/errors";
 
 function ActivatePageContent() {
+  const t = useTranslations("activate");
+  const locale = useLocale() as Locale;
+  const serverError = useServerError();
   const searchParams = useSearchParams();
   const router = useRouter();
   const codeFromUrl = searchParams.get("code") ?? "";
@@ -43,23 +48,15 @@ function ActivatePageContent() {
   const activateMutation = api.juryCodes.activate.useMutation({
     onSuccess: (result) => {
       localStorage.removeItem("pendingActivationCode");
-      toast.success("Code activé !", {
-        description: `Vous avez maintenant accès à ${result.categoriesCount} catégorie${result.categoriesCount !== 1 ? "s" : ""}`,
+      toast.success(t("toastActivated"), {
+        description: t("toastAccess", { count: result.categoriesCount }),
       });
       // Redirect to jury cup page
       router.push(`/jury/cups/${result.cupId}`);
     },
     onError: (err) => {
-      // Les erreurs métier du routeur sont déjà rédigées en français
-      // (lib/errors.ts) ; une erreur serveur, elle, remonte un libellé
-      // technique en anglais qu'il ne faut pas afficher tel quel.
-      const isServerFault =
-        err.data?.code === "INTERNAL_SERVER_ERROR" || !err.message;
-      toast.error(
-        isServerFault
-          ? "L'activation a échoué. Réessayez dans quelques instants."
-          : err.message
-      );
+      // Message métier traduit ; une panne serveur n'est jamais affichée.
+      toast.error(serverError(err, t("activateFailed")));
     },
   });
 
@@ -74,7 +71,7 @@ function ActivatePageContent() {
   const handleSearchCode = () => {
     const normalizedCode = inputCode.trim().toUpperCase();
     if (!normalizedCode) {
-      toast.error("Veuillez entrer un code");
+      toast.error(t("enterCode"));
       return;
     }
     setSearchCode(normalizedCode);
@@ -119,13 +116,13 @@ function ActivatePageContent() {
 
   const verifyButton = (
     <button type="button" className="btn accent" onClick={handleSearchCode}>
-      Vérifier le code
+      {t("verify")}
     </button>
   );
 
   // Loading state
   if (sessionLoading) {
-    return <ActivatePending label="Chargement…" />;
+    return <ActivatePending label={t("loading")} />;
   }
 
   // No code yet - show entry form
@@ -133,11 +130,11 @@ function ActivatePageContent() {
     return (
       <div className="pg pg--form auth-page">
         <PageHead
-          title="Activer un code jury"
-          lede="Saisissez le code d'invitation que vous avez reçu (par email ou sur QR code) pour rejoindre le jury."
+          title={t("entryTitle")}
+          lede={t("entryLede")}
         />
         <div className="form-card">
-          {codeField("code", "Code d'invitation")}
+          {codeField("code", t("codeLabel"))}
           <div className="form-actions">{verifyButton}</div>
         </div>
       </div>
@@ -146,23 +143,23 @@ function ActivatePageContent() {
 
   // Loading code info
   if (isLoading) {
-    return <ActivatePending label="Vérification du code…" />;
+    return <ActivatePending label={t("checking")} />;
   }
 
   // Error state
   if (error) {
     return (
       <div className="pg pg--form auth-page">
-        <PageHead title="Code invalide" />
+        <PageHead title={t("invalidTitle")} />
         <div className="form-card">
           <div className="notice is-error" role="alert">
-            {getErrorMessage(error, "Ce code d'activation n'est pas valide.")}
+            {serverError(error, t("invalidText"))}
           </div>
-          {codeField("code-retry", "Essayer un autre code")}
+          {codeField("code-retry", t("tryAnother"))}
           <div className="form-actions">
             {verifyButton}
             <Link href="/" className="btn ghost">
-              Retour à l&apos;accueil
+              {t("backHome")}
             </Link>
           </div>
         </div>
@@ -181,12 +178,12 @@ function ActivatePageContent() {
         <PageHead
           title={
             isExpired
-              ? "Code expiré"
+              ? t("expiredTitle")
               : isActivated
-                ? "Code déjà utilisé"
+                ? t("usedTitle")
                 : isRevoked
-                  ? "Code révoqué"
-                  : "Code invalide"
+                  ? t("revokedTitle")
+                  : t("invalidTitle")
           }
         />
         <div className="form-card">
@@ -194,14 +191,20 @@ function ActivatePageContent() {
             className={`notice ${isActivated ? "is-info" : "is-error"}`}
             role="alert"
           >
-            {data.message}
+            {isExpired
+              ? t("expiredText")
+              : isActivated
+                ? t("usedText")
+                : isRevoked
+                  ? t("revokedText")
+                  : t("invalidText")}
           </div>
-          {codeField("code-retry-2", "Essayer un autre code")}
+          {codeField("code-retry-2", t("tryAnother"))}
           <div className="form-actions">
             {verifyButton}
             {session?.user && (
               <Link href="/jury" className="btn ghost">
-                Accéder à mon espace jury
+                {t("goJury")}
               </Link>
             )}
           </div>
@@ -213,6 +216,7 @@ function ActivatePageContent() {
   // Valid code - show activation UI
   if (!data || !data.valid || !data.cup || !data.categories) return null;
 
+  // Noms de catégories déjà traduits par le serveur (ctx.locale).
   const { cup, categories } = data;
 
   const rowStyle: React.CSSProperties = {
@@ -235,23 +239,17 @@ function ActivatePageContent() {
   return (
     <div className="pg pg--form auth-page">
       <PageHead
-        title={
-          <>
-            Rejoindre le <em>jury</em>
-          </>
-        }
-        lede={
-          <>
-            Vous êtes invité à noter les produits de{" "}
-            <strong style={{ color: "var(--fg)" }}>{cup.name}</strong>.
-          </>
-        }
+        title={t.rich("joinTitle", { em: (c) => <em>{c}</em> })}
+        lede={t.rich("joinLede", {
+          cup: cup.name,
+          b: (c) => <strong style={{ color: "var(--fg)" }}>{c}</strong>,
+        })}
       />
 
       <div className="form-card">
         <dl style={{ margin: 0 }}>
           <div style={{ ...rowStyle, paddingTop: 0 }}>
-            <dt style={termStyle}>Code</dt>
+            <dt style={termStyle}>{t("code")}</dt>
             <dd
               style={{
                 ...valueStyle,
@@ -263,17 +261,15 @@ function ActivatePageContent() {
             </dd>
           </div>
           <div style={rowStyle}>
-            <dt style={termStyle}>Concours</dt>
+            <dt style={termStyle}>{t("competition")}</dt>
             <dd style={valueStyle}>{cup.name}</dd>
           </div>
           <div style={rowStyle}>
-            <dt style={termStyle}>Organisateur</dt>
+            <dt style={termStyle}>{t("organiser")}</dt>
             <dd style={valueStyle}>Platinum CBD Cup</dd>
           </div>
           <div style={rowStyle}>
-            <dt style={termStyle}>
-              Catégorie{categories.length !== 1 ? "s" : ""}
-            </dt>
+            <dt style={termStyle}>{t("categories", { count: categories.length })}</dt>
             <dd
               style={{
                 margin: 0,
@@ -292,14 +288,8 @@ function ActivatePageContent() {
           </div>
           {data.expiresAt && (
             <div style={rowStyle}>
-              <dt style={termStyle}>Valable jusqu&apos;au</dt>
-              <dd style={valueStyle}>
-                {new Date(data.expiresAt).toLocaleDateString("fr-FR", {
-                  day: "numeric",
-                  month: "long",
-                  year: "numeric",
-                })}
-              </dd>
+              <dt style={termStyle}>{t("validUntil")}</dt>
+              <dd style={valueStyle}>{formatDate(data.expiresAt, locale)}</dd>
             </div>
           )}
         </dl>
@@ -307,7 +297,7 @@ function ActivatePageContent() {
         {/* Ce que l'activation ouvre */}
         <div>
           <h2 style={{ fontSize: 18, margin: "0 0 10px" }}>
-            En activant ce code, vous pourrez :
+            {t("youCan")}
           </h2>
           <ul
             style={{
@@ -319,19 +309,19 @@ function ActivatePageContent() {
             }}
           >
             <li>
-              accéder à {categories.length} catégorie
-              {categories.length !== 1 ? "s" : ""} :{" "}
-              {categories.map((c) => c.name).join(", ")} ;
+              {t("canAccess", {
+                count: categories.length,
+                list: categories.map((c) => c.name).join(", "),
+              })}
             </li>
-            <li>noter les produits de ces catégories ;</li>
-            <li>contribuer aux résultats officiels de la cup.</li>
+            <li>{t("canRate")}</li>
+            <li>{t("canContribute")}</li>
           </ul>
         </div>
 
         {data.samplesIncluded && (
           <div className="notice is-info">
-            Vos échantillons sont dans la box : leur réception sera confirmée
-            automatiquement.
+            {t("samplesIncluded")}
           </div>
         )}
 
@@ -339,27 +329,27 @@ function ActivatePageContent() {
         {!session?.user ? (
           <>
             <div className="notice is-info">
-              Connectez-vous ou créez un compte pour activer ce code.
+              {t("signInToActivate")}
             </div>
             <div className="form-actions">
               <Link
                 href={`/register?intent=jury&callbackUrl=${encodeURIComponent(callbackUrl)}`}
                 className="btn accent"
               >
-                Créer un compte
+                {t("createAccount")}
               </Link>
               <Link
                 href={`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`}
                 className="btn ghost"
               >
-                Se connecter
+                {t("signIn")}
               </Link>
             </div>
           </>
         ) : (
           <>
             <div className="notice is-success">
-              Connecté en tant que <b>{session.user.email}</b>
+              {t.rich("signedInAs", { email: session.user.email, b: (c) => <b>{c}</b> })}
             </div>
             <div className="form-actions">
               <button
@@ -371,7 +361,7 @@ function ActivatePageContent() {
                 {activateMutation.isPending && (
                   <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
                 )}
-                Activer ce code et devenir jury
+                {t("activate")}
               </button>
             </div>
           </>
@@ -389,9 +379,10 @@ function PageHead({
   title: React.ReactNode;
   lede?: React.ReactNode;
 }) {
+  const t = useTranslations("activate");
   return (
     <header className="pg-head">
-      <p className="eyebrow">Espace jury</p>
+      <p className="eyebrow">{t("eyebrow")}</p>
       <h1 className="display">{title}</h1>
       {lede && <p className="pg-lede">{lede}</p>}
     </header>
@@ -415,8 +406,9 @@ function ActivatePending({ label }: { label: string }) {
 
 // Wrap in Suspense for useSearchParams
 export default function ActivatePage() {
+  const t = useTranslations("activate");
   return (
-    <Suspense fallback={<ActivatePending label="Chargement…" />}>
+    <Suspense fallback={<ActivatePending label={t("loading")} />}>
       <ActivatePageContent />
     </Suspense>
   );

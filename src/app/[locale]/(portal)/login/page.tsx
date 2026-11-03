@@ -7,6 +7,9 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Eye, EyeOff, Loader2, MailWarning } from "lucide-react";
 import { toast } from "sonner";
+import { useLocale, useTranslations } from "next-intl";
+import { hrefFor, type Locale } from "~/i18n/locales";
+import { translateValidation } from "~/i18n/validation";
 
 import { sendVerificationEmail, signIn, useSession } from "~/lib/auth-client";
 import { loginSchema, type LoginInput } from "~/lib/validations/auth";
@@ -56,9 +59,10 @@ function sanitizeCallbackUrl(raw: string | null): string | null {
 }
 
 export default function PortalLoginPage() {
+  const t = useTranslations("auth.login");
   return (
     <div className="pg pg--form auth-page">
-      <Suspense fallback={<LoginPending label="Chargement…" />}>
+      <Suspense fallback={<LoginPending label={t("loading")} />}>
         <PortalLoginForm />
       </Suspense>
     </div>
@@ -79,6 +83,9 @@ function LoginPending({ label }: { label: string }) {
 }
 
 function PortalLoginForm() {
+  const t = useTranslations("auth.login");
+  const tv = useTranslations("validation");
+  const locale = useLocale() as Locale;
   const searchParams = useSearchParams();
   const organization = useOrganization();
   const { data: session, isPending: isSessionLoading } = useSession();
@@ -141,9 +148,11 @@ function PortalLoginForm() {
       }
 
       hasRedirected.current = true;
-      window.location.href = redirectPath;
+      // Chemin interne nu (rôle, callbackUrl) → dans la langue de la page ;
+      // le back-office reste sans préfixe.
+      window.location.href = hrefFor(redirectPath, locale);
     }
-  }, [session, isSessionDetermined, searchParams]);
+  }, [session, isSessionDetermined, searchParams, locale]);
 
   // Show toast for newly registered users
   useEffect(() => {
@@ -159,20 +168,18 @@ function PortalLoginForm() {
       if (registered === "true") {
         const cb = searchParams.get("callbackUrl") ?? "";
         if (cb.startsWith("/jury-invite/") || cb.startsWith("/jury/")) {
-          toast.success("Compte créé ! Connectez-vous pour accéder au jury.");
+          toast.success(t("toastRegisteredJury"));
         } else {
-          toast.info("Compte créé ! Vérifiez votre email pour activer votre compte.");
+          toast.info(t("toastRegistered"));
         }
       }
 
       if (logout === "true") {
-        toast.success("Vous avez été déconnecté avec succès.");
+        toast.success(t("toastLogout"));
       }
 
       if (reset === "true") {
-        toast.success(
-          "Mot de passe modifié ! Connectez-vous avec votre nouveau mot de passe."
-        );
+        toast.success(t("toastReset"));
       }
 
       // Clean up URL
@@ -182,7 +189,7 @@ function PortalLoginForm() {
       url.searchParams.delete("reset");
       window.history.replaceState({}, "", url.pathname + url.search);
     }
-  }, [searchParams]);
+  }, [searchParams, t]);
 
   // Focus first error field
   useEffect(() => {
@@ -218,9 +225,7 @@ function PortalLoginForm() {
             // `emailVerification.sendOnSignIn` vient de renvoyer le lien ;
             // le panneau offre un second envoi si l'email n'arrive pas.
             setUnverifiedEmail(data.email);
-            toast.warning(
-              "Votre email n'est pas encore confirmé. Un nouveau lien vient de vous être envoyé."
-            );
+            toast.warning(t("errorUnverified"));
             return;
           }
 
@@ -235,7 +240,7 @@ function PortalLoginForm() {
             errorCodeUpper.includes("LIMIT") ||
             errorMessage.includes("too many")
           ) {
-            toast.error("Trop de tentatives. Veuillez réessayer plus tard.");
+            toast.error(t("errorRate"));
             return;
           }
 
@@ -243,9 +248,7 @@ function PortalLoginForm() {
           // Longtemps confondue avec un mauvais mot de passe, ce qui envoyait
           // les utilisateurs réinitialiser un mot de passe pourtant valide.
           if (status >= 500 || status === 0) {
-            toast.error(
-              "Service momentanément indisponible. Réessayez dans quelques minutes."
-            );
+            toast.error(t("errorUnavailable"));
             return;
           }
 
@@ -253,25 +256,21 @@ function PortalLoginForm() {
           // par import n'ont aucun mot de passe et tombent ici : on rappelle le
           // chemin « Mot de passe oublié », sans révéler si le compte existe.
           if (status === 401 || errorCodeUpper.includes("INVALID_EMAIL_OR_PASSWORD")) {
-            toast.error(
-              "Email ou mot de passe incorrect. Si vous n'avez jamais défini de mot de passe, utilisez « Mot de passe oublié ? »."
-            );
+            toast.error(t("errorCredentials"));
             return;
           }
 
           // Tout le reste (403 origine refusée, 400 requête invalide…) : ne pas
           // le déguiser en erreur d'identifiants.
           console.error("[Login] Erreur de connexion inattendue", result.error);
-          toast.error(
-            `Connexion impossible (erreur ${status || "inconnue"}). Contactez l'organisation si cela persiste.`
-          );
+          toast.error(t("errorOther", { status: status || "?" }));
           return;
         }
 
         setUnverifiedEmail(null);
 
         // Login succeeded!
-        toast.success("Connexion réussie !");
+        toast.success(t("success"));
         setLoginSuccess(true);
 
         // Determine redirect path based on role (from the freshly-returned session)
@@ -298,14 +297,14 @@ function PortalLoginForm() {
           } catch { /* ignore localStorage errors */ }
         }
 
-        window.location.href = redirectPath;
+        window.location.href = hrefFor(redirectPath, locale);
         return;
       } catch {
         setIsLoggingIn(false);
-        toast.error("Erreur de connexion. Vérifiez votre connexion internet.");
+        toast.error(t("errorNetwork"));
       }
     },
-    [searchParams]
+    [searchParams, locale, t]
   );
 
   const handleResendVerification = useCallback(async () => {
@@ -315,40 +314,34 @@ function PortalLoginForm() {
     try {
       const result = await sendVerificationEmail({
         email: unverifiedEmail,
-        callbackURL: "/login",
+        callbackURL: hrefFor("/login", locale),
       });
 
       if (result.error) {
         if (result.error.status === 429) {
-          toast.error(
-            "Trop de demandes d'envoi. Patientez quelques minutes avant de réessayer."
-          );
+          toast.error(t("resendRate"));
         } else {
-          toast.error(
-            "L'email n'a pas pu être renvoyé. Contactez l'organisation."
-          );
+          toast.error(t("resendFailed"));
         }
         return;
       }
 
-      toast.success(
-        `Email de confirmation renvoyé à ${unverifiedEmail}. Pensez à vérifier les spams.`
-      );
+      toast.success(t("resendSuccess", { email: unverifiedEmail }));
     } catch {
-      toast.error("Erreur réseau. Vérifiez votre connexion internet.");
+      toast.error(t("errorNetwork"));
     } finally {
       setIsResendingVerification(false);
     }
-  }, [unverifiedEmail]);
+  }, [unverifiedEmail, locale, t]);
 
   // Chargement de la session, connexion en cours ou redirection
   if (!isSessionDetermined || isLoggingIn || loginSuccess) {
-    return <LoginPending label={loginSuccess ? "Redirection en cours…" : "Chargement…"} />;
+    return <LoginPending label={loginSuccess ? t("redirecting") : t("loading")} />;
   }
 
   // Déjà connecté : la redirection part du useEffect ci-dessus
   if (session?.user) {
-    return <LoginPending label="Redirection en cours…" />;
+    return <LoginPending label={t("redirecting")} />;
   }
 
   const callbackUrl = searchParams.get("callbackUrl");
@@ -356,10 +349,8 @@ function PortalLoginForm() {
   return (
     <>
       <header className="pg-head">
-        <h1 className="display">Connexion</h1>
-        <p className="pg-lede">
-          Connectez-vous à votre espace {organization.name}.
-        </p>
+        <h1 className="display">{t("title")}</h1>
+        <p className="pg-lede">{t("lede", { name: organization.name })}</p>
       </header>
 
       <div className="form-card">
@@ -371,13 +362,13 @@ function PortalLoginForm() {
         >
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <label htmlFor="email" className="field-label">
-              Email
+              {t("email")}
             </label>
             <input
               id="email"
               type="email"
               className="field-input"
-              placeholder="vous@exemple.com"
+              placeholder={t("emailPlaceholder")}
               autoComplete="email"
               aria-invalid={!!errors.email}
               aria-required="true"
@@ -387,7 +378,7 @@ function PortalLoginForm() {
             />
             {errors.email && (
               <p id="email-error" className="field-error" style={{ margin: 0 }}>
-                {errors.email.message}
+                {translateValidation(errors.email.message, tv)}
               </p>
             )}
           </div>
@@ -403,10 +394,10 @@ function PortalLoginForm() {
               }}
             >
               <label htmlFor="password" className="field-label">
-                Mot de passe
+                {t("password")}
               </label>
               <Link href="/forgot-password" className="pg-link auth-forgot" style={{ fontSize: 15 }}>
-                Mot de passe oublié ?
+                {t("forgot")}
               </Link>
             </div>
             <div style={{ position: "relative" }}>
@@ -428,11 +419,7 @@ function PortalLoginForm() {
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                aria-label={
-                  showPassword
-                    ? "Masquer le mot de passe"
-                    : "Afficher le mot de passe"
-                }
+                aria-label={showPassword ? t("hidePassword") : t("showPassword")}
                 className="pw-toggle"
               >
                 {showPassword ? (
@@ -444,7 +431,7 @@ function PortalLoginForm() {
             </div>
             {errors.password && (
               <p id="password-error" className="field-error" style={{ margin: 0 }}>
-                {errors.password.message}
+                {translateValidation(errors.password.message, tv)}
               </p>
             )}
           </div>
@@ -462,9 +449,7 @@ function PortalLoginForm() {
                   aria-hidden="true"
                 />
                 <p style={{ margin: 0 }}>
-                  Votre adresse <b>{unverifiedEmail}</b> n&apos;est pas encore
-                  confirmée. Ouvrez le lien reçu par email, ou demandez un nouvel
-                  envoi.
+                  {t.rich("unverified", { email: unverifiedEmail, b: (c) => <b>{c}</b> })}
                 </p>
               </div>
               <button
@@ -477,10 +462,10 @@ function PortalLoginForm() {
                 {isResendingVerification ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                    Envoi en cours…
+                    {t("resending")}
                   </>
                 ) : (
-                  "Renvoyer l'email de confirmation"
+                  t("resend")
                 )}
               </button>
             </div>
@@ -496,17 +481,17 @@ function PortalLoginForm() {
               {isSubmitting ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                  Connexion…
+                  {t("submitting")}
                 </>
               ) : (
-                "Se connecter"
+                t("submit")
               )}
             </button>
           </div>
         </form>
 
         <p className="form-foot" style={{ margin: 0, paddingTop: 20, borderTop: "1px solid var(--line)" }}>
-          Pas encore de compte ?{" "}
+          {t("noAccount")}{" "}
           <Link
             href={
               callbackUrl?.startsWith("/jury-invite/")
@@ -514,7 +499,7 @@ function PortalLoginForm() {
                 : "/register"
             }
           >
-            Créer un compte
+            {t("createAccount")}
           </Link>
         </p>
       </div>

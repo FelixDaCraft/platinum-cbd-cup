@@ -732,6 +732,8 @@ export const juryRouter = createTRPCRouter({
           // Sans role explicite la colonne retombe sur "producer" (defaut DB) et
           // les redirections apres connexion envoient le jure vers /producer.
           role: "jury",
+          // Langue de la page d'inscription : celle des e-mails à venir.
+          locale: ctx.locale,
           createdAt: now,
           updatedAt: now,
         });

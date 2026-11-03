@@ -7,6 +7,9 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Check, Eye, EyeOff, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
+import { useLocale, useTranslations } from "next-intl";
+import { localizePath, type Locale } from "~/i18n/locales";
+import { translateValidation } from "~/i18n/validation";
 
 import { resetPassword } from "~/lib/auth-client";
 import {
@@ -16,9 +19,10 @@ import {
 } from "~/lib/validations/auth";
 
 export default function ResetPasswordPage() {
+  const t = useTranslations("auth.login");
   return (
     <div className="pg pg--form auth-page">
-      <Suspense fallback={<ResetPending label="Chargement…" />}>
+      <Suspense fallback={<ResetPending label={t("loading")} />}>
         <ResetPasswordCard />
       </Suspense>
     </div>
@@ -39,6 +43,12 @@ function ResetPending({ label }: { label: string }) {
 }
 
 function ResetPasswordCard() {
+  const t = useTranslations("auth.reset");
+  const tl = useTranslations("auth.login");
+  const tf = useTranslations("auth.forgot");
+  const tr = useTranslations("auth.register");
+  const tv = useTranslations("validation");
+  const locale = useLocale() as Locale;
   const searchParams = useSearchParams();
 
   const token = searchParams.get("token");
@@ -88,20 +98,20 @@ function ResetPasswordCard() {
 
           if (code.includes("TOKEN")) {
             toast.error(
-              "Ce lien a expiré ou a déjà été utilisé. Demandez-en un nouveau."
+              t("errorToken")
             );
             return;
           }
 
           if (code.includes("PASSWORD_TOO_SHORT") || code.includes("PASSWORD_TOO_LONG")) {
             toast.error(
-              "Ce mot de passe ne respecte pas les règles de longueur attendues."
+              t("errorLength")
             );
             return;
           }
 
           if (status === 429) {
-            toast.error("Trop de tentatives. Veuillez réessayer plus tard.");
+            toast.error(tl("errorRate"));
             return;
           }
 
@@ -109,7 +119,7 @@ function ResetPasswordCard() {
           // des libellés techniques en anglais.
           console.error("[ResetPassword] Échec de la réinitialisation", result.error);
           toast.error(
-            "Impossible de réinitialiser le mot de passe. Veuillez réessayer."
+            t("errorGeneric")
           );
           return;
         }
@@ -117,18 +127,18 @@ function ResetPasswordCard() {
         // Better Auth invalidates every existing session on reset, so the
         // user has to sign in again with the new password.
         setIsRedirecting(true);
-        toast.success("Mot de passe mis à jour !");
-        window.location.href = "/login?reset=true";
+        toast.success(t("success"));
+        window.location.href = localizePath("/login?reset=true", locale);
       } catch {
-        toast.error("Erreur réseau. Vérifiez votre connexion internet.");
+        toast.error(tl("errorNetwork"));
       }
     },
-    [token]
+    [token, locale, t, tl]
   );
 
   const header = (title: string, lede: string) => (
     <header className="pg-head">
-      <p className="eyebrow">Mon compte</p>
+      <p className="eyebrow">{tf("eyebrow")}</p>
       <h1 className="display">{title}</h1>
       <p className="pg-lede">{lede}</p>
     </header>
@@ -136,7 +146,7 @@ function ResetPasswordCard() {
 
   const backToLogin = (
     <p className="form-foot" style={{ margin: 0 }}>
-      <Link href="/login">Retour à la connexion</Link>
+      <Link href="/login">{tf("back")}</Link>
     </p>
   );
 
@@ -144,17 +154,16 @@ function ResetPasswordCard() {
   if (!token || callbackError) {
     return (
       <>
-        {header("Lien invalide", "Ce lien de réinitialisation n'est plus valable.")}
+        {header(t("invalidTitle"), t("invalidLede"))}
 
         <div className="form-card">
           <div className="notice is-error" role="alert">
-            Les liens de réinitialisation expirent au bout d&apos;une heure et ne
-            servent qu&apos;une fois. Demandez-en un nouveau pour continuer.
+            {t("invalidText")}
           </div>
 
           <div className="form-actions">
             <Link href="/forgot-password" className="btn accent">
-              Demander un nouveau lien
+              {t("newLink")}
             </Link>
           </div>
 
@@ -165,14 +174,14 @@ function ResetPasswordCard() {
   }
 
   if (isRedirecting) {
-    return <ResetPending label="Redirection en cours…" />;
+    return <ResetPending label={tl("redirecting")} />;
   }
 
   const errorBorder = { borderColor: "var(--danger)" };
 
   return (
     <>
-      {header("Nouveau mot de passe", "Choisissez un mot de passe sûr pour votre compte.")}
+      {header(t("title"), t("lede"))}
 
       <div className="form-card">
         <form
@@ -184,7 +193,7 @@ function ResetPasswordCard() {
           {/* Mot de passe */}
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <label htmlFor="password" className="field-label">
-              Nouveau mot de passe
+              {t("newPassword")}
             </label>
             <div style={{ position: "relative" }}>
               <input
@@ -205,9 +214,7 @@ function ResetPasswordCard() {
                 onClick={() => setShowPassword(!showPassword)}
                 className="pw-toggle"
                 aria-label={
-                  showPassword
-                    ? "Masquer le mot de passe"
-                    : "Afficher le mot de passe"
+                  showPassword ? tl("hidePassword") : tl("showPassword")
                 }
               >
                 {showPassword ? (
@@ -219,7 +226,7 @@ function ResetPasswordCard() {
             </div>
             {errors.password && (
               <p id="password-error" className="field-error" style={{ margin: 0 }}>
-                {errors.password.message}
+                {translateValidation(errors.password.message, tv)}
               </p>
             )}
 
@@ -241,7 +248,7 @@ function ResetPasswordCard() {
                 const isValid = checkCriteria(criterion.regex);
                 return (
                   <li
-                    key={criterion.label}
+                    key={criterion.key}
                     style={{
                       display: "flex",
                       alignItems: "center",
@@ -255,7 +262,7 @@ function ResetPasswordCard() {
                     ) : (
                       <X className="h-4 w-4" aria-hidden="true" />
                     )}
-                    <span>{criterion.label}</span>
+                    <span>{tv(`criteria.${criterion.key}`)}</span>
                   </li>
                 );
               })}
@@ -265,7 +272,7 @@ function ResetPasswordCard() {
           {/* Confirmation */}
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <label htmlFor="confirmPassword" className="field-label">
-              Confirmer le mot de passe
+              {tr("confirmPassword")}
             </label>
             <div style={{ position: "relative" }}>
               <input
@@ -287,9 +294,7 @@ function ResetPasswordCard() {
                 onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                 className="pw-toggle"
                 aria-label={
-                  showConfirmPassword
-                    ? "Masquer le mot de passe"
-                    : "Afficher le mot de passe"
+                  showConfirmPassword ? tl("hidePassword") : tl("showPassword")
                 }
               >
                 {showConfirmPassword ? (
@@ -301,7 +306,7 @@ function ResetPasswordCard() {
             </div>
             {errors.confirmPassword && (
               <p id="confirm-password-error" className="field-error" style={{ margin: 0 }}>
-                {errors.confirmPassword.message}
+                {translateValidation(errors.confirmPassword.message, tv)}
               </p>
             )}
           </div>
@@ -311,10 +316,10 @@ function ResetPasswordCard() {
               {isSubmitting ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                  Mise à jour…
+                  {t("saving")}
                 </>
               ) : (
-                "Enregistrer le mot de passe"
+                t("save")
               )}
             </button>
           </div>

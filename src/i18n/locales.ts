@@ -189,9 +189,14 @@ export function isLocalizedRoute(path: string): boolean {
   );
 }
 
-/** Comme localizePath, mais laisse intactes les routes non traduites. */
+/**
+ * Comme localizePath, mais laisse intactes les routes non traduites. Un
+ * chemin déjà préfixé (lien d'e-mail, callbackUrl) est d'abord ramené à sa
+ * forme nue : pas de `/en/en/…`.
+ */
 export function hrefFor(path: string, locale: Locale): string {
-  return isLocalizedRoute(path) ? localizePath(path, locale) : path;
+  const bare = stripLocale(path);
+  return isLocalizedRoute(bare) ? localizePath(bare, locale) : bare;
 }
 
 /** Traductions d'un contenu riche (règlement, article) : corps TipTap compris. */
@@ -240,4 +245,18 @@ export function localizedContent<
     content: content ?? doc.content,
     translated: locale === defaultLocale || content != null,
   };
+}
+
+/**
+ * Langue d'une requête serveur (tRPC, route API) : en-tête `x-locale` posé
+ * par le client tRPC d'après `<html lang>`, sinon celui que le middleware
+ * next-intl pose sur les pages, sinon le cookie, sinon le français.
+ */
+export function requestLocale(headers: Headers): Locale {
+  const explicit = headers.get("x-locale");
+  if (isLocale(explicit)) return explicit;
+  const fromMiddleware = headers.get("x-next-intl-locale");
+  if (isLocale(fromMiddleware)) return fromMiddleware;
+  const cookie = /(?:^|;\s*)NEXT_LOCALE=([^;]+)/.exec(headers.get("cookie") ?? "")?.[1];
+  return isLocale(cookie) ? cookie : defaultLocale;
 }

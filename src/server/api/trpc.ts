@@ -9,6 +9,7 @@
 import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import { ZodError } from "zod";
+import { requestLocale } from "~/i18n/locales";
 
 import { db } from "~/server/db";
 import { auth } from "~/lib/auth";
@@ -29,6 +30,12 @@ import { ERROR_MESSAGES } from "~/lib/errors";
 export const createTRPCContext = async (opts: { headers: Headers }) => {
   return {
     db,
+    /**
+     * Langue de la page qui appelle : les procédures servies aux visiteurs,
+     * producteurs et jurés renvoient les noms de catégories, critères et
+     * labels traduits (localizedField), avec repli sur le français.
+     */
+    locale: requestLocale(opts.headers),
     ...opts,
   };
 };

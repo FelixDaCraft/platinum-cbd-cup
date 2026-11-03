@@ -6,6 +6,9 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { useLocale, useTranslations } from "next-intl";
+import { localizePath, type Locale } from "~/i18n/locales";
+import { translateValidation } from "~/i18n/validation";
 
 import { forgetPassword } from "~/lib/auth-client";
 import {
@@ -29,6 +32,10 @@ export default function ForgotPasswordPage() {
 }
 
 function ForgotPasswordForm() {
+  const t = useTranslations("auth.forgot");
+  const tv = useTranslations("validation");
+  const tl = useTranslations("auth.login");
+  const locale = useLocale() as Locale;
   const [submittedEmail, setSubmittedEmail] = useState<string | null>(null);
 
   const {
@@ -45,16 +52,18 @@ function ForgotPasswordForm() {
     try {
       const result = await forgetPassword({
         email: data.email,
-        redirectTo: RESET_REDIRECT_PATH,
+        // Préfixé de la langue : la page de réinitialisation et l'e-mail
+        // suivent la langue de cette page.
+        redirectTo: localizePath(RESET_REDIRECT_PATH, locale),
       });
 
       if (result.error) {
         const code = (result.error.code ?? "").toUpperCase();
         if (code.includes("RATE") || code.includes("LIMIT")) {
-          toast.error("Trop de demandes. Veuillez réessayer dans quelques minutes.");
+          toast.error(t("errorRate"));
           return;
         }
-        toast.error("Impossible d'envoyer l'email. Veuillez réessayer.");
+        toast.error(t("errorSend"));
         return;
       }
 
@@ -62,20 +71,16 @@ function ForgotPasswordForm() {
       // so the confirmation screen must stay generic too.
       setSubmittedEmail(data.email);
     } catch {
-      toast.error("Erreur réseau. Vérifiez votre connexion internet.");
+      toast.error(tl("errorNetwork"));
     }
-  }, []);
+  }, [locale, t, tl]);
 
   return (
     <>
       <header className="pg-head">
-        <p className="eyebrow">Mon compte</p>
-        <h1 className="display">Mot de passe oublié</h1>
-        <p className="pg-lede">
-          {submittedEmail
-            ? "Vérifiez votre boîte mail."
-            : "Indiquez votre adresse email : nous vous enverrons un lien pour choisir un nouveau mot de passe."}
-        </p>
+        <p className="eyebrow">{t("eyebrow")}</p>
+        <h1 className="display">{t("title")}</h1>
+        <p className="pg-lede">{submittedEmail ? t("checkInbox") : t("lede")}</p>
       </header>
 
       <div className="form-card">
@@ -83,12 +88,10 @@ function ForgotPasswordForm() {
           <>
             <div className="notice is-info" role="status" aria-live="polite">
               <p style={{ margin: 0 }}>
-                Si un compte existe pour <b>{submittedEmail}</b>, un lien de
-                réinitialisation vient d&apos;être envoyé.
+                {t.rich("sent", { email: submittedEmail, b: (c) => <b>{c}</b> })}
               </p>
               <p style={{ margin: "8px 0 0", fontSize: 15, color: "var(--fg-2)" }}>
-                Le lien expire dans 1 heure. Pensez à regarder dans vos
-                courriers indésirables.
+                {t("expiry")}
               </p>
             </div>
 
@@ -104,10 +107,10 @@ function ForgotPasswordForm() {
                 {isSubmitting ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                    Envoi…
+                    {t("sending")}
                   </>
                 ) : (
-                  "Renvoyer l'email"
+                  t("resend")
                 )}
               </button>
             </div>
@@ -121,12 +124,12 @@ function ForgotPasswordForm() {
           >
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <label htmlFor="email" className="field-label">
-                Adresse email
+                {t("emailLabel")}
               </label>
               <input
                 id="email"
                 type="email"
-                placeholder="vous@exemple.com"
+                placeholder={tl("emailPlaceholder")}
                 autoComplete="email"
                 autoFocus
                 aria-invalid={!!errors.email}
@@ -138,7 +141,7 @@ function ForgotPasswordForm() {
               />
               {errors.email && (
                 <p id="email-error" className="field-error" style={{ margin: 0 }}>
-                  {errors.email.message}
+                  {translateValidation(errors.email.message, tv)}
                 </p>
               )}
             </div>
@@ -148,10 +151,10 @@ function ForgotPasswordForm() {
                 {isSubmitting ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                    Envoi en cours…
+                    {t("sending")}
                   </>
                 ) : (
-                  "Envoyer le lien"
+                  t("submit")
                 )}
               </button>
             </div>
@@ -159,7 +162,7 @@ function ForgotPasswordForm() {
         )}
 
         <p className="form-foot" style={{ margin: 0 }}>
-          <Link href="/login">Retour à la connexion</Link>
+          <Link href="/login">{t("back")}</Link>
         </p>
       </div>
     </>

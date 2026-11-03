@@ -7,6 +7,9 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Eye, EyeOff, Check, X, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { useLocale, useTranslations } from "next-intl";
+import { localizePath, type Locale } from "~/i18n/locales";
+import { translateValidation } from "~/i18n/validation";
 
 import { signUp } from "~/lib/auth-client";
 import { PASSWORD_CRITERIA } from "~/lib/validations/auth";
@@ -22,11 +25,12 @@ import { useOrganization } from "~/lib/portal/context";
  * - default: Creates user account + producer profile
  */
 export default function PortalRegisterPage() {
+  const t = useTranslations("auth.register");
   return (
     <Suspense
       fallback={
         <div className="pg pg--form auth-page" role="status" style={{ alignItems: "center", paddingTop: 96 }}>
-          <Loader2 className="h-8 w-8 animate-spin" style={{ color: "var(--accent)" }} aria-label="Chargement" />
+          <Loader2 className="h-8 w-8 animate-spin" style={{ color: "var(--accent)" }} aria-label={t("loading")} />
         </div>
       }
     >
@@ -36,6 +40,10 @@ export default function PortalRegisterPage() {
 }
 
 function RegisterInner() {
+  const t = useTranslations("auth.register");
+  const tv = useTranslations("validation");
+  const tl = useTranslations("auth.login");
+  const locale = useLocale() as Locale;
   const router = useRouter();
   const searchParams = useSearchParams();
   const organization = useOrganization();
@@ -93,6 +101,9 @@ function RegisterInner() {
           // Vides : non transmis (la colonne reste nulle).
           pendingCompanyName: data.companyName?.trim() || undefined,
           pendingBrandName: data.brandName?.trim() || undefined,
+          // Retour après confirmation de l'e-mail, dans la langue de la page :
+          // c'est aussi ce qui fixe la langue de l'e-mail et du compte.
+          callbackURL: localizePath("/", locale),
         });
 
         if (result.error) {
@@ -106,26 +117,26 @@ function RegisterInner() {
             errorMessage.includes("exists") ||
             errorMessage.includes("existe")
           ) {
-            toast.error("Cet email est déjà utilisé. Connectez-vous à la place.");
+            toast.error(t("errorExists"));
           } else {
-            toast.error("Une erreur est survenue. Veuillez réessayer.");
+            toast.error(t("errorGeneric"));
           }
           setIsSubmittingForm(false);
           return;
         }
 
-        toast.success("Inscription réussie ! Vérifiez votre email.");
+        toast.success(t("success"));
         const cb = searchParams.get("callbackUrl");
         const loginUrl = cb
           ? `/login?registered=true&callbackUrl=${encodeURIComponent(cb)}`
           : "/login?registered=true";
         router.push(loginUrl);
       } catch {
-        toast.error("Erreur de connexion. Vérifiez votre connexion internet.");
+        toast.error(tl("errorNetwork"));
         setIsSubmittingForm(false);
       }
     },
-    [router, searchParams]
+    [router, searchParams, locale, t, tl]
   );
 
   const checkCriteria = useCallback(
@@ -136,10 +147,8 @@ function RegisterInner() {
   return (
     <div className="pg pg--form auth-page">
       <header className="pg-head">
-        <h1 className="display">Créer un compte</h1>
-        <p className="pg-lede">
-          Rejoignez {organization.name} et participez aux compétitions.
-        </p>
+        <h1 className="display">{t("title")}</h1>
+        <p className="pg-lede">{t("lede", { name: organization.name })}</p>
       </header>
 
       <div className="form-card">
@@ -151,13 +160,13 @@ function RegisterInner() {
         >
           <div className="field">
             <label htmlFor="email" className="field-label">
-              Email
+              {tl("email")}
             </label>
             <input
               id="email"
               type="email"
               className="field-input"
-              placeholder="vous@exemple.com"
+              placeholder={tl("emailPlaceholder")}
               autoComplete="email"
               aria-invalid={!!errors.email}
               aria-required="true"
@@ -167,20 +176,20 @@ function RegisterInner() {
             />
             {errors.email && (
               <p id="email-error" className="field-error" style={{ margin: 0 }}>
-                {errors.email.message}
+                {translateValidation(errors.email.message, tv)}
               </p>
             )}
           </div>
 
           <div className="field">
             <label htmlFor="name" className="field-label">
-              Votre nom
+              {t("name")}
             </label>
             <input
               id="name"
               type="text"
               className="field-input"
-              placeholder="Jean Dupont"
+              placeholder={t("namePlaceholder")}
               autoComplete="name"
               aria-invalid={!!errors.name}
               aria-required="true"
@@ -190,7 +199,7 @@ function RegisterInner() {
             />
             {errors.name && (
               <p id="name-error" className="field-error" style={{ margin: 0 }}>
-                {errors.name.message}
+                {translateValidation(errors.name.message, tv)}
               </p>
             )}
           </div>
@@ -201,13 +210,13 @@ function RegisterInner() {
           <div className="form-row">
             <div className="field">
               <label htmlFor="companyName" className="field-label">
-                Entreprise <span style={{ color: "var(--fg-3)", fontWeight: 400 }}>(facultatif)</span>
+                {t("company")} <span style={{ color: "var(--fg-3)", fontWeight: 400 }}>{t("optional")}</span>
               </label>
               <input
                 id="companyName"
                 type="text"
                 className="field-input"
-                placeholder="Ferme du Val"
+                placeholder={t("companyPlaceholder")}
                 autoComplete="organization"
                 maxLength={100}
                 aria-invalid={!!errors.companyName}
@@ -217,13 +226,13 @@ function RegisterInner() {
               />
               {errors.companyName && (
                 <p id="companyName-error" className="field-error" style={{ margin: 0 }}>
-                  {errors.companyName.message}
+                  {translateValidation(errors.companyName.message, tv)}
                 </p>
               )}
             </div>
             <div className="field">
               <label htmlFor="brandName" className="field-label">
-                Marque <span style={{ color: "var(--fg-3)", fontWeight: 400 }}>(facultatif)</span>
+                {t("brand")} <span style={{ color: "var(--fg-3)", fontWeight: 400 }}>{t("optional")}</span>
               </label>
               <input
                 id="brandName"
@@ -238,7 +247,7 @@ function RegisterInner() {
               />
               {errors.brandName && (
                 <p id="brandName-error" className="field-error" style={{ margin: 0 }}>
-                  {errors.brandName.message}
+                  {translateValidation(errors.brandName.message, tv)}
                 </p>
               )}
             </div>
@@ -246,7 +255,7 @@ function RegisterInner() {
 
           <div className="field">
             <label htmlFor="password" className="field-label">
-              Mot de passe
+              {tl("password")}
             </label>
             <div style={{ position: "relative" }}>
               <input
@@ -264,11 +273,7 @@ function RegisterInner() {
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                aria-label={
-                  showPassword
-                    ? "Masquer le mot de passe"
-                    : "Afficher le mot de passe"
-                }
+                aria-label={showPassword ? tl("hidePassword") : tl("showPassword")}
                 className="pw-toggle"
               >
                 {showPassword ? (
@@ -280,7 +285,7 @@ function RegisterInner() {
             </div>
             {errors.password && (
               <p id="password-error" className="field-error" style={{ margin: 0 }}>
-                {errors.password.message}
+                {translateValidation(errors.password.message, tv)}
               </p>
             )}
 
@@ -295,7 +300,7 @@ function RegisterInner() {
                 const isValid = checkCriteria(criterion.regex);
                 return (
                   <div
-                    key={criterion.label}
+                    key={criterion.key}
                     style={{
                       display: "flex",
                       alignItems: "center",
@@ -309,7 +314,7 @@ function RegisterInner() {
                     ) : (
                       <X className="h-4 w-4" style={{ flexShrink: 0 }} aria-hidden="true" />
                     )}
-                    <span>{criterion.label}</span>
+                    <span>{tv(`criteria.${criterion.key}`)}</span>
                   </div>
                 );
               })}
@@ -318,7 +323,7 @@ function RegisterInner() {
 
           <div className="field">
             <label htmlFor="confirmPassword" className="field-label">
-              Confirmer le mot de passe
+              {t("confirmPassword")}
             </label>
             <div style={{ position: "relative" }}>
               <input
@@ -338,11 +343,7 @@ function RegisterInner() {
               <button
                 type="button"
                 onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                aria-label={
-                  showConfirmPassword
-                    ? "Masquer la confirmation"
-                    : "Afficher la confirmation"
-                }
+                aria-label={showConfirmPassword ? t("hideConfirm") : t("showConfirm")}
                 className="pw-toggle"
               >
                 {showConfirmPassword ? (
@@ -354,7 +355,7 @@ function RegisterInner() {
             </div>
             {errors.confirmPassword && (
               <p id="confirm-password-error" className="field-error" style={{ margin: 0 }}>
-                {errors.confirmPassword.message}
+                {translateValidation(errors.confirmPassword.message, tv)}
               </p>
             )}
           </div>
@@ -369,17 +370,17 @@ function RegisterInner() {
               {isSubmittingForm ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                  Inscription en cours…
+                  {t("submitting")}
                 </>
               ) : (
-                "Créer mon compte"
+                t("submit")
               )}
             </button>
           </div>
         </form>
 
         <p className="form-foot">
-          Déjà un compte ? <Link href="/login">Se connecter</Link>
+          {t("haveAccount")} <Link href="/login">{tl("submit")}</Link>
         </p>
       </div>
     </div>

@@ -29,7 +29,7 @@ export function articleCategoryKey(category: string): string | null {
     .trim()
     .toUpperCase()
     .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "");
+    .replace(/[\u0300-\u036f]/g, "");
   return KNOWN[normalized] ?? null;
 }
 

@@ -7,6 +7,8 @@
  */
 
 import { ORGANIZATION_NAME } from "~/lib/organization";
+import type { Locale } from "~/i18n/locales";
+import { translatorFor } from "~/i18n/translator";
 
 import { escapeHtml, safeUrl } from "./escape";
 
@@ -25,6 +27,11 @@ export interface EmailLayoutParams {
    * pour les emails qui doivent porter un lien de préférences.
    */
   footerHtml?: string;
+  /**
+   * Langue du destinataire (pied de page et attribut `lang`). Par défaut le
+   * français : les e-mails adressés à l'organisation ne changent pas.
+   */
+  locale?: Locale;
 }
 
 /**
@@ -33,10 +40,17 @@ export interface EmailLayoutParams {
 export function renderEmailLayout(params: EmailLayoutParams): string {
   const { body } = params;
   const title = escapeHtml(params.title);
-  const footerHtml = params.footerHtml ?? escapeHtml(DEFAULT_FOOTER);
+  const locale = params.locale ?? "fr";
+  const footerHtml =
+    params.footerHtml ??
+    escapeHtml(
+      locale === "fr"
+        ? DEFAULT_FOOTER
+        : `${ORGANIZATION_NAME} - ${translatorFor(locale, "emails")("footerTagline")}`
+    );
 
   return `
-    <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px; background-color: #ffffff;">
+    <div lang="${locale}" style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px; background-color: #ffffff;">
       <div style="text-align: center; margin-bottom: 32px;">
         <h1 style="color: ${BRAND_GOLD}; font-size: 32px; margin: 0;">
           ${escapeHtml(ORGANIZATION_NAME)}
@@ -83,11 +97,13 @@ export function renderButton(url: string, label: string): string {
 }
 
 /** Lien brut proposé en repli sous le bouton, pour les clients qui bloquent. */
-export function renderFallbackLink(url: string): string {
+export function renderFallbackLink(url: string, locale: Locale = "fr"): string {
   const href = safeUrl(url);
+  const label =
+    locale === "fr" ? "Ou copiez ce lien :" : escapeHtml(translatorFor(locale, "emails")("copyLink"));
   return `
       <p style="color: #9ca3af; font-size: 12px; text-align: center; margin-bottom: 24px;">
-        Ou copiez ce lien : <a href="${href}" style="color: ${BRAND_GOLD};">${href}</a>
+        ${label} <a href="${href}" style="color: ${BRAND_GOLD};">${href}</a>
       </p>`;
 }
 

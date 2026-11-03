@@ -1,0 +1,86 @@
+{
+  "fr": {
+    "exists": "Cet e-mail est déjà utilisé. Connectez-vous pour activer votre code.",
+    "success": "Inscription réussie ! Vérifiez votre e-mail pour activer votre compte.",
+    "missingTitle": "Code manquant",
+    "missingText": "Un code d'invitation est nécessaire pour s'inscrire en tant que juré.",
+    "invalidText": "Ce code d'invitation n'est pas valide ou a expiré.",
+    "eyebrow": "Jury",
+    "title": "Inscription du jury",
+    "lede": "Créez votre compte pour rejoindre <b>{name}</b>.",
+    "validCode": "Code valide :",
+    "categoriesList": "Catégories : {list}"
+  },
+  "en": {
+    "exists": "This email is already in use. Sign in to activate your code.",
+    "success": "Registration successful! Check your email to activate your account.",
+    "missingTitle": "Missing code",
+    "missingText": "An invitation code is required to register as a juror.",
+    "invalidText": "This invitation code is not valid or has expired.",
+    "eyebrow": "Jury",
+    "title": "Jury registration",
+    "lede": "Create your account to join <b>{name}</b>.",
+    "validCode": "Valid code:",
+    "categoriesList": "Categories: {list}"
+  },
+  "it": {
+    "exists": "Questa e-mail è già in uso. Accedi per attivare il tuo codice.",
+    "success": "Registrazione completata! Controlla la tua e-mail per attivare l'account.",
+    "missingTitle": "Codice mancante",
+    "missingText": "Per registrarti come giurato serve un codice di invito.",
+    "invalidText": "Questo codice di invito non è valido o è scaduto.",
+    "eyebrow": "Giuria",
+    "title": "Registrazione giuria",
+    "lede": "Crea il tuo account per entrare in <b>{name}</b>.",
+    "validCode": "Codice valido:",
+    "categoriesList": "Categorie: {list}"
+  },
+  "de": {
+    "exists": "Diese E-Mail-Adresse wird bereits verwendet. Melden Sie sich an, um Ihren Code zu aktivieren.",
+    "success": "Registrierung erfolgreich! Prüfen Sie Ihre E-Mails, um Ihr Konto zu aktivieren.",
+    "missingTitle": "Code fehlt",
+    "missingText": "Für die Registrierung als Jurymitglied ist ein Einladungscode erforderlich.",
+    "invalidText": "Dieser Einladungscode ist ungültig oder abgelaufen.",
+    "eyebrow": "Jury",
+    "title": "Jury-Registrierung",
+    "lede": "Erstellen Sie Ihr Konto, um <b>{name}</b> beizutreten.",
+    "validCode": "Gültiger Code:",
+    "categoriesList": "Kategorien: {list}"
+  },
+  "cs": {
+    "exists": "Tento e-mail se již používá. Přihlaste se a aktivujte svůj kód.",
+    "success": "Registrace proběhla úspěšně! Zkontrolujte e-mail a aktivujte účet.",
+    "missingTitle": "Chybí kód",
+    "missingText": "K registraci porotce je potřeba kód pozvánky.",
+    "invalidText": "Tento kód pozvánky není platný nebo jeho platnost vypršela.",
+    "eyebrow": "Porota",
+    "title": "Registrace porotce",
+    "lede": "Vytvořte si účet a připojte se k <b>{name}</b>.",
+    "validCode": "Platný kód:",
+    "categoriesList": "Kategorie: {list}"
+  },
+  "nl": {
+    "exists": "Dit e-mailadres is al in gebruik. Log in om je code te activeren.",
+    "success": "Registratie gelukt! Controleer je e-mail om je account te activeren.",
+    "missingTitle": "Code ontbreekt",
+    "missingText": "Om je als jurylid te registreren heb je een uitnodigingscode nodig.",
+    "invalidText": "Deze uitnodigingscode is niet geldig of verlopen.",
+    "eyebrow": "Jury",
+    "title": "Juryregistratie",
+    "lede": "Maak je account aan om deel te nemen aan <b>{name}</b>.",
+    "validCode": "Geldige code:",
+    "categoriesList": "Categorieën: {list}"
+  },
+  "es": {
+    "exists": "Este correo ya está en uso. Inicia sesión para activar tu código.",
+    "success": "¡Registro completado! Revisa tu correo para activar tu cuenta.",
+    "missingTitle": "Falta el código",
+    "missingText": "Se necesita un código de invitación para registrarse como miembro del jurado.",
+    "invalidText": "Este código de invitación no es válido o ha caducado.",
+    "eyebrow": "Jurado",
+    "title": "Registro del jurado",
+    "lede": "Crea tu cuenta para unirte a <b>{name}</b>.",
+    "validCode": "Código válido:",
+    "categoriesList": "Categorías: {list}"
+  }
+}

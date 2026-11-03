@@ -7,12 +7,14 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Eye, EyeOff, Check, X, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslations } from "next-intl";
+import { useServerError } from "~/i18n/server-error";
+import { translateValidation } from "~/i18n/validation";
 import { z } from "zod";
 
 import { useSession, signIn } from "~/lib/auth-client";
 import { PASSWORD_CRITERIA, passwordSchema } from "~/lib/validations/auth";
 import { api } from "~/trpc/react";
-import { getErrorMessage } from "../../_lib/errors";
 
 /**
  * Jury invite registration schema
@@ -43,6 +45,8 @@ export default function PortalJuryInvitePage() {
   const params = useParams();
   const token = params.token as string;
   const { data: session } = useSession();
+  const t = useTranslations("juryInvite");
+  const tAct = useTranslations("activate");
 
   // Validate the invitation token
   const {
@@ -66,7 +70,7 @@ export default function PortalJuryInvitePage() {
         >
           <Loader2 className="h-8 w-8 animate-spin" style={{ color: "var(--accent)" }} aria-hidden="true" />
           <p style={{ margin: 0, fontSize: 16, color: "var(--fg-2)" }}>
-            Vérification de l&apos;invitation…
+            {t("checking")}
           </p>
         </div>
       </div>
@@ -77,15 +81,13 @@ export default function PortalJuryInvitePage() {
   if (validationError || !invitation) {
     return (
       <div className="pg pg--form auth-page">
-        <InviteHead title="Invitation invalide" />
+        <InviteHead title={t("invalidTitle")} />
         <div className="form-card">
           <div className="notice is-error" role="alert">
-            Cette invitation n&apos;est plus valide. Elle a peut-être expiré ou a
-            déjà été utilisée. Contactez l&apos;organisateur pour obtenir une
-            nouvelle invitation.
+            {t("invalidText")}
           </div>
           <p className="form-foot" style={{ margin: 0 }}>
-            <Link href="/">Retour à l&apos;accueil</Link>
+            <Link href="/">{tAct("backHome")}</Link>
           </p>
         </div>
       </div>
@@ -109,9 +111,10 @@ function InviteHead({
   title: React.ReactNode;
   lede?: React.ReactNode;
 }) {
+  const t = useTranslations("juryInvite");
   return (
     <header className="pg-head">
-      <p className="eyebrow">Invitation jury</p>
+      <p className="eyebrow">{t("eyebrow")}</p>
       <h1 className="display">{title}</h1>
       {lede && <p className="pg-lede">{lede}</p>}
     </header>
@@ -147,16 +150,19 @@ function JuryAcceptInvitation({
   invitation: InvitationData;
 }) {
   const router = useRouter();
+  const t = useTranslations("juryInvite");
+  const tAct = useTranslations("activate");
+  const serverError = useServerError();
   const [isAccepting, setIsAccepting] = useState(false);
 
   const acceptMutation = api.jury.acceptInvitation.useMutation({
     onSuccess: () => {
-      toast.success("Invitation acceptée ! Bienvenue dans le jury.");
+      toast.success(t("accepted"));
       router.push("/jury/dashboard");
     },
     onError: (error) => {
       toast.error(
-        getErrorMessage(error, "Impossible d'accepter l'invitation pour le moment."),
+        serverError(error, t("acceptFailed")),
       );
       setIsAccepting(false);
     },
@@ -174,28 +180,21 @@ function JuryAcceptInvitation({
   return (
     <div className="pg pg--form auth-page">
       <InviteHead
-        title={
-          <>
-            Rejoindre le <em>jury</em>
-          </>
-        }
-        lede={
-          <>
-            Vous êtes invité à rejoindre le jury de{" "}
-            <strong style={{ color: "var(--fg)" }}>{invitation.cup.name}</strong>.
-          </>
-        }
+        title={tAct.rich("joinTitle", { em: (c) => <em>{c}</em> })}
+        lede={t.rich("acceptLede", {
+          cup: invitation.cup.name,
+          b: (c) => <strong style={{ color: "var(--fg)" }}>{c}</strong>,
+        })}
       />
       <div className="form-card">
         <div className="notice is-info">
-          Invitation adressée à{" "}
-          {invitee ? (
-            <>
-              <b>{invitee}</b> ({invitation.email})
-            </>
-          ) : (
-            <b>{invitation.email}</b>
-          )}
+          {invitee
+            ? t.rich("addressedToNamed", {
+                name: invitee,
+                email: invitation.email,
+                b: (c) => <b>{c}</b>,
+              })
+            : t.rich("addressedTo", { email: invitation.email, b: (c) => <b>{c}</b> })}
         </div>
 
         <div className="form-actions">
@@ -208,16 +207,16 @@ function JuryAcceptInvitation({
             {isAccepting ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                Acceptation…
+                {t("accepting")}
               </>
             ) : (
-              "Accepter l'invitation"
+              t("accept")
             )}
           </button>
         </div>
 
         <p className="form-foot" style={{ margin: 0 }}>
-          <Link href="/">Retour à l&apos;accueil</Link>
+          <Link href="/">{tAct("backHome")}</Link>
         </p>
       </div>
     </div>
@@ -235,6 +234,12 @@ function JuryRegisterForm({
   invitation: InvitationData;
 }) {
   const router = useRouter();
+  const t = useTranslations("juryInvite");
+  const tAct = useTranslations("activate");
+  const tl = useTranslations("auth.login");
+  const tr = useTranslations("auth.register");
+  const tv = useTranslations("validation");
+  const serverError = useServerError();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [passwordValue, setPasswordValue] = useState("");
@@ -268,11 +273,11 @@ function JuryRegisterForm({
         password: variables.password,
       });
       if (result.error) {
-        toast.info("Compte créé ! Connectez-vous pour accéder au jury.");
+        toast.info(tl("toastRegisteredJury"));
         router.push(`/login?callbackUrl=/jury/dashboard`);
         return;
       }
-      toast.success("Bienvenue dans le jury !");
+      toast.success(t("welcome"));
       router.push("/jury/dashboard");
     },
     onError: (error) => {
@@ -284,13 +289,13 @@ function JuryRegisterForm({
         errorMessage.includes("already") ||
         errorMessage.includes("exists")
       ) {
-        toast.info("Ce compte existe déjà. Connectez-vous pour accepter l'invitation.");
+        toast.info(t("exists"));
         router.push(`/login?callbackUrl=/jury-invite/${token}`);
         return;
       }
 
       toast.error(
-        getErrorMessage(error, "Une erreur est survenue. Veuillez réessayer."),
+        serverError(error, tr("errorGeneric")),
       );
     },
   });
@@ -336,17 +341,11 @@ function JuryRegisterForm({
   return (
     <div className="pg pg--form auth-page">
       <InviteHead
-        title={
-          <>
-            Rejoindre le <em>jury</em>
-          </>
-        }
-        lede={
-          <>
-            Créez votre compte pour rejoindre le jury de{" "}
-            <strong style={{ color: "var(--fg)" }}>{invitation.cup.name}</strong>.
-          </>
-        }
+        title={tAct.rich("joinTitle", { em: (c) => <em>{c}</em> })}
+        lede={t.rich("registerLede", {
+          cup: invitation.cup.name,
+          b: (c) => <strong style={{ color: "var(--fg)" }}>{c}</strong>,
+        })}
       />
 
       <div className="form-card">
@@ -354,7 +353,7 @@ function JuryRegisterForm({
           {/* Email, prérempli depuis l'invitation */}
           <div className="field">
             <label htmlFor="email" className="field-label">
-              Adresse email
+              {t("email")}
             </label>
             <input
               id="email"
@@ -369,7 +368,7 @@ function JuryRegisterForm({
             />
             {errors.email && (
               <p id="email-error" className="field-error" style={{ margin: 0 }}>
-                {errors.email.message}
+                {translateValidation(errors.email.message, tv)}
               </p>
             )}
           </div>
@@ -377,12 +376,12 @@ function JuryRegisterForm({
           {/* Nom */}
           <div className="field">
             <label htmlFor="name" className="field-label">
-              Nom et prénom
+              {t("fullName")}
             </label>
             <input
               id="name"
               type="text"
-              placeholder="Jean Dupont"
+              placeholder={tr("namePlaceholder")}
               autoComplete="name"
               aria-invalid={!!errors.name}
               aria-describedby={errors.name ? "name-error" : undefined}
@@ -392,7 +391,7 @@ function JuryRegisterForm({
             />
             {errors.name && (
               <p id="name-error" className="field-error" style={{ margin: 0 }}>
-                {errors.name.message}
+                {translateValidation(errors.name.message, tv)}
               </p>
             )}
           </div>
@@ -400,13 +399,13 @@ function JuryRegisterForm({
           {/* Expertise */}
           <div className="field">
             <label htmlFor="expertise" className="field-label">
-              Expertise{" "}
-              <span style={{ fontWeight: 400, color: "var(--fg-3)" }}>(facultatif)</span>
+              {t("expertise")}{" "}
+              <span style={{ fontWeight: 400, color: "var(--fg-3)" }}>{tr("optional")}</span>
             </label>
             <input
               id="expertise"
               type="text"
-              placeholder="Ex. : producteur, gérant de boutique, journaliste"
+              placeholder={t("expertisePlaceholder")}
               aria-invalid={!!errors.expertise}
               aria-describedby={errors.expertise ? "expertise-error" : undefined}
               className="field-input"
@@ -415,7 +414,7 @@ function JuryRegisterForm({
             />
             {errors.expertise && (
               <p id="expertise-error" className="field-error" style={{ margin: 0 }}>
-                {errors.expertise.message}
+                {translateValidation(errors.expertise.message, tv)}
               </p>
             )}
           </div>
@@ -423,13 +422,13 @@ function JuryRegisterForm({
           {/* Mot de passe */}
           <div className="field">
             <label htmlFor="password" className="field-label">
-              Mot de passe
+              {tl("password")}
             </label>
             <div style={{ position: "relative" }}>
               <input
                 id="password"
                 type={showPassword ? "text" : "password"}
-                placeholder="Votre mot de passe"
+                placeholder={t("passwordPlaceholder")}
                 autoComplete="new-password"
                 aria-invalid={!!errors.password}
                 aria-describedby="password-criteria password-error"
@@ -443,8 +442,8 @@ function JuryRegisterForm({
                 className="pw-toggle"
                 aria-label={
                   showPassword
-                    ? "Masquer le mot de passe"
-                    : "Afficher le mot de passe"
+                    ? tl("hidePassword")
+                    : tl("showPassword")
                 }
               >
                 {showPassword ? (
@@ -456,7 +455,7 @@ function JuryRegisterForm({
             </div>
             {errors.password && (
               <p id="password-error" className="field-error" style={{ margin: 0 }}>
-                {errors.password.message}
+                {translateValidation(errors.password.message, tv)}
               </p>
             )}
 
@@ -476,7 +475,7 @@ function JuryRegisterForm({
                 const isValid = checkCriteria(criterion.regex);
                 return (
                   <li
-                    key={criterion.label}
+                    key={criterion.key}
                     style={{
                       display: "flex",
                       alignItems: "center",
@@ -490,7 +489,7 @@ function JuryRegisterForm({
                     ) : (
                       <X className="h-4 w-4" aria-hidden="true" />
                     )}
-                    <span>{criterion.label}</span>
+                    <span>{tv(`criteria.${criterion.key}`)}</span>
                   </li>
                 );
               })}
@@ -500,13 +499,13 @@ function JuryRegisterForm({
           {/* Confirmation */}
           <div className="field">
             <label htmlFor="confirmPassword" className="field-label">
-              Confirmer le mot de passe
+              {tr("confirmPassword")}
             </label>
             <div style={{ position: "relative" }}>
               <input
                 id="confirmPassword"
                 type={showConfirmPassword ? "text" : "password"}
-                placeholder="Confirmez votre mot de passe"
+                placeholder={tv("confirmRequired")}
                 autoComplete="new-password"
                 aria-invalid={!!errors.confirmPassword}
                 aria-describedby={
@@ -522,8 +521,8 @@ function JuryRegisterForm({
                 className="pw-toggle"
                 aria-label={
                   showConfirmPassword
-                    ? "Masquer la confirmation"
-                    : "Afficher la confirmation"
+                    ? tr("hideConfirm")
+                    : tr("showConfirm")
                 }
               >
                 {showConfirmPassword ? (
@@ -539,7 +538,7 @@ function JuryRegisterForm({
                 className="field-error"
                 style={{ margin: 0 }}
               >
-                {errors.confirmPassword.message}
+                {translateValidation(errors.confirmPassword.message, tv)}
               </p>
             )}
           </div>
@@ -553,18 +552,18 @@ function JuryRegisterForm({
               {registerMutation.isPending ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                  Inscription…
+                  {tr("submitting")}
                 </>
               ) : (
-                "Créer mon compte jury"
+                t("submit")
               )}
             </button>
           </div>
         </form>
 
         <p className="form-foot" style={{ margin: 0 }}>
-          Déjà un compte ?{" "}
-          <Link href={`/login?callbackUrl=/jury-invite/${token}`}>Se connecter</Link>
+          {tr("haveAccount")}{" "}
+          <Link href={`/login?callbackUrl=/jury-invite/${token}`}>{tl("submit")}</Link>
         </p>
       </div>
     </div>

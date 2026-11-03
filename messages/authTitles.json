@@ -1,0 +1,58 @@
+{
+  "fr": {
+    "activate": "Activation du compte",
+    "forgot": "Mot de passe oublié",
+    "juryInvite": "Invitation jury",
+    "login": "Connexion",
+    "register": "Inscription",
+    "reset": "Nouveau mot de passe"
+  },
+  "en": {
+    "activate": "Account activation",
+    "forgot": "Forgot password",
+    "juryInvite": "Jury invitation",
+    "login": "Sign in",
+    "register": "Sign up",
+    "reset": "New password"
+  },
+  "it": {
+    "activate": "Attivazione dell'account",
+    "forgot": "Password dimenticata",
+    "juryInvite": "Invito giuria",
+    "login": "Accesso",
+    "register": "Registrazione",
+    "reset": "Nuova password"
+  },
+  "de": {
+    "activate": "Kontoaktivierung",
+    "forgot": "Passwort vergessen",
+    "juryInvite": "Jury-Einladung",
+    "login": "Anmelden",
+    "register": "Registrierung",
+    "reset": "Neues Passwort"
+  },
+  "cs": {
+    "activate": "Aktivace účtu",
+    "forgot": "Zapomenuté heslo",
+    "juryInvite": "Pozvánka do poroty",
+    "login": "Přihlášení",
+    "register": "Registrace",
+    "reset": "Nové heslo"
+  },
+  "nl": {
+    "activate": "Accountactivering",
+    "forgot": "Wachtwoord vergeten",
+    "juryInvite": "Jury-uitnodiging",
+    "login": "Inloggen",
+    "register": "Registreren",
+    "reset": "Nieuw wachtwoord"
+  },
+  "es": {
+    "activate": "Activación de la cuenta",
+    "forgot": "Contraseña olvidada",
+    "juryInvite": "Invitación al jurado",
+    "login": "Iniciar sesión",
+    "register": "Registro",
+    "reset": "Nueva contraseña"
+  }
+}

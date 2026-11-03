@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { getTranslations } from "next-intl/server";
 import type { ReactNode } from "react";
 
 /**
@@ -7,10 +8,10 @@ import type { ReactNode } from "react";
  * compte n'a rien à faire dans un index, et son référencement dilue celui
  * des pages éditoriales (robots.ts la bloque aussi, ceinture et bretelles).
  */
-export const metadata: Metadata = {
-  title: "Mot de passe oublié",
-  robots: { index: false, follow: false },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("authTitles");
+  return { title: t("forgot"), robots: { index: false, follow: false } };
+}
 
 export default function AuthSegmentLayout({ children }: { children: ReactNode }) {
   return children;

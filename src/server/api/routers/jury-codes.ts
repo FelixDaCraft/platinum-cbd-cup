@@ -5,6 +5,7 @@
  */
 
 import { z } from "zod";
+import { localizedField } from "~/i18n/locales";
 import { randomInt } from "crypto";
 import { TRPCError } from "@trpc/server";
 import { eq, and, desc, inArray } from "drizzle-orm";
@@ -280,7 +281,7 @@ export const juryCodesRouter = createTRPCRouter({
         },
         categories: code.categories.map((cc) => ({
           id: cc.category.id,
-          name: cc.category.name,
+          name: localizedField(cc.category, "name", ctx.locale),
         })),
         expiresAt: code.expiresAt,
         samplesIncluded: code.samplesIncluded,

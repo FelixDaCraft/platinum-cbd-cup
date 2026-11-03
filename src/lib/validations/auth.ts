@@ -61,9 +61,10 @@ export const resetPasswordSchema = z
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
 
 // Password criteria for UI display
+/** `key` : libellé traduit dans `validation.criteria.<key>`. */
 export const PASSWORD_CRITERIA = [
-  { label: "12 caractères minimum", regex: /.{12,}/ },
-  { label: "Une majuscule", regex: /[A-Z]/ },
-  { label: "Un chiffre", regex: /[0-9]/ },
-  { label: "Un caractère spécial", regex: /[^A-Za-z0-9]/ },
+  { key: "length", label: "12 caractères minimum", regex: /.{12,}/ },
+  { key: "upper", label: "Une majuscule", regex: /[A-Z]/ },
+  { key: "digit", label: "Un chiffre", regex: /[0-9]/ },
+  { key: "special", label: "Un caractère spécial", regex: /[^A-Za-z0-9]/ },
 ] as const;

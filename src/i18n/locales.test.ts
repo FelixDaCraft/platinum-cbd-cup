@@ -14,6 +14,7 @@ import {
   locales,
   negotiateLocale,
   ogLocale,
+  requestLocale,
   pickLocale,
   stripLocale,
 } from "./locales";
@@ -123,6 +124,8 @@ describe("routes non traduites", () => {
   it("hrefFor préfixe seulement les routes traduites", () => {
     expect(hrefFor("/dashboard", "en")).toBe("/dashboard");
     expect(hrefFor("/producer", "en")).toBe("/en/producer");
+    expect(hrefFor("/de/producer?x=1", "en")).toBe("/en/producer?x=1");
+    expect(hrefFor("/en/jury", "fr")).toBe("/jury");
   });
 });
 
@@ -211,5 +214,14 @@ describe("localizedContent (règlement, articles)", () => {
     const fr = localizedContent(doc, "fr");
     expect(fr.title).toBe("Règlement");
     expect(fr.translated).toBe(true);
+  });
+});
+
+describe("requestLocale", () => {
+  it("préfère x-locale, puis l'en-tête du middleware, puis le cookie", () => {
+    expect(requestLocale(new Headers({ "x-locale": "cs", cookie: "NEXT_LOCALE=de" }))).toBe("cs");
+    expect(requestLocale(new Headers({ "x-next-intl-locale": "it" }))).toBe("it");
+    expect(requestLocale(new Headers({ cookie: "a=b; NEXT_LOCALE=nl" }))).toBe("nl");
+    expect(requestLocale(new Headers({ "x-locale": "zz" }))).toBe("fr");
   });
 });
