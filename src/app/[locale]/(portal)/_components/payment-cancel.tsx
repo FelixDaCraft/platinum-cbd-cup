@@ -5,7 +5,8 @@ import { useSearchParams } from "next/navigation";
 import { Link } from "~/i18n/navigation";
 
 import { api } from "~/trpc/react";
-import { getErrorMessage } from "../_lib/errors";
+import { useTranslations } from "next-intl";
+import { useServerError } from "~/i18n/server-error";
 
 /**
  * Landing page for the Viva.com failure / cancel redirect.
@@ -21,15 +22,17 @@ import { getErrorMessage } from "../_lib/errors";
  * second produit.
  */
 export function PaymentCancel({ cupId }: { cupId?: string }) {
-
+  const t = useTranslations("payment");
   return (
-    <Suspense fallback={<StatusBlock title="Paiement non abouti" />}>
+    <Suspense fallback={<StatusBlock title={t("cancelTitle")} />}>
       <CancelInner cupId={cupId} />
     </Suspense>
   );
 }
 
 function CancelInner({ cupId }: { cupId?: string }) {
+  const t = useTranslations("payment");
+  const serverError = useServerError();
   const [retryError, setRetryError] = useState<string | null>(null);
 
   const { data: registrations, isLoading } =
@@ -80,17 +83,13 @@ function CancelInner({ cupId }: { cupId?: string }) {
       });
 
       if (!session.checkoutUrl) {
-        setRetryError(
-          "Le paiement n'est pas disponible pour le moment. Réessayez dans quelques minutes."
-        );
+        setRetryError(t("unavailable"));
         return;
       }
 
       window.location.href = session.checkoutUrl;
     } catch (error) {
-      setRetryError(
-        getErrorMessage(error, "Impossible de relancer le paiement.")
-      );
+      setRetryError(serverError(error, t("retryFailed")));
     }
   };
 
@@ -98,8 +97,8 @@ function CancelInner({ cupId }: { cupId?: string }) {
 
   return (
     <StatusBlock
-      title="Paiement non abouti"
-      message="Votre paiement a été annulé ou refusé : votre inscription est enregistrée mais pas encore validée. Aucun montant n'a été débité. Vos produits sont conservés et vous pouvez relancer le paiement."
+      title={t("cancelTitle")}
+      message={t("cancelText")}
       error={retryError}
       actions={
         <>
@@ -109,16 +108,16 @@ function CancelInner({ cupId }: { cupId?: string }) {
               onClick={() => void handleRetry()}
               disabled={isLoading || retrying || releaseReservation.isPending}
             >
-              {retrying ? "Redirection…" : "Réessayer le paiement"}
+              {retrying ? t("redirecting") : t("retry")}
               {!retrying && <span className="btn-arrow">→</span>}
             </button>
           )}
           <Link href="/producer/registrations" className="btn ghost">
-            Voir mes inscriptions
+            {t("myRegistrations")}
           </Link>
           {returnCupId && (
             <Link href={`/cups/${returnCupId}`} className="btn ghost">
-              Retour à la cup
+              {t("backToCup")}
             </Link>
           )}
         </>
@@ -138,10 +137,11 @@ function StatusBlock({
   error?: string | null;
   actions?: React.ReactNode;
 }) {
+  const t = useTranslations("payment");
   return (
     <div className="pg pg--narrow page-enter">
       <header className="pg-head">
-        <p className="eyebrow">Paiement</p>
+        <p className="eyebrow">{t("eyebrow")}</p>
         <h1 className="display">{title}</h1>
         {message && <p className="pg-lede">{message}</p>}
       </header>

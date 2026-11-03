@@ -13,6 +13,7 @@ import cup from "./cup.json";
 import cups from "./cups.json";
 import edition from "./edition.json";
 import emails from "./emails.json";
+import errorPage from "./errorPage.json";
 import home from "./home.json";
 import juries from "./juries.json";
 import juryInvite from "./juryInvite.json";
@@ -21,10 +22,13 @@ import legalNotice from "./legalNotice.json";
 import legalPage from "./legalPage.json";
 import meta from "./meta.json";
 import nav from "./nav.json";
+import notFound from "./notFound.json";
 import palmares from "./palmares.json";
 import panels from "./panels.json";
+import payment from "./payment.json";
 import press from "./press.json";
 import privacy from "./privacy.json";
+import register from "./register.json";
 import rules from "./rules.json";
 import serverErrors from "./serverErrors.json";
 import shell from "./shell.json";
@@ -43,6 +47,7 @@ export const catalog = {
   cups,
   edition,
   emails,
+  errorPage,
   home,
   juries,
   juryInvite,
@@ -51,10 +56,13 @@ export const catalog = {
   legalPage,
   meta,
   nav,
+  notFound,
   palmares,
   panels,
+  payment,
   press,
   privacy,
+  register,
   rules,
   serverErrors,
   shell,

@@ -2,7 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
+import { useLocale, useTranslations } from "next-intl";
 import { Link, useRouter } from "~/i18n/navigation";
+import { formatPrice, intlLocale, localizePath, type Locale } from "~/i18n/locales";
+import { useServerError } from "~/i18n/server-error";
 
 import { useSession } from "~/lib/auth-client";
 import { api } from "~/trpc/react";
@@ -42,37 +45,35 @@ const EMPTY_SPECIMEN = {
 /** Taux de Δ9-THC maximal admis par la réglementation européenne, en %. */
 const MAX_THC_PERCENT = 0.3;
 
-/** Les prix sont stockés en centimes côté serveur. */
-function formatEuros(cents: number): string {
-  return (cents / 100).toLocaleString("fr-FR", {
-    style: "currency",
-    currency: "EUR",
-    minimumFractionDigits: cents % 100 === 0 ? 0 : 2,
-  });
+/** Taux affiché selon la langue : 0.3 → « 0,3 % », « 0.3% »… */
+function thcLimitLabel(locale: Locale): string {
+  return new Intl.NumberFormat(intlLocale(locale), {
+    style: "percent",
+    maximumFractionDigits: 1,
+  }).format(MAX_THC_PERCENT / 100);
 }
 
 // ---------------------------------------------------------------------------
 // Stepper sub-component
 // ---------------------------------------------------------------------------
 
+/** Libellés : `register.steps.<key>.label` et `.title`. */
 const STEPS = [
-  { n: 1, l: "Catégorie", title: "Choisissez une catégorie" },
-  { n: 2, l: "Produit", title: "Décrivez votre produit" },
-  { n: 3, l: "Panier", title: "Votre panier" },
-  { n: 4, l: "Coordonnées", title: "Vos coordonnées" },
-  { n: 5, l: "Paiement", title: "Paiement" },
-];
+  { n: 1, key: "category" },
+  { n: 2, key: "product" },
+  { n: 3, key: "cart" },
+  { n: 4, key: "details" },
+  { n: 5, key: "payment" },
+] as const;
 
 const STEP_CART = 3;
 const STEP_DETAILS = 4;
 const STEP_PAY = 5;
 
-/** Taux affiché à la française : 0.3 → « 0,3 % ». */
-const MAX_THC_LABEL = `${String(MAX_THC_PERCENT).replace(".", ",")} %`;
-
 function Stepper({ step }: { step: number }) {
+  const t = useTranslations("register");
   return (
-    <nav aria-label="Étapes de l'inscription">
+    <nav aria-label={t("stepsAria")}>
       <ol className="reg-steps">
         {STEPS.map((s) => {
           const done = step > s.n;
@@ -86,7 +87,7 @@ function Stepper({ step }: { step: number }) {
               <span aria-hidden="true" className="tabular reg-step-n">
                 {done ? "✓" : s.n}
               </span>
-              <span className="reg-step-label">{s.l}</span>
+              <span className="reg-step-label">{t(`steps.${s.key}.label`)}</span>
             </li>
           );
         })}
@@ -95,12 +96,6 @@ function Stepper({ step }: { step: number }) {
   );
 }
 
-/** Places restantes, sur le modèle de la page de l'édition. */
-function placesText(remaining: number): string {
-  if (remaining === 1) return "Plus qu'une place";
-  if (remaining <= 3) return `Plus que ${remaining} places`;
-  return `${remaining} places restantes`;
-}
 
 /** Ligne de panier : produit, catégorie, prix, action éventuelle. */
 function CartLine({
@@ -137,6 +132,16 @@ const listReset = { listStyle: "none", margin: 0, padding: 0 } as const;
 // ---------------------------------------------------------------------------
 
 export default function RegisterPage() {
+  const t = useTranslations("register");
+  const tEdition = useTranslations("edition");
+  const locale = useLocale() as Locale;
+  const serverError = useServerError();
+  const formatEuros = (cents: number) => formatPrice(cents, locale);
+  const MAX_THC_LABEL = thcLimitLabel(locale);
+  const placesText = (remaining: number) =>
+    remaining <= 3
+      ? tEdition("places.low", { count: remaining })
+      : tEdition("places.remaining", { count: remaining });
   const params = useParams();
   const router = useRouter();
   const cupId = params.cupId as string;
@@ -263,28 +268,26 @@ export default function RegisterPage() {
 
   const handleAddToCart = async () => {
     if (!selectedCategory) {
-      setSubmitError("Choisissez une catégorie à l'étape 1.");
+      setSubmitError(t("errorNoCategory"));
       return;
     }
     if (!data.name.trim() || !data.producer.trim()) {
-      setSubmitError("Le nom du produit et le producteur sont obligatoires.");
+      setSubmitError(t("errorRequired"));
       return;
     }
 
     const thc = Number(data.thc.replace(",", "."));
     if (!data.thc.trim() || Number.isNaN(thc)) {
-      setSubmitError("Renseignez le taux de Δ9-THC déclaré.");
+      setSubmitError(t("errorThcMissing"));
       return;
     }
     if (thc > MAX_THC_PERCENT) {
-      setSubmitError(
-        `Le taux de Δ9-THC déclaré (${data.thc} %) dépasse la limite de ${MAX_THC_LABEL} : ce produit ne peut pas être inscrit.`
-      );
+      setSubmitError(t("errorThcTooHigh", { value: data.thc, limit: MAX_THC_LABEL }));
       return;
     }
 
     if (!registrationId) {
-      setSubmitError("Inscription non initialisée. Rechargez la page.");
+      setSubmitError(t("errorNotInitialized"));
       return;
     }
 
@@ -317,7 +320,7 @@ export default function RegisterPage() {
       setData((d) => ({ ...d, ...EMPTY_SPECIMEN }));
       setStep(STEP_CART);
     } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : "Une erreur est survenue.");
+      setSubmitError(serverError(err));
     } finally {
       setSubmitting(false);
     }
@@ -329,7 +332,7 @@ export default function RegisterPage() {
       await removeProduct.mutateAsync({ productId });
       await refetchCart();
     } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : "Une erreur est survenue.");
+      setSubmitError(serverError(err));
     }
   };
 
@@ -339,11 +342,11 @@ export default function RegisterPage() {
 
   const handlePay = async () => {
     if (!data.accept) {
-      setSubmitError("Vous devez accepter le règlement pour continuer.");
+      setSubmitError(t("errorAccept"));
       return;
     }
     if (!registrationId || cartProducts.length === 0) {
-      setSubmitError("Votre panier est vide : ajoutez au moins un produit.");
+      setSubmitError(t("errorEmptyCart"));
       return;
     }
 
@@ -357,9 +360,7 @@ export default function RegisterPage() {
       const session = await createCheckoutSession.mutateAsync({ registrationId });
 
       if (!session.checkoutUrl) {
-        setSubmitError(
-          "Le paiement n'est pas disponible pour le moment. Votre panier est conservé : réessayez depuis « Mes inscriptions »."
-        );
+        setSubmitError(t("errorPaymentUnavailable"));
         setSubmitting(false);
         return;
       }
@@ -368,9 +369,7 @@ export default function RegisterPage() {
       // que le navigateur quitte la page.
       window.location.href = session.checkoutUrl;
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Une erreur est survenue.";
-      setSubmitError(message);
+      setSubmitError(serverError(err));
       setSubmitting(false);
     }
   };
@@ -383,7 +382,7 @@ export default function RegisterPage() {
     return (
       <div className="pg pg--narrow page-enter">
         <p role="status" className="pg-lede" style={{ paddingTop: 80 }}>
-          Chargement…
+          {t("loading")}
         </p>
       </div>
     );
@@ -398,7 +397,7 @@ export default function RegisterPage() {
     return (
       <div className="pg pg--narrow page-enter">
         <p role="status" className="pg-lede" style={{ paddingTop: 80 }}>
-          Chargement de la cup…
+          {t("loadingCup")}
         </p>
       </div>
     );
@@ -408,14 +407,12 @@ export default function RegisterPage() {
     return (
       <div className="pg pg--narrow page-enter">
         <header className="pg-head">
-          <h1 className="display">Inscriptions fermées</h1>
-          <p className="pg-lede">
-            Les inscriptions à cette cup ne sont pas ouvertes actuellement.
-          </p>
+          <h1 className="display">{t("closedTitle")}</h1>
+          <p className="pg-lede">{t("closedText")}</p>
         </header>
         <div className="form-actions">
           <Link href={`/cups/${cupId}`} className="btn ghost">
-            ← Retour à la cup
+            {t("backToCup")}
           </Link>
         </div>
       </div>
@@ -427,14 +424,12 @@ export default function RegisterPage() {
     return (
       <div className="pg pg--narrow page-enter">
         <header className="pg-head">
-          <h1 className="display">Profil producteur requis</h1>
-          <p className="pg-lede">
-            Complétez votre profil producteur pour pouvoir inscrire des produits.
-          </p>
+          <h1 className="display">{t("profileTitle")}</h1>
+          <p className="pg-lede">{t("profileText")}</p>
         </header>
         <div className="form-actions">
           <Link href="/producer/complete-profile" className="btn accent">
-            Compléter mon profil <span className="btn-arrow">→</span>
+            {t("completeProfile")} <span className="btn-arrow">→</span>
           </Link>
         </div>
       </div>
@@ -457,21 +452,15 @@ export default function RegisterPage() {
     <div className="pg page-enter reg-flow" data-step={step}>
       {/* ── EN-TÊTE ───────────────────────────────────────────────────────── */}
       <header className="pg-head">
-        <Eyebrow>Inscription · {cupData.cup.name}</Eyebrow>
-        <h1 className="display">Inscrire vos produits</h1>
-        <p className="pg-lede">
-          Choisissez une catégorie, décrivez votre produit et ajoutez-le au
-          panier. Vous pouvez inscrire plusieurs produits, dans une ou plusieurs
-          catégories, et tout régler en un seul paiement.
-        </p>
+        <Eyebrow>{t("eyebrow", { cup: cupData.cup.name })}</Eyebrow>
+        <h1 className="display">{t("title")}</h1>
+        <p className="pg-lede">{t("lede")}</p>
         {getOrCreate.data?.isSupplement && (
           <div className="notice is-info">
-            <b>Commande complémentaire.</b> Vous avez déjà{" "}
-            {getOrCreate.data.paidProductsCount} produit
-            {getOrCreate.data.paidProductsCount > 1 ? "s" : ""} réglé
-            {getOrCreate.data.paidProductsCount > 1 ? "s" : ""} pour cette cup.
-            Cette nouvelle commande fait l&apos;objet d&apos;un paiement et
-            d&apos;une facture séparés.
+            {t.rich("supplement", {
+              count: getOrCreate.data.paidProductsCount,
+              b: (c) => <b>{c}</b>,
+            })}
           </div>
         )}
       </header>
@@ -490,18 +479,16 @@ export default function RegisterPage() {
         >
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <p className="eyebrow" style={{ margin: 0 }}>
-              Étape {step} sur {STEPS.length}
+              {t("stepOf", { step, total: STEPS.length })}
             </p>
-            <h2 id="register-step-title">{currentStep.title}</h2>
+            <h2 id="register-step-title">{t(`steps.${currentStep.key}.title`)}</h2>
           </div>
 
           {/* ── ÉTAPE 1 — CATÉGORIE ───────────────────────────────────────── */}
           {step === 1 &&
             (categories.length === 0 ? (
               <div className="notice">
-                Aucune catégorie n&apos;est ouverte sur cette cup pour
-                l&apos;instant. L&apos;organisateur doit les créer avant que les
-                inscriptions soient possibles.
+                {t("noCategories")}
               </div>
             ) : (
               <ul style={{ ...listReset, display: "flex", flexDirection: "column", gap: 12 }}>
@@ -519,19 +506,17 @@ export default function RegisterPage() {
                     category.remainingPlaces !== null &&
                     category.remainingPlaces <= 3;
                   const quota = category.isFull
-                    ? "Catégorie complète"
+                    ? t("categoryFull")
                     : atProducerMax
-                      ? `Maximum atteint : ${held} sur ${category.maxProductsPerProducer} par producteur`
+                      ? t("maxReached", { held, max: category.maxProductsPerProducer ?? 0 })
                       : [
                           category.remainingPlaces !== null
                             ? placesText(category.remainingPlaces)
                             : null,
                           category.maxProductsPerProducer !== null
-                            ? `${category.maxProductsPerProducer} produit${category.maxProductsPerProducer > 1 ? "s" : ""} maximum par producteur`
+                            ? t("maxPerProducer", { count: category.maxProductsPerProducer })
                             : null,
-                          held > 0
-                            ? `Déjà ${held} dans votre inscription`
-                            : null,
+                          held > 0 ? t("alreadyHeld", { count: held }) : null,
                         ]
                           .filter(Boolean)
                           .join(" · ");
@@ -592,7 +577,7 @@ export default function RegisterPage() {
             <>
               {selectedCategory && (
                 <p style={{ margin: 0, fontSize: 16, color: "var(--fg-2)" }}>
-                  Catégorie :{" "}
+                  {t("categoryLabel")}{" "}
                   <b style={{ color: "var(--fg)" }}>{selectedCategory.name}</b>{" "}
                   ·{" "}
                   <span className="tabular">
@@ -602,27 +587,27 @@ export default function RegisterPage() {
               )}
               <div className="form-row">
                 <Field
-                  label="Nom du produit *"
+                  label={t("productName")}
                   placeholder="Platinum Haze v2"
                   value={data.name}
                   onChange={(v) => set("name", v)}
                   required
                 />
                 <Field
-                  label="Producteur *"
+                  label={t("producer")}
                   placeholder="Studio Garden"
                   value={data.producer}
                   onChange={(v) => set("producer", v)}
                   required
                 />
                 <Field
-                  label="Pays d'origine"
-                  placeholder="Portugal"
+                  label={t("origin")}
+                  placeholder={t("originPlaceholder")}
                   value={data.origin}
                   onChange={(v) => set("origin", v)}
                 />
                 <Field
-                  label="Année de récolte"
+                  label={t("vintage")}
                   placeholder="2026"
                   value={data.vintage}
                   onChange={(v) => set("vintage", v)}
@@ -631,22 +616,22 @@ export default function RegisterPage() {
               {/* Déclaratif laboratoire */}
               <fieldset className="reg-fieldset">
                 <legend style={{ padding: "0 6px", fontSize: 17, fontWeight: 600 }}>
-                  Analyse déclarée
+                  {t("declaredAnalysis")}
                 </legend>
                 <div className="form-row">
                   <Field
-                    label="Taux de Δ9-THC (%) *"
+                    label={t("thc")}
                     name="thc"
-                    placeholder="0,28"
+                    placeholder={t("thcPlaceholder")}
                     value={data.thc}
                     onChange={(v) => set("thc", v)}
-                    hint={`${MAX_THC_LABEL} maximum (réglementation européenne)`}
+                    hint={t("thcHint", { limit: MAX_THC_LABEL })}
                     required
                   />
                   <Field
-                    label="Taux de CBD total (%)"
+                    label={t("cbd")}
                     name="cbd"
-                    placeholder="12,4"
+                    placeholder={t("cbdPlaceholder")}
                     value={data.cbd}
                     onChange={(v) => set("cbd", v)}
                   />
@@ -664,9 +649,7 @@ export default function RegisterPage() {
                     onClick={() => set("hasCoa", !data.hasCoa)}
                   />
                   <span style={{ fontSize: 16, lineHeight: 1.5, color: "var(--fg-2)" }}>
-                    J&apos;ai un certificat d&apos;analyse (COA). Facultatif : vous
-                    pourrez déposer le PDF depuis « Mes inscriptions » une fois le
-                    produit ajouté ; seule l&apos;organisation le consultera.
+                    {t("coa")}
                   </span>
                 </label>
               </fieldset>
@@ -678,11 +661,10 @@ export default function RegisterPage() {
           {step === STEP_CART && (
             <>
               <p style={{ margin: 0, fontSize: 16, lineHeight: 1.6, color: "var(--fg-2)" }}>
-                Inscrivez tous vos produits, dans une ou plusieurs catégories :
-                ils seront réglés en un seul paiement, sur une seule facture.
+                {t("cartIntro")}
               </p>
               {cartProducts.length === 0 ? (
-                <div className="notice">Votre panier est vide pour l&apos;instant.</div>
+                <div className="notice">{t("cartEmptyYet")}</div>
               ) : (
                 <div>
                   <ul style={{ ...listReset, borderTop: "1px solid var(--line)" }}>
@@ -698,9 +680,9 @@ export default function RegisterPage() {
                             className="btn ghost reg-remove"
                             disabled={removeProduct.isPending}
                             onClick={() => void handleRemove(product.id)}
-                            aria-label={`Retirer ${product.name}`}
+                            aria-label={t("removeAria", { name: product.name })}
                           >
-                            Retirer
+                            {t("remove")}
                           </button>
                         }
                       />
@@ -719,8 +701,7 @@ export default function RegisterPage() {
                     }}
                   >
                     <span>
-                      Total · {cartProducts.length} produit
-                      {cartProducts.length > 1 ? "s" : ""}
+                      {t("totalCount", { count: cartProducts.length })}
                     </span>
                     <span className="tabular" style={{ fontSize: 20, fontWeight: 700 }}>
                       {formatEuros(totalInCents)}
@@ -737,7 +718,7 @@ export default function RegisterPage() {
                     setStep(1);
                   }}
                 >
-                  + Ajouter un autre produit
+                  {t("addAnother")}
                 </button>
               </div>
               {errorNotice}
@@ -754,13 +735,13 @@ export default function RegisterPage() {
               */}
               <div>
                 <div className="kv">
-                  <span className="kv-k">Email du compte</span>
+                  <span className="kv-k">{t("accountEmail")}</span>
                   <span className="kv-v reg-kv-v">
                     {session.user.email ?? "—"}
                   </span>
                 </div>
                 <div className="kv">
-                  <span className="kv-k">Raison sociale</span>
+                  <span className="kv-k">{t("companyName")}</span>
                   <span className="kv-v reg-kv-v">
                     {producerProfile?.companyName ?? "—"}
                   </span>
@@ -768,31 +749,28 @@ export default function RegisterPage() {
                 <div className="kv">
                   <span className="kv-k">SIRET</span>
                   <span className="kv-v reg-kv-v">
-                    {producerProfile?.siret ?? "Non renseigné"}
+                    {producerProfile?.siret ?? t("notProvided")}
                   </span>
                 </div>
                 <div className="kv">
-                  <span className="kv-k">Téléphone</span>
+                  <span className="kv-k">{t("phone")}</span>
                   <span className="kv-v reg-kv-v">
-                    {producerProfile?.phone ? formatPhone(producerProfile.phone) : "Non renseigné"}
+                    {producerProfile?.phone ? formatPhone(producerProfile.phone) : t("notProvided")}
                   </span>
                 </div>
               </div>
               {producerProfile && !producerProfile.phone && (
                 <div className="notice is-error" role="alert">
-                  <b>Téléphone requis.</b> Nous en avons besoin pour vous joindre au
-                  sujet de vos échantillons.{" "}
-                  <Link href="/producer/profile">Ajouter mon numéro</Link>
+                  {t.rich("phoneRequired", { b: (c) => <b>{c}</b> })}{" "}
+                  <Link href="/producer/profile">{t("addPhone")}</Link>
                 </div>
               )}
               <p className="form-foot" style={{ margin: 0 }}>
-                Ces informations figureront sur votre facture.{" "}
-                <Link href="/producer/profile">Modifier mon profil producteur</Link>
+                {t("onInvoice")}{" "}
+                <Link href="/producer/profile">{t("editProfile")}</Link>
               </p>
               <div className="notice is-info">
-                <b>Envoi des échantillons.</b> Après paiement, l&apos;adresse
-                d&apos;envoi et les quantités attendues vous sont envoyées dans
-                le mail de confirmation.
+                {t.rich("samplesInfo", { b: (c) => <b>{c}</b> })}
               </div>
             </>
           )}
@@ -806,7 +784,7 @@ export default function RegisterPage() {
                 carte. Le moyen de paiement se choisit là-bas.
               */}
               <div className="reg-pay-box">
-                <h3 style={{ margin: 0, fontSize: 18 }}>Paiement sécurisé par Viva.com</h3>
+                <h3 style={{ margin: 0, fontSize: 18 }}>{t("securePayment")}</h3>
                 {/* Logo viva.com : exigé par Viva sur les écrans de paiement
                     (validation de la source de paiement). Logo sombre, posé
                     sur un fond clair pour rester lisible en thème sombre. */}
@@ -823,15 +801,16 @@ export default function RegisterPage() {
                   <img src="/viva-logo.svg" alt="viva.com" width={104} height={18} />
                 </span>
                 <p style={{ margin: 0, fontSize: 16, lineHeight: 1.6, color: "var(--fg-2)" }}>
-                  En validant, vous serez redirigé vers la page de paiement de{" "}
-                  <b style={{ color: "var(--fg)" }}>Viva.com</b> pour régler{" "}
-                  <b className="tabular" style={{ color: "var(--fg)" }}>
-                    {formatEuros(totalInCents)}
-                  </b>{" "}
-                  pour {cartProducts.length} produit{cartProducts.length > 1 ? "s" : ""}, en
-                  une seule fois. Votre inscription est confirmée dès que le
-                  paiement est encaissé ; vous recevez alors votre facture par
-                  email.
+                  {t.rich("payExplain", {
+                    amount: formatEuros(totalInCents),
+                    count: cartProducts.length,
+                    b: (c) => <b style={{ color: "var(--fg)" }}>{c}</b>,
+                    amt: (c) => (
+                      <b className="tabular" style={{ color: "var(--fg)" }}>
+                        {c}
+                      </b>
+                    ),
+                  })}
                 </p>
               </div>
 
@@ -850,13 +829,19 @@ export default function RegisterPage() {
                 />
                 <span style={{ fontSize: 16, lineHeight: 1.5, color: "var(--fg-2)" }}>
                   {/* Nouvel onglet : le producteur ne perd pas son panier. */}
-                  J&apos;accepte le{" "}
-                  <a href="/reglement" target="_blank" rel="noreferrer" style={{ color: "var(--accent-hi)" }}>
-                    règlement de la Platinum CBD Cup
-                  </a>{" "}
-                  et je
-                  certifie que chacun des produits inscrits respecte la
-                  réglementation européenne en vigueur (Δ9-THC ≤ {MAX_THC_LABEL}).
+                  {t.rich("acceptTerms", {
+                    limit: MAX_THC_LABEL,
+                    rules: (c) => (
+                      <a
+                        href={localizePath("/reglement", locale)}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ color: "var(--accent-hi)" }}
+                      >
+                        {c}
+                      </a>
+                    ),
+                  })}
                 </span>
               </label>
 
@@ -880,7 +865,7 @@ export default function RegisterPage() {
                 opacity: step === 1 && cartProducts.length === 0 ? 0.3 : 1,
               }}
             >
-              {step === 1 && cartProducts.length > 0 ? "← Retour au panier" : "← Précédent"}
+              {step === 1 && cartProducts.length > 0 ? t("backToCart") : t("previous")}
             </button>
             <button
               type="button"
@@ -904,13 +889,13 @@ export default function RegisterPage() {
             >
               {submitting
                 ? step === STEP_PAY
-                  ? "Redirection vers le paiement…"
-                  : "Ajout…"
+                  ? t("redirectingToPayment")
+                  : t("adding")
                 : step === 2
-                  ? "Ajouter au panier"
+                  ? t("addToCart")
                   : step === STEP_PAY
-                    ? `Payer ${formatEuros(totalInCents)}`
-                    : "Continuer"}{" "}
+                    ? t("pay", { amount: formatEuros(totalInCents) })
+                    : t("continue")}{" "}
               {!submitting && <span className="btn-arrow">→</span>}
             </button>
           </div>
@@ -922,7 +907,7 @@ export default function RegisterPage() {
           aria-labelledby="register-summary-title"
         >
           <h2 id="register-summary-title" style={{ fontSize: 20, marginBottom: 8 }}>
-            Récapitulatif
+            {t("summary")}
           </h2>
           <ul style={listReset}>
             {cartProducts.map((product) => (
@@ -937,15 +922,15 @@ export default function RegisterPage() {
             {step <= 2 && selectedCategory && (
               <CartLine
                 muted
-                name={data.name || "Nouveau produit"}
-                category={`${selectedCategory.name} · pas encore ajouté`}
+                name={data.name || t("newProduct")}
+                category={t("notYetAdded", { category: selectedCategory.name })}
                 price={formatEuros(categoryPriceInCents(selectedCategory))}
               />
             )}
           </ul>
           {cartProducts.length === 0 && !(step <= 2 && selectedCategory) && (
             <p style={{ margin: "8px 0 0", fontSize: 16, color: "var(--fg-3)" }}>
-              Votre panier est vide.
+              {t("cartEmpty")}
             </p>
           )}
           <p
@@ -959,7 +944,7 @@ export default function RegisterPage() {
               gap: 16,
             }}
           >
-            <span style={{ fontSize: 17, fontWeight: 600 }}>Total</span>
+            <span style={{ fontSize: 17, fontWeight: 600 }}>{t("total")}</span>
             <span className="tabular" style={{ fontSize: 28, fontWeight: 700 }}>
               {formatEuros(totalInCents)}
             </span>

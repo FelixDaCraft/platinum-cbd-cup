@@ -3,6 +3,7 @@ import "~/styles/globals.css";
 import { type Metadata, type Viewport } from "next";
 import { headers } from "next/headers";
 import { getLocale } from "next-intl/server";
+import { NextIntlClientProvider } from "next-intl";
 import { Geist, Geist_Mono, Hanken_Grotesk } from "next/font/google";
 
 // L'URL de base était recopiée ici aussi (metadataBase, openGraph.url et les
@@ -332,7 +333,12 @@ ${PORTAL_THEME.customCss ? sanitizeCustomCss(PORTAL_THEME.customCss) : ""}
 
         <Providers nonce={nonce}>
           <div id="portal-root">
-            <PortalProvider value={{ ...PORTAL_CONTEXT, locale }}>{children}</PortalProvider>
+            {/* Messages de la langue courante pour tous les composants client,
+                back-office compris (français) : les composants partagés
+                utilisent les liens et libellés de next-intl. */}
+            <NextIntlClientProvider>
+              <PortalProvider value={{ ...PORTAL_CONTEXT, locale }}>{children}</PortalProvider>
+            </NextIntlClientProvider>
           </div>
         </Providers>
       </body>

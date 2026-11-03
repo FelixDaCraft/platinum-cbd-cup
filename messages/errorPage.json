@@ -1,0 +1,65 @@
+{
+  "fr": {
+    "title": "Une erreur est survenue",
+    "lede": "Cette page n'a pas pu s'afficher. Le problème vient de notre côté et a été enregistré. Vous pouvez réessayer dans un instant ou revenir à l'accueil.",
+    "home": "Retour à l'accueil",
+    "retry": "Réessayer",
+    "persist": "Le problème persiste ?",
+    "contact": "Contactez-nous",
+    "reference": "en indiquant la référence <b>{digest}</b>."
+  },
+  "en": {
+    "title": "Something went wrong",
+    "lede": "This page could not be displayed. The problem is on our side and has been logged. You can try again in a moment or go back to the home page.",
+    "home": "Back to home",
+    "retry": "Try again",
+    "persist": "Still not working?",
+    "contact": "Contact us",
+    "reference": "quoting the reference <b>{digest}</b>."
+  },
+  "it": {
+    "title": "Si è verificato un errore",
+    "lede": "Impossibile visualizzare questa pagina. Il problema è nostro ed è stato registrato. Puoi riprovare tra un istante o tornare alla home.",
+    "home": "Torna alla home",
+    "retry": "Riprova",
+    "persist": "Il problema persiste?",
+    "contact": "Contattaci",
+    "reference": "indicando il riferimento <b>{digest}</b>."
+  },
+  "de": {
+    "title": "Ein Fehler ist aufgetreten",
+    "lede": "Diese Seite konnte nicht angezeigt werden. Das Problem liegt bei uns und wurde protokolliert. Versuchen Sie es gleich noch einmal oder kehren Sie zur Startseite zurück.",
+    "home": "Zurück zur Startseite",
+    "retry": "Erneut versuchen",
+    "persist": "Besteht das Problem weiterhin?",
+    "contact": "Kontaktieren Sie uns",
+    "reference": "und nennen Sie die Referenz <b>{digest}</b>."
+  },
+  "cs": {
+    "title": "Došlo k chybě",
+    "lede": "Tuto stránku se nepodařilo zobrazit. Problém je na naší straně a byl zaznamenán. Zkuste to za chvíli znovu nebo se vraťte na úvod.",
+    "home": "Zpět na úvod",
+    "retry": "Zkusit znovu",
+    "persist": "Problém přetrvává?",
+    "contact": "Kontaktujte nás",
+    "reference": "a uveďte referenci <b>{digest}</b>."
+  },
+  "nl": {
+    "title": "Er is een fout opgetreden",
+    "lede": "Deze pagina kon niet worden weergegeven. Het probleem ligt bij ons en is geregistreerd. Probeer het zo meteen opnieuw of ga terug naar de homepage.",
+    "home": "Terug naar home",
+    "retry": "Opnieuw proberen",
+    "persist": "Blijft het probleem bestaan?",
+    "contact": "Neem contact op",
+    "reference": "en vermeld de referentie <b>{digest}</b>."
+  },
+  "es": {
+    "title": "Se ha producido un error",
+    "lede": "No se ha podido mostrar esta página. El problema es nuestro y ha quedado registrado. Puedes volver a intentarlo en un momento o volver al inicio.",
+    "home": "Volver al inicio",
+    "retry": "Reintentar",
+    "persist": "¿El problema continúa?",
+    "contact": "Contáctanos",
+    "reference": "indicando la referencia <b>{digest}</b>."
+  }
+}

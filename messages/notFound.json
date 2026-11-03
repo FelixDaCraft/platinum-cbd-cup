@@ -1,0 +1,37 @@
+{
+  "fr": {
+    "title": "Page introuvable",
+    "lede": "Cette page n'existe pas, ou plus : une édition dépubliée, un article retiré ou une adresse mal recopiée.",
+    "mistake": "Vous pensez qu'il s'agit d'une erreur ?"
+  },
+  "en": {
+    "title": "Page not found",
+    "lede": "This page does not exist, or no longer exists: an unpublished edition, a removed article or a mistyped address.",
+    "mistake": "Think this is a mistake?"
+  },
+  "it": {
+    "title": "Pagina non trovata",
+    "lede": "Questa pagina non esiste, o non esiste più: un'edizione ritirata, un articolo rimosso o un indirizzo digitato male.",
+    "mistake": "Pensi che si tratti di un errore?"
+  },
+  "de": {
+    "title": "Seite nicht gefunden",
+    "lede": "Diese Seite existiert nicht oder nicht mehr: eine zurückgezogene Ausgabe, ein entfernter Artikel oder eine falsch eingegebene Adresse.",
+    "mistake": "Glauben Sie, dass es sich um einen Fehler handelt?"
+  },
+  "cs": {
+    "title": "Stránka nenalezena",
+    "lede": "Tato stránka neexistuje nebo již neexistuje: stažený ročník, odstraněný článek nebo chybně zadaná adresa.",
+    "mistake": "Myslíte si, že jde o chybu?"
+  },
+  "nl": {
+    "title": "Pagina niet gevonden",
+    "lede": "Deze pagina bestaat niet (meer): een ingetrokken editie, een verwijderd artikel of een verkeerd overgetypt adres.",
+    "mistake": "Denk je dat dit een fout is?"
+  },
+  "es": {
+    "title": "Página no encontrada",
+    "lede": "Esta página no existe o ya no existe: una edición retirada, un artículo eliminado o una dirección mal escrita.",
+    "mistake": "¿Crees que se trata de un error?"
+  }
+}

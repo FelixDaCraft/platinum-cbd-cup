@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useRef, useState } from "react";
 import { Link } from "~/i18n/navigation";
 import { useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
 
 import { api } from "~/trpc/react";
 
@@ -22,15 +23,16 @@ import { api } from "~/trpc/react";
  * settle the payment. Both paths are idempotent.
  */
 export function PaymentSuccess({ cupId }: { cupId?: string }) {
-
+  const t = useTranslations("payment");
   return (
-    <Suspense fallback={<StatusBlock title="Vérification du paiement…" />}>
+    <Suspense fallback={<StatusBlock title={t("checking")} />}>
       <SuccessInner cupId={cupId} />
     </Suspense>
   );
 }
 
 function SuccessInner({ cupId: cupIdFromUrl }: { cupId?: string }) {
+  const t = useTranslations("payment");
   const searchParams = useSearchParams();
   const transactionId = searchParams.get("t");
 
@@ -64,11 +66,11 @@ function SuccessInner({ cupId: cupIdFromUrl }: { cupId?: string }) {
   if (state === "missing") {
     return (
       <StatusBlock
-        title="Paiement introuvable"
-        message="Aucune référence de transaction n'a été transmise. Si vous avez été débité, votre inscription sera confirmée automatiquement d'ici quelques minutes."
+        title={t("missingTitle")}
+        message={t("missingText")}
         actions={
           <Link href="/producer/registrations" className="btn accent">
-            Voir mes inscriptions
+            {t("myRegistrations")}
           </Link>
         }
       />
@@ -76,22 +78,22 @@ function SuccessInner({ cupId: cupIdFromUrl }: { cupId?: string }) {
   }
 
   if (state === "checking") {
-    return <StatusBlock title="Vérification du paiement…" />;
+    return <StatusBlock title={t("checking")} />;
   }
 
   if (state === "confirmed") {
     return (
       <StatusBlock
-        title="Inscription confirmée"
-        message="Votre paiement a bien été reçu. Votre facture vient de vous être envoyée par email ; l'adresse d'envoi de vos échantillons et les quantités attendues y figurent."
+        title={t("confirmedTitle")}
+        message={t("confirmedText")}
         actions={
           <>
             <Link href="/producer/registrations" className="btn accent">
-              Voir mes inscriptions <span className="btn-arrow">→</span>
+              {t("myRegistrations")} <span className="btn-arrow">→</span>
             </Link>
             {cupId && (
               <Link href={`/cups/${cupId}`} className="btn ghost">
-                Retour à la cup
+                {t("backToCup")}
               </Link>
             )}
           </>
@@ -103,11 +105,11 @@ function SuccessInner({ cupId: cupIdFromUrl }: { cupId?: string }) {
   if (state === "pending") {
     return (
       <StatusBlock
-        title="Paiement en cours de traitement"
-        message="Votre paiement n'est pas encore finalisé par la banque. L'inscription sera confirmée automatiquement dès que Viva.com nous en informe ; vous recevrez alors un email."
+        title={t("pendingTitle")}
+        message={t("pendingText")}
         actions={
           <Link href="/producer/registrations" className="btn accent">
-            Voir mes inscriptions
+            {t("myRegistrations")}
           </Link>
         }
       />
@@ -116,15 +118,15 @@ function SuccessInner({ cupId: cupIdFromUrl }: { cupId?: string }) {
 
   return (
     <StatusBlock
-      title="Vérification impossible"
-      message="Nous n'avons pas pu vérifier votre paiement à l'instant. Si vous avez été débité, l'inscription sera confirmée automatiquement. Contactez-nous si ce n'est pas le cas d'ici une heure."
+      title={t("errorTitle")}
+      message={t("errorText")}
       actions={
         <>
           <Link href="/producer/registrations" className="btn accent">
-            Voir mes inscriptions
+            {t("myRegistrations")}
           </Link>
           <Link href="/contact" className="btn ghost">
-            Nous contacter
+            {t("contactUs")}
           </Link>
         </>
       }
@@ -141,10 +143,11 @@ function StatusBlock({
   message?: string;
   actions?: React.ReactNode;
 }) {
+  const t = useTranslations("payment");
   return (
     <div className="pg pg--narrow page-enter">
       <header className="pg-head">
-        <p className="eyebrow">Paiement</p>
+        <p className="eyebrow">{t("eyebrow")}</p>
         <h1 className="display" aria-live="polite">
           {title}
         </h1>

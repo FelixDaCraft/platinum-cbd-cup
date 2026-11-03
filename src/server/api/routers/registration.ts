@@ -1,5 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { localizeRow } from "~/i18n/locales";
 import { nanoid } from "nanoid";
 import { and as drizzleAnd, eq, gte, lte, sql } from "drizzle-orm";
 
@@ -496,7 +497,14 @@ export const registrationRouter = createTRPCRouter({
         });
       }
 
-      return registration;
+      // Catégories dans la langue de la page du producteur.
+      return {
+        ...registration,
+        products: registration.products.map((product) => ({
+          ...product,
+          category: localizeRow(product.category, ctx.locale),
+        })),
+      };
     }),
 
   /**

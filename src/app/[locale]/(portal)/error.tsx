@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { Link } from "~/i18n/navigation";
 
 /**
@@ -17,6 +18,7 @@ export default function PortalError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const t = useTranslations("errorPage");
   useEffect(() => {
     // Seule trace côté client d'une erreur de rendu ; le `digest` permet de
     // la relier à la ligne correspondante dans les logs du serveur.
@@ -26,32 +28,31 @@ export default function PortalError({
   return (
     <div className="pg pg--narrow page-enter">
       <header className="pg-head">
-        <h1 className="display">Une erreur est survenue</h1>
-        <p className="pg-lede">
-          Cette page n&apos;a pas pu s&apos;afficher. Le problème vient de notre
-          côté et a été enregistré. Vous pouvez réessayer dans un instant ou
-          revenir à l&apos;accueil.
-        </p>
+        <h1 className="display">{t("title")}</h1>
+        <p className="pg-lede">{t("lede")}</p>
       </header>
 
       <div className="home-actions">
         <Link href="/" className="btn accent">
-          Retour à l&apos;accueil <span className="btn-arrow">→</span>
+          {t("home")} <span className="btn-arrow">→</span>
         </Link>
         <button type="button" onClick={reset} className="btn ghost">
-          Réessayer
+          {t("retry")}
         </button>
       </div>
 
       <p className="pg-meta" style={{ marginTop: 32, marginBottom: 0 }}>
-        Le problème persiste ?{" "}
+        {t("persist")}{" "}
         <Link href="/contact" className="pg-link">
-          Contactez-nous
+          {t("contact")}
         </Link>
         {error.digest ? (
           <>
             {" "}
-            en indiquant la référence <b style={{ color: "var(--fg-2)" }}>{error.digest}</b>.
+            {t.rich("reference", {
+              digest: error.digest,
+              b: (c) => <b style={{ color: "var(--fg-2)" }}>{c}</b>,
+            })}
           </>
         ) : (
           "."

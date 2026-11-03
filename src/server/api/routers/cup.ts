@@ -1,5 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { localizeRow } from "~/i18n/locales";
 import { nanoid } from "nanoid";
 
 import {
@@ -612,6 +613,7 @@ export const cupRouter = createTRPCRouter({
               panel: true,
               name: true,
               description: true,
+              translations: true,
               coefficient: true,
               sortOrder: true,
             },
@@ -628,15 +630,25 @@ export const cupRouter = createTRPCRouter({
           category.maxProducts === null
             ? null
             : Math.max(0, category.maxProducts - (occupancy.get(category.id) ?? 0));
+        // Noms et descriptions dans la langue de la page (ctx.locale).
+        const localized = localizeRow(category, ctx.locale);
         return {
           id: category.id,
-          name: category.name,
-          description: category.description,
+          name: localized.name,
+          description: localized.description,
           pricePerProduct: category.priceOverride,
           maxProductsPerProducer: category.maxProductsPerProducer,
           remainingPlaces,
           isFull: remainingPlaces === 0,
-          criteria: category.criteria,
+          // Les traductions servent au calcul, elles ne partent pas au client.
+          criteria: category.criteria.map(({ translations, ...criterion }) => {
+            const localizedCriterion = localizeRow({ ...criterion, translations }, ctx.locale);
+            return {
+              ...criterion,
+              name: localizedCriterion.name,
+              description: localizedCriterion.description,
+            };
+          }),
         };
       });
 

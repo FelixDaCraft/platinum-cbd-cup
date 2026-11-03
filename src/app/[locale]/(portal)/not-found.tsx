@@ -1,3 +1,4 @@
+import { useTranslations } from "next-intl";
 import { Link } from "~/i18n/navigation";
 
 /**
@@ -9,29 +10,29 @@ import { Link } from "~/i18n/navigation";
  * barre de navigation et le pied de page.
  */
 export default function PortalNotFound() {
+  const t = useTranslations("notFound");
+  const tError = useTranslations("errorPage");
+  const tNav = useTranslations("nav");
   return (
     <div className="pg pg--narrow page-enter">
       <header className="pg-head">
-        <h1 className="display">Page introuvable</h1>
-        <p className="pg-lede">
-          Cette page n&apos;existe pas, ou plus : une édition dépubliée, un
-          article retiré ou une adresse mal recopiée.
-        </p>
+        <h1 className="display">{t("title")}</h1>
+        <p className="pg-lede">{t("lede")}</p>
       </header>
 
       <div className="home-actions">
         <Link href="/" className="btn accent">
-          Retour à l&apos;accueil <span className="btn-arrow">→</span>
+          {tError("home")} <span className="btn-arrow">→</span>
         </Link>
         <Link href="/palmares" className="btn ghost">
-          Voir le palmarès
+          {tNav("seePalmares")}
         </Link>
       </div>
 
       <p className="pg-meta" style={{ marginTop: 32, marginBottom: 0 }}>
-        Vous pensez qu&apos;il s&apos;agit d&apos;une erreur ?{" "}
+        {t("mistake")}{" "}
         <Link href="/contact" className="pg-link">
-          Contactez-nous
+          {tError("contact")}
         </Link>
         .
       </p>

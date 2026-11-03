@@ -260,3 +260,25 @@ export function requestLocale(headers: Headers): Locale {
   const cookie = /(?:^|;\s*)NEXT_LOCALE=([^;]+)/.exec(headers.get("cookie") ?? "")?.[1];
   return isLocale(cookie) ? cookie : defaultLocale;
 }
+
+/**
+ * Copie d'une ligne de contenu (catégorie, critère, label) dont `name` et
+ * `description` / `condition` sont remplacés par leur traduction.
+ */
+export function localizeRow<T extends { name: string; translations?: unknown }>(
+  row: T,
+  locale: Locale
+): T {
+  if (locale === defaultLocale) return row;
+  const out = { ...row, name: localizedField(row, "name", locale) };
+  for (const field of ["description", "condition"] as const) {
+    if (field in row) {
+      (out as Record<string, unknown>)[field] = localizedField(
+        row as unknown as Record<string, unknown>,
+        field,
+        locale
+      );
+    }
+  }
+  return out;
+}

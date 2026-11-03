@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
-import { hasLocale, NextIntlClientProvider } from "next-intl";
+import { hasLocale } from "next-intl";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { routing } from "~/i18n/routing";
 import { ogLocale, locales, type Locale } from "~/i18n/locales";
@@ -42,7 +42,7 @@ export default async function LocaleLayout({ children, params }: Props) {
   if (!hasLocale(routing.locales, locale)) notFound();
   setRequestLocale(locale as Locale);
 
-  // Les messages de la langue (déjà fusionnés sur le français) suivent
-  // automatiquement vers les composants client.
-  return <NextIntlClientProvider>{children}</NextIntlClientProvider>;
+  // Le NextIntlClientProvider est posé par le layout racine, qui lit la même
+  // langue (en-tête du middleware) : il couvre aussi le back-office et la 404.
+  return children;
 }
