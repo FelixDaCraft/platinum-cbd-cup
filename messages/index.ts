@@ -28,6 +28,8 @@ import panels from "./panels.json";
 import payment from "./payment.json";
 import press from "./press.json";
 import privacy from "./privacy.json";
+import producerDashboard from "./producerDashboard.json";
+import producerSpace from "./producerSpace.json";
 import register from "./register.json";
 import rules from "./rules.json";
 import serverErrors from "./serverErrors.json";
@@ -62,6 +64,8 @@ export const catalog = {
   payment,
   press,
   privacy,
+  producerDashboard,
+  producerSpace,
   register,
   rules,
   serverErrors,

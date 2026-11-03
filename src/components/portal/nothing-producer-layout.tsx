@@ -23,6 +23,8 @@ import { authClient } from "~/lib/auth-client";
 import { api } from "~/trpc/react";
 import { PWAWrapper } from "~/components/pwa/pwa-wrapper";
 import { withPortalScope } from "~/lib/ui/nothing-scope";
+import { useTranslations } from "next-intl";
+import { LanguageSwitcher } from "~/components/portal/platinum/language-switcher";
 
 // ─── Nothing CSS ────────────────────────────────────────────────────────────
 
@@ -158,22 +160,24 @@ const nothingCss = `
 
 interface NavItem {
   href: string;
-  label: string;
+  /** Clé dans `producerSpace.nav`. */
+  label: "home" | "registrations" | "results" | "labels" | "widget" | "profile";
   icon: LucideIcon;
 }
 
 const producerNavItems: NavItem[] = [
-  { href: "/producer", label: "ACCUEIL", icon: Home },
-  { href: "/producer/registrations", label: "INSCRIPTIONS", icon: Trophy },
-  { href: "/producer/results", label: "RÉSULTATS", icon: TrendingUp },
-  { href: "/producer/labels", label: "DISTINCTIONS", icon: Award },
-  { href: "/producer/widget", label: "WIDGET", icon: Code },
-  { href: "/producer/profile", label: "PROFIL", icon: Building2 },
+  { href: "/producer", label: "home", icon: Home },
+  { href: "/producer/registrations", label: "registrations", icon: Trophy },
+  { href: "/producer/results", label: "results", icon: TrendingUp },
+  { href: "/producer/labels", label: "labels", icon: Award },
+  { href: "/producer/widget", label: "widget", icon: Code },
+  { href: "/producer/profile", label: "profile", icon: Building2 },
 ];
 
 // ─── Sidebar ────────────────────────────────────────────────────────────────
 
 function NothingProdSidebar() {
+  const t = useTranslations("producerSpace");
   const pathname = usePathname();
   const router = useRouter();
   const organization = useOrganization();
@@ -195,9 +199,9 @@ function NothingProdSidebar() {
   if (rolesData?.roles) {
     const { roles } = rolesData;
     if (roles.organizer) {
-      dashboardLinks.push({ href: roles.organizer.href ?? "/dashboard", label: "ORGANISATEUR", icon: Building2 });
+      dashboardLinks.push({ href: roles.organizer.href ?? "/dashboard", label: t("organizer"), icon: Building2 });
     }
-    if (roles.jury) dashboardLinks.push({ href: "/jury/dashboard", label: "JURY", icon: Scale });
+    if (roles.jury) dashboardLinks.push({ href: "/jury/dashboard", label: t("jury"), icon: Scale });
   }
 
   return (
@@ -216,15 +220,24 @@ function NothingProdSidebar() {
         )}
         {!isCollapsed && (
           <div className="flex-1 min-w-0">
-            <p className="n-font-data text-xs uppercase tracking-[0.08em] font-bold truncate" style={{ color: "var(--n-text-display)" }}>ESPACE PRODUCTEUR</p>
+            <p className="n-font-data text-xs uppercase tracking-[0.08em] font-bold truncate" style={{ color: "var(--n-text-display)" }}>{t("spaceTitle")}</p>
             <p className="text-xs truncate mt-0.5" style={{ color: "var(--n-text-disabled)" }}>{organization.name}</p>
           </div>
         )}
       </div>
 
       {/* Nav */}
-      <nav aria-label="Navigation producteur" className="flex-1 overflow-y-auto p-3 space-y-1">
-        {!isCollapsed && <p className="n-label px-3 mb-3" style={{ color: "var(--n-text-disabled)" }}>NAVIGATION</p>}
+      {/* Langue de l'espace (et des e-mails à venir). */}
+      {!isCollapsed && (
+        <div className="st-lang-scope px-4 pt-3">
+          <React.Suspense fallback={null}>
+            <LanguageSwitcher />
+          </React.Suspense>
+        </div>
+      )}
+
+      <nav aria-label={t("navAria")} className="flex-1 overflow-y-auto p-3 space-y-1">
+        {!isCollapsed && <p className="n-label px-3 mb-3" style={{ color: "var(--n-text-disabled)" }}>{t("navigation")}</p>}
         {producerNavItems.map((item) => {
           const active = isActive(item.href);
           const Icon = item.icon;
@@ -233,12 +246,12 @@ function NothingProdSidebar() {
               key={item.href} href={item.href}
               aria-current={active ? "page" : undefined}
               className={cn("flex items-center gap-3 px-3 py-2.5 rounded-none text-sm transition-all duration-200 relative", isCollapsed && "justify-center px-2")}
-              style={{ color: active ? "var(--n-text-display)" : "var(--n-text-disabled)", fontFamily: "'Space Mono', monospace", fontSize: "12px", letterSpacing: "0.06em" }}
-              title={isCollapsed ? item.label : undefined}
+              style={{ color: active ? "var(--n-text-display)" : "var(--n-text-disabled)", fontFamily: "'Space Mono', monospace", fontSize: "12px", letterSpacing: "0.06em", textTransform: "uppercase" }}
+              title={isCollapsed ? t(`nav.${item.label}`) : undefined}
             >
               {active && <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[2px] h-5" style={{ backgroundColor: "var(--n-text-display)" }} />}
               <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={1.5} />
-              {!isCollapsed && <span>{item.label}</span>}
+              {!isCollapsed && <span>{t(`nav.${item.label}`)}</span>}
             </Link>
           );
         })}
@@ -247,13 +260,13 @@ function NothingProdSidebar() {
       {/* Dashboard switch */}
       {!isCollapsed && dashboardLinks.length > 0 && (
         <div className="px-3 pb-2 space-y-1 border-t" style={{ borderColor: "var(--n-border)" }}>
-          <p className="n-label px-3 pt-3 pb-1" style={{ color: "var(--n-text-disabled)" }}>MES ESPACES</p>
+          <p className="n-label px-3 pt-3 pb-1" style={{ color: "var(--n-text-disabled)" }}>{t("mySpaces")}</p>
           {dashboardLinks.map((link) => {
             const LIcon = link.icon;
             const Comp = link.isExternal ? "a" : Link;
             return (
               <Comp key={link.href} href={link.href} className="flex items-center gap-2 px-3 py-1.5 text-xs transition-colors duration-200"
-                style={{ color: "var(--n-text-disabled)", fontFamily: "'Space Mono', monospace", letterSpacing: "0.06em" }}>
+                style={{ color: "var(--n-text-disabled)", fontFamily: "'Space Mono', monospace", letterSpacing: "0.06em", textTransform: "uppercase" }}>
                 <LIcon className="h-4 w-4" strokeWidth={1.5} /><span>{link.label}</span>
               </Comp>
             );
@@ -271,15 +284,15 @@ function NothingProdSidebar() {
                 {session.user.name?.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2) ?? "??"}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium truncate" style={{ color: "var(--n-text-primary)" }}>{session.user.name ?? "Utilisateur"}</p>
+                <p className="text-xs font-medium truncate" style={{ color: "var(--n-text-primary)" }}>{session.user.name ?? t("user")}</p>
                 <p className="text-[10px] truncate" style={{ color: "var(--n-text-disabled)" }}>{session.user.email}</p>
               </div>
-              <button onClick={handleLogout} className="p-2" style={{ color: "var(--n-text-disabled)" }} title="Déconnexion">
+              <button onClick={handleLogout} className="p-2" style={{ color: "var(--n-text-disabled)" }} title={t("logout")} aria-label={t("logout")}>
                 <LogOut className="h-4 w-4" strokeWidth={1.5} />
               </button>
             </div>
           ) : (
-            <button onClick={handleLogout} className="w-full flex justify-center p-2" style={{ color: "var(--n-text-disabled)" }}>
+            <button onClick={handleLogout} className="w-full flex justify-center p-2" style={{ color: "var(--n-text-disabled)" }} aria-label={t("logout")}>
               <LogOut className="h-5 w-5" strokeWidth={1.5} />
             </button>
           )}
@@ -291,7 +304,7 @@ function NothingProdSidebar() {
         <button onClick={() => setIsCollapsed(!isCollapsed)}
           className="w-full flex items-center justify-center gap-2 p-2 text-xs transition-colors"
           style={{ color: "var(--n-text-disabled)", fontFamily: "'Space Mono', monospace", letterSpacing: "0.06em" }}>
-          {isCollapsed ? <ChevronRight className="h-4 w-4" strokeWidth={1.5} /> : <><ChevronLeft className="h-4 w-4" strokeWidth={1.5} /><span className="uppercase">REDUIRE</span></>}
+          {isCollapsed ? <ChevronRight className="h-4 w-4" strokeWidth={1.5} /> : <><ChevronLeft className="h-4 w-4" strokeWidth={1.5} /><span className="uppercase">{t("collapse")}</span></>}
         </button>
       </div>
     </aside>
@@ -301,13 +314,14 @@ function NothingProdSidebar() {
 // ─── Bottom Nav ─────────────────────────────────────────────────────────────
 
 function NothingProdBottomNav() {
+  const t = useTranslations("producerSpace");
   const pathname = usePathname();
   const items: NavItem[] = [
-    { href: "/producer", label: "ACCUEIL", icon: Home },
-    { href: "/producer/registrations", label: "INSCRIPTIONS", icon: Trophy },
-    { href: "/producer/results", label: "RÉSULTATS", icon: TrendingUp },
-    { href: "/producer/labels", label: "DISTINCTIONS", icon: Award },
-    { href: "/producer/profile", label: "PROFIL", icon: Building2 },
+    { href: "/producer", label: "home", icon: Home },
+    { href: "/producer/registrations", label: "registrations", icon: Trophy },
+    { href: "/producer/results", label: "results", icon: TrendingUp },
+    { href: "/producer/labels", label: "labels", icon: Award },
+    { href: "/producer/profile", label: "profile", icon: Building2 },
   ];
 
   const isActive = (href: string) => {
@@ -316,7 +330,7 @@ function NothingProdBottomNav() {
   };
 
   return (
-    <nav aria-label="Navigation producteur (mobile)" className="lg:hidden fixed bottom-0 left-0 right-0 z-50 border-t safe-area-bottom"
+    <nav aria-label={t("navAriaMobile")} className="lg:hidden fixed bottom-0 left-0 right-0 z-50 border-t safe-area-bottom"
       style={{ backgroundColor: "var(--n-black)", borderColor: "var(--n-border)" }}>
       <div className="flex items-center justify-around px-2 py-1">
         {items.map((item) => {
@@ -330,7 +344,7 @@ function NothingProdBottomNav() {
               </div>
               <span className="mt-0.5 truncate max-w-[64px]"
                 style={{ fontFamily: "'Space Mono', monospace", fontSize: "9px", letterSpacing: "0.08em", textTransform: "uppercase", color: active ? "var(--n-text-display)" : "var(--n-text-disabled)" }}>
-                {item.label}
+                {t(`nav.${item.label}`)}
               </span>
             </Link>
           );
@@ -343,6 +357,7 @@ function NothingProdBottomNav() {
 // ─── Main Layout ────────────────────────────────────────────────────────────
 
 export function NothingProducerLayout({ children }: { children: React.ReactNode }) {
+  const t = useTranslations("producerSpace");
   return (
     <PWAWrapper>
       <style dangerouslySetInnerHTML={{ __html: withPortalScope(nothingCss, "nothing-producer") }} />
@@ -350,9 +365,15 @@ export function NothingProducerLayout({ children }: { children: React.ReactNode 
         {/* Premier élément focusable : permet de sauter la barre latérale,
             répétée à l'identique sur chaque écran. */}
         <a href="#contenu-principal" className="n-skip-link">
-          Aller au contenu
+          {t("skip")}
         </a>
         <NothingProdSidebar />
+        {/* Mobile : pas de barre latérale, le sélecteur de langue va en haut. */}
+        <div className="st-lang-scope is-end lg:hidden flex justify-end px-4 pt-3">
+          <React.Suspense fallback={null}>
+            <LanguageSwitcher />
+          </React.Suspense>
+        </div>
         <div className="lg:pl-64 transition-all duration-200">
           <main id="contenu-principal" tabIndex={-1} className="min-h-screen">
             <div className="container mx-auto px-4 lg:px-8 py-8 pb-24 lg:pb-8">

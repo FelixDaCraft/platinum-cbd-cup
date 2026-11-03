@@ -192,6 +192,13 @@ export const streetCSS = `
 }
 
 /* ── Coquille : sélecteur de langue ───────────────────────── */
+/* Hors de la coquille du portail (espaces producteur et juré), les jetons
+   de la charte sont redéclarés ici. */
+.st-lang-scope{ --st-display: "Unbounded", "Hanken Grotesk", ui-sans-serif, sans-serif; --st-night: #0c0b09;
+  --st-ink: #f3eee3; --st-ink-3: rgba(243,238,227,.56); --st-gold: #d4af37; --st-gold-hi: #f5e6a8;
+  --st-rule: rgba(243,238,227,.86); --st-control: rgba(243,238,227,.42); --st-ease: cubic-bezier(.16,1,.3,1); }
+.st-lang-scope .st-lang-menu{ left: 0; right: auto; }
+.st-lang-scope.is-end .st-lang-menu{ left: auto; right: 0; }
 .st-lang{ position: relative; flex: none; }
 .st-lang-toggle{ display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 12px;
   background: transparent; color: var(--st-ink); border: 1px solid var(--st-control); border-radius: 0; cursor: pointer;

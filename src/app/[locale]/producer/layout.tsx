@@ -1,18 +1,24 @@
 import { headers } from "next/headers";
-import { redirect } from "next/navigation";
 import type { Metadata, Viewport } from "next";
+import { getTranslations } from "next-intl/server";
+import { currentLocale, localizedRedirect as redirect } from "~/i18n/server";
+import { syncUserLocale } from "~/server/services/user-locale";
 import { getPortalSession, getUserPortalAccess } from "~/lib/portal/server-auth";
 import { NothingProducerLayout } from "~/components/portal/nothing-producer-layout";
 
-export const metadata: Metadata = {
-  title: "Platinum CBD Cup — Producteur",
-  description: "Espace producteur - Gérez vos inscriptions et labels",
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: "black-translucent",
-    title: "Producer",
-  },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("producerSpace");
+  return {
+    title: t("metaTitle"),
+    description: t("metaDescription"),
+    robots: { index: false, follow: false },
+    appleWebApp: {
+      capable: true,
+      statusBarStyle: "black-translucent",
+      title: "Producer",
+    },
+  };
+}
 
 const COMPLETE_PROFILE_PATH = "/producer/complete-profile";
 
@@ -38,8 +44,15 @@ export default async function PortalProducerLayout({
   const session = await getPortalSession();
 
   if (!session?.user) {
-    redirect("/login?callbackUrl=/producer");
+    return redirect("/login?callbackUrl=/producer");
   }
+
+  // Langue des e-mails à venir (résultats) : celle de l'espace consulté.
+  await syncUserLocale(
+    session.user.id,
+    (session.user as { locale?: string | null }).locale,
+    await currentLocale()
+  );
 
   // Check roles - only producers and organizers can access
   const access = await getUserPortalAccess();
@@ -47,7 +60,7 @@ export default async function PortalProducerLayout({
   if (!access.hasAccess) {
     // Signed in but no role or profile at all. Never send them back to
     // /login: it redirects by role and would bounce them straight here.
-    redirect("/");
+    return redirect("/");
   }
 
   const pathname = (await headers()).get("x-pathname") ?? "";
@@ -65,17 +78,17 @@ export default async function PortalProducerLayout({
   if (!access.roles.includes("producer") && !access.roles.includes("organizer")) {
     // User has access but wrong role - redirect to their area
     if (access.roles.includes("jury")) {
-      redirect("/jury");
+      return redirect("/jury");
     }
     // Fallback
-    redirect("/");
+    return redirect("/");
   }
 
   // Signed up but never completed the producer profile: every page under
   // /producer needs one, so funnel them to the form instead of bouncing
   // them back to /login (which would send them straight back here).
   if (access.needsProducerProfile && pathname !== COMPLETE_PROFILE_PATH) {
-    redirect(COMPLETE_PROFILE_PATH);
+    return redirect(COMPLETE_PROFILE_PATH);
   }
 
   return <NothingProducerLayout>{children}</NothingProducerLayout>;

@@ -1,10 +1,15 @@
 "use client";
 
+import { useLocale, useTranslations } from "next-intl";
 import { Link } from "~/i18n/navigation";
+import { formatDate, type Locale } from "~/i18n/locales";
 import { api } from "~/trpc/react";
 import { useOrganization, usePortalTheme } from "~/lib/portal/context";
 
 export default function ProducerDashboardPage() {
+  const t = useTranslations("producerDashboard");
+  const tc = useTranslations("producerSpace");
+  const locale = useLocale() as Locale;
   const organization = useOrganization();
   const theme = usePortalTheme();
 
@@ -38,7 +43,7 @@ export default function ProducerDashboardPage() {
         className="flex items-center justify-center min-h-[400px]"
         style={{ color: "var(--n-text-disabled)" }}
       >
-        <span className="n-font-data text-sm tracking-widest">[LOADING...]</span>
+        <span className="n-font-data text-sm tracking-widest">{tc("loading")}</span>
       </div>
     );
   }
@@ -52,10 +57,10 @@ export default function ProducerDashboardPage() {
         style={{ color: "var(--n-text-secondary)" }}
       >
         <span role="alert" className="n-font-data text-sm tracking-widest">
-          [ERREUR] VOTRE TABLEAU DE BORD N&apos;A PAS PU ÊTRE CHARGÉ
+          {t("errorDashboard")}
         </span>
         <button type="button" className="n-btn-secondary text-xs" onClick={() => void refetchStats()}>
-          RÉESSAYER
+          {tc("retry")}
         </button>
       </div>
     );
@@ -68,9 +73,9 @@ export default function ProducerDashboardPage() {
   // Ce dont l'organisation a besoin : le téléphone (obligatoire pour payer),
   // le logo et la photo repris sur les réseaux sociaux.
   const profileItems = [
-    { label: "Téléphone", done: !!profile?.phone },
-    { label: "Logo", done: !!profile?.logo },
-    { label: "Photo de vous ou de votre équipe", done: !!profile?.teamPhoto },
+    { label: t("itemPhone"), done: !!profile?.phone },
+    { label: t("itemLogo"), done: !!profile?.logo },
+    { label: t("itemPhoto"), done: !!profile?.teamPhoto },
   ];
   const profileScore = profileItems.filter((item) => item.done).length;
   const profileIncomplete = profile && profileScore < profileItems.length;
@@ -105,13 +110,13 @@ export default function ProducerDashboardPage() {
           )}
           <div>
             <div className="n-label mb-1" style={{ color: "var(--n-text-disabled)" }}>
-              ESPACE PRODUCTEUR · {organization.name}
+              {t("eyebrow", { name: organization.name })}
             </div>
             <h1
               className="n-font-data text-2xl font-bold"
               style={{ color: "var(--n-text-display)" }}
             >
-              {profile?.brandName ?? profile?.companyName ?? "MON ESPACE"}
+              {profile?.brandName ?? profile?.companyName ?? t("mySpace")}
             </h1>
             {profile?.companyName && profile.brandName && (
               <p className="text-sm mt-0.5" style={{ color: "var(--n-text-secondary)" }}>
@@ -122,7 +127,7 @@ export default function ProducerDashboardPage() {
         </div>
 
         <Link href="/producer/registrations" className="n-btn-secondary text-sm">
-          VOIR MES INSCRIPTIONS
+          {t("seeRegistrations")}
         </Link>
       </div>
 
@@ -131,28 +136,28 @@ export default function ProducerDashboardPage() {
         {[
           {
             href: "/producer/registrations?filter=active",
-            label: "CUPS ACTIVES",
+            label: t("statActive"),
             value: stats?.activeCompetitions ?? 0,
-            unit: "en cours",
+            unit: t("unitActive"),
           },
           {
             href: "/producer/registrations",
-            label: "PRODUITS INSCRITS",
+            label: t("statProducts"),
             value: stats?.registeredProducts ?? 0,
-            unit: "total",
+            unit: t("unitTotal"),
           },
           {
             href: "/producer/results",
-            label: "LABELS OBTENUS",
+            label: t("statLabels"),
             value: stats?.obtainedLabels ?? 0,
-            unit: "distinctions",
+            unit: t("unitAwards"),
             color: "var(--n-warning)",
           },
           {
             href: "/producer/results",
-            label: "EN ATTENTE",
+            label: t("statPending"),
             value: pendingResults > 0 ? pendingResults : 0,
-            unit: "resultats a venir",
+            unit: t("unitPending"),
             color: pendingResults > 0 ? "var(--n-text-primary)" : "var(--n-text-disabled)",
           },
         ].map((stat) => (
@@ -192,13 +197,13 @@ export default function ProducerDashboardPage() {
             <div className="flex items-center justify-between mb-6">
               <div>
                 <div className="n-label mb-1" style={{ color: "var(--n-text-disabled)" }}>
-                  ACTIVITE
+                  {t("activityLabel")}
                 </div>
                 <h2 className="text-base font-medium" style={{ color: "var(--n-text-display)" }}>
-                  Activite recente
+                  {t("activityTitle")}
                 </h2>
               </div>
-              <Link href="/producer/registrations" className="n-btn-ghost text-xs">TOUT VOIR</Link>
+              <Link href="/producer/registrations" className="n-btn-ghost text-xs">{t("seeAll")}</Link>
             </div>
 
             {isRegistrationsLoading ? (
@@ -207,7 +212,7 @@ export default function ProducerDashboardPage() {
                   className="n-font-data text-sm"
                   style={{ color: "var(--n-text-disabled)" }}
                 >
-                  [LOADING...]
+                  {tc("loading")}
                 </span>
               </div>
             ) : isRegistrationsError ? (
@@ -219,7 +224,7 @@ export default function ProducerDashboardPage() {
                   className="n-font-data text-sm"
                   style={{ color: "var(--n-text-secondary)" }}
                 >
-                  [ERREUR] VOS INSCRIPTIONS N&apos;ONT PAS PU ÊTRE CHARGÉES
+                  {t("errorRegistrations")}
                 </span>
                 <div>
                   <button
@@ -227,7 +232,7 @@ export default function ProducerDashboardPage() {
                     className="n-btn-secondary text-xs"
                     onClick={() => void refetchRegistrations()}
                   >
-                    RÉESSAYER
+                    {tc("retry")}
                   </button>
                 </div>
               </div>
@@ -265,30 +270,26 @@ export default function ProducerDashboardPage() {
                             }
                           >
                             {reg.status === "confirmed"
-                              ? "CONFIRME"
+                              ? t("statusConfirmed")
                               : reg.status === "pending_payment"
-                                ? "EN ATTENTE"
-                                : "ANNULE"}
+                                ? t("statusPending")
+                                : t("statusCancelled")}
                           </span>
                         </div>
                         <div className="n-label" style={{ color: "var(--n-text-disabled)" }}>
-                          {reg.productsCount} PRODUIT{reg.productsCount > 1 ? "S" : ""} INSCRIT
-                          {reg.productsCount > 1 ? "S" : ""}
+                          {t("productsEntered", { count: reg.productsCount })}
                         </div>
                       </div>
                       <div className="shrink-0 text-right">
                         <div className="n-font-data text-xs" style={{ color: "var(--n-text-disabled)" }}>
-                          {new Date(reg.createdAt).toLocaleDateString("fr-FR", {
-                            day: "numeric",
-                            month: "short",
-                          })}
+                          {formatDate(reg.createdAt, locale, { day: "numeric", month: "short" })}
                         </div>
                         {reg.hasResults && (
                           <div
                             className="n-label mt-1"
                             style={{ color: "var(--n-warning)" }}
                           >
-                            RESULTATS DISPO
+                            {t("resultsAvailable")}
                           </div>
                         )}
                       </div>
@@ -299,10 +300,10 @@ export default function ProducerDashboardPage() {
             ) : (
               <div className="py-12 text-center">
                 <div className="n-label mb-2" style={{ color: "var(--n-text-secondary)" }}>
-                  AUCUNE ACTIVITE
+                  {t("noActivity")}
                 </div>
                 <p className="text-sm" style={{ color: "var(--n-text-disabled)" }}>
-                  Vos inscriptions apparaitront ici.
+                  {t("noActivityText")}
                 </p>
               </div>
             )}
@@ -314,16 +315,16 @@ export default function ProducerDashboardPage() {
               <div className="flex items-center justify-between mb-6">
                 <div>
                   <div className="n-label mb-1" style={{ color: "var(--n-text-disabled)" }}>
-                    DISTINCTIONS
+                    {t("awardsLabel")}
                   </div>
                   <h2
                     className="text-base font-medium"
                     style={{ color: "var(--n-text-display)" }}
                   >
-                    Mes distinctions
+                    {t("awardsTitle")}
                   </h2>
                 </div>
-                <Link href="/producer/labels" className="n-btn-ghost text-xs">TOUT VOIR</Link>
+                <Link href="/producer/labels" className="n-btn-ghost text-xs">{t("seeAll")}</Link>
               </div>
 
               {isLabelsLoading ? (
@@ -332,7 +333,7 @@ export default function ProducerDashboardPage() {
                     className="n-font-data text-sm"
                     style={{ color: "var(--n-text-disabled)" }}
                   >
-                    [LOADING...]
+                    {tc("loading")}
                   </span>
                 </div>
               ) : (
@@ -385,11 +386,10 @@ export default function ProducerDashboardPage() {
               style={{ borderColor: "var(--n-warning)", borderWidth: "1px" }}
             >
               <div className="n-label mb-1" style={{ color: "var(--n-warning)" }}>
-                PROFIL INCOMPLET
+                {t("profileIncomplete")}
               </div>
               <p className="text-sm mb-2" style={{ color: "var(--n-text-secondary)" }}>
-                Votre logo et votre photo servent à annoncer votre participation
-                sur nos réseaux sociaux. Il manque :
+                {t("profileIncompleteText")}
               </p>
               <ul className="text-sm mb-4 list-disc pl-5" style={{ color: "var(--n-text-primary)" }}>
                 {profileItems
@@ -402,7 +402,7 @@ export default function ProducerDashboardPage() {
               {/* Segmented progress */}
               <div className="mb-1 flex items-center justify-between">
                 <span className="n-label" style={{ color: "var(--n-text-disabled)" }}>
-                  PROGRESSION
+                  {t("progress")}
                 </span>
                 <span className="n-font-data text-xs" style={{ color: "var(--n-text-primary)" }}>
                   {profileScore}/{profileItems.length}
@@ -423,7 +423,7 @@ export default function ProducerDashboardPage() {
               </div>
 
               <Link href="/producer/profile" className="n-btn-secondary w-full text-xs block">
-                COMPLETER MON PROFIL
+                {t("completeProfile")}
               </Link>
             </div>
           )}
@@ -437,27 +437,27 @@ export default function ProducerDashboardPage() {
               className="text-sm font-medium mb-2"
               style={{ color: "var(--n-text-display)" }}
             >
-              Widget de distinctions
+              {t("widgetTitle")}
             </h3>
             <p className="text-sm mb-4" style={{ color: "var(--n-text-secondary)" }}>
-              Affichez vos recompenses sur votre site web.
+              {t("widgetText")}
             </p>
             <Link href="/producer/widget" className="n-btn-secondary w-full text-xs block">
-              CONFIGURER LE WIDGET
+              {t("widgetCta")}
             </Link>
           </div>
 
           {/* Quick Actions */}
           <div className="n-card">
             <div className="n-label mb-4" style={{ color: "var(--n-text-disabled)" }}>
-              ACTIONS RAPIDES
+              {t("quickActions")}
             </div>
             <div className="space-y-2">
               <Link href="/producer/results" className="n-btn-ghost w-full justify-start text-xs block">
-                VOIR MES RESULTATS
+                {t("seeResults")}
               </Link>
               <Link href="/producer/profile" className="n-btn-ghost w-full justify-start text-xs block">
-                MON PROFIL
+                {t("myProfile")}
               </Link>
             </div>
           </div>
@@ -471,10 +471,10 @@ export default function ProducerDashboardPage() {
             }}
           >
             <p className="n-label mb-1" style={{ color: "var(--n-text-disabled)" }}>
-              NOTIFICATIONS
+              {t("notifications")}
             </p>
             <p className="text-xs" style={{ color: "var(--n-text-secondary)" }}>
-              Vous recevrez un email lorsque les resultats de vos inscriptions seront disponibles.
+              {t("notificationsText")}
             </p>
           </div>
         </div>
