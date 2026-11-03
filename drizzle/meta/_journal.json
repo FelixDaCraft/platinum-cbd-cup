@@ -141,6 +141,13 @@
       "when": 1793665358292,
       "tag": "0019_traductions",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1793720974535,
+      "tag": "0020_suivi_colis",
+      "breakpoints": true
     }
   ]
 }

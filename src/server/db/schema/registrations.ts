@@ -62,6 +62,14 @@ export const registrations = pgTable(
     lastPaymentFailureAt: timestamp("last_payment_failure_at", { withTimezone: true }),
     // EventId Viva du dernier refus (motif bancaire), voir `paymentFailureLabel`.
     lastPaymentFailureCode: text("last_payment_failure_code"),
+    // Colis d'échantillons, un par inscription : déclaré expédié par le
+    // producteur (ou par l'organisation à sa place, quand il prévient par
+    // téléphone). La réception, elle, reste portée par le statut de chaque
+    // produit (voir `parcelState`). Transporteur : un identifiant connu
+    // (`SHIPPING_CARRIERS`) ou un nom libre.
+    shippedAt: timestamp("shipped_at", { withTimezone: true }),
+    shippingCarrier: text("shipping_carrier"),
+    trackingNumber: text("tracking_number"),
     // Legacy: payments taken through Stripe before the switch to Viva.com.
     // Kept read-only so old registrations keep their audit trail; nothing
     // writes to it any more.

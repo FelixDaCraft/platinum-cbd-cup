@@ -74,7 +74,50 @@ export const listByCupSchema = z.object({
   dateTo: z.date().optional(),
 });
 
+export const CARRIER_MAX = 40;
+export const TRACKING_NUMBER_MAX = 40;
+
+/**
+ * Déclaration d'expédition du colis d'échantillons, par le producteur ou par
+ * l'organisation à sa place. Le numéro de suivi est rangé sans espaces et en
+ * majuscules, comme les transporteurs l'impriment.
+ */
+export const declareShipmentSchema = z.object({
+  registrationId: z.string().min(1, "Registration ID requis"),
+  // Une saisie vide vaut « non renseigné ».
+  carrier: z
+    .string()
+    .trim()
+    .max(CARRIER_MAX, "Transporteur trop long")
+    .nullish()
+    .transform((value) => value || null),
+  trackingNumber: z
+    .string()
+    .transform((value) => value.replace(/\s+/g, "").toUpperCase())
+    .pipe(
+      z
+        .string()
+        .max(TRACKING_NUMBER_MAX, "Numéro de suivi trop long")
+        .regex(/^[A-Z0-9-]*$/, "Numéro de suivi invalide")
+    )
+    .nullish()
+    .transform((value) => value || null),
+  // Date d'envoi, par défaut aujourd'hui. Une journée de marge couvre le
+  // décalage horaire d'un producteur en avance sur le serveur.
+  shippedAt: z.coerce
+    .date()
+    .refine((date) => date.getTime() <= Date.now() + 24 * 3600 * 1000, {
+      message: "La date d'expédition ne peut pas être dans le futur",
+    })
+    .optional(),
+});
+
+export const clearShipmentSchema = z.object({
+  registrationId: z.string().min(1, "Registration ID requis"),
+});
+
 // Type exports
+export type DeclareShipmentInput = z.infer<typeof declareShipmentSchema>;
 export type StartRegistrationInput = z.infer<typeof startRegistrationSchema>;
 export type AddProductInput = z.infer<typeof addProductSchema>;
 export type UpdateProductInput = z.infer<typeof updateProductSchema>;

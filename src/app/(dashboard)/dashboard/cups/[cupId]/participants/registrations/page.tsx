@@ -48,6 +48,13 @@ import {
   type CheckoutState,
 } from "~/lib/registration-checkout";
 import { formatPhone } from "~/lib/validations/producer";
+import {
+  OrganizerShipmentForm,
+  ParcelCell,
+  parcelFilters,
+  parcelStateConfig,
+  type RegistrationShipment,
+} from "~/components/dashboard/parcel-shipment";
 
 /** Filtre par parcours : groupes, puis chaque étape du parcours. */
 const parcoursFilters: { value: string; label: string }[] = [
@@ -124,6 +131,7 @@ interface Registration {
   products: Product[];
   productCount: number;
   checkout: ProductCheckout;
+  shipment: RegistrationShipment;
   invoiceNumber: string | null;
 }
 
@@ -173,6 +181,7 @@ export default function CupRegistrationsPage() {
 
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [parcelFilter, setParcelFilter] = useState<string>("all");
   const [selectedRegistration, setSelectedRegistration] = useState<Registration | null>(null);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -232,12 +241,22 @@ export default function CupRegistrationsPage() {
     },
   });
 
+  // Le panneau garde une copie de l'inscription : on la remplace par la
+  // version rechargée pour afficher la nouvelle expédition.
+  const handleShipmentSaved = async (registrationId: string) => {
+    const { data } = await refetchRegistrations();
+    const fresh = data?.find((r) => r.id === registrationId);
+    if (fresh) setSelectedRegistration(fresh);
+  };
+
   const resetFilters = () => {
     setStatusFilter("all");
     setCategoryFilter("all");
+    setParcelFilter("all");
   };
 
-  const hasActiveFilters = statusFilter !== "all" || categoryFilter !== "all";
+  const hasActiveFilters =
+    statusFilter !== "all" || categoryFilter !== "all" || parcelFilter !== "all";
 
   if (isLoading) {
     return (
@@ -266,8 +285,10 @@ export default function CupRegistrationsPage() {
     return null;
   }
 
-  const registrations = allRegistrations.filter((r) =>
-    matchesParcours(r.checkout.state, statusFilter)
+  const registrations = allRegistrations.filter(
+    (r) =>
+      matchesParcours(r.checkout.state, statusFilter) &&
+      (parcelFilter === "all" || r.shipment.state === parcelFilter)
   );
   const competing = allRegistrations.filter((r) => isCompeting(r.checkout.state));
   const confirmedCount = competing.length;
@@ -342,6 +363,20 @@ export default function CupRegistrationsPage() {
               </SelectContent>
             </Select>
           </div>
+          <div className="w-full sm:w-[200px]">
+            <Select value={parcelFilter} onValueChange={setParcelFilter}>
+              <SelectTrigger className="h-9" aria-label="Colis">
+                <SelectValue placeholder="Colis" />
+              </SelectTrigger>
+              <SelectContent>
+                {parcelFilters.map((f) => (
+                  <SelectItem key={f.value} value={f.value}>
+                    {f.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </div>
 
@@ -366,6 +401,7 @@ export default function CupRegistrationsPage() {
                     <TableHead><span className="n-label" style={{ color: "var(--n-text-secondary)" }}>PRODUCTEUR</span></TableHead>
                     <TableHead className="hidden sm:table-cell"><span className="n-label" style={{ color: "var(--n-text-secondary)" }}>PRODUITS</span></TableHead>
                     <TableHead><span className="n-label" style={{ color: "var(--n-text-secondary)" }}>STATUT</span></TableHead>
+                    <TableHead><span className="n-label" style={{ color: "var(--n-text-secondary)" }}>COLIS</span></TableHead>
                     <TableHead className="hidden sm:table-cell"><span className="n-label" style={{ color: "var(--n-text-secondary)" }}>MONTANT</span></TableHead>
                     <TableHead className="hidden md:table-cell"><span className="n-label" style={{ color: "var(--n-text-secondary)" }}>DATE</span></TableHead>
                     <TableHead className="text-right"><span className="n-label" style={{ color: "var(--n-text-secondary)" }}>ACTIONS</span></TableHead>
@@ -396,6 +432,9 @@ export default function CupRegistrationsPage() {
                         </TableCell>
                         <TableCell>
                           <RegistrationStatusCell registration={registration} />
+                        </TableCell>
+                        <TableCell>
+                          <ParcelCell shipment={registration.shipment} />
                         </TableCell>
                         <TableCell className="hidden sm:table-cell">
                           <span style={{ fontFamily: "'Space Mono', monospace", color: "var(--n-text-primary)" }}>
@@ -462,6 +501,25 @@ export default function CupRegistrationsPage() {
                     </Button>
                   )}
                 </div>
+
+                {/* Colis d'échantillons */}
+                {isCompeting(selectedRegistration.checkout.state) && (
+                  <div className="space-y-3">
+                    <p className="n-label" style={{ color: "var(--n-text-secondary)" }}>COLIS</p>
+                    <div style={{ background: "var(--n-surface)", border: "1px solid var(--n-border)", borderRadius: "8px", padding: "14px 16px" }} className="space-y-3">
+                      <ParcelCell shipment={selectedRegistration.shipment} />
+                      <p style={{ fontSize: "12px", color: "var(--n-text-secondary)" }}>
+                        {parcelStateConfig[selectedRegistration.shipment.state].hint}
+                      </p>
+                      <OrganizerShipmentForm
+                        key={selectedRegistration.id}
+                        registrationId={selectedRegistration.id}
+                        shipment={selectedRegistration.shipment}
+                        onSaved={() => void handleShipmentSaved(selectedRegistration.id)}
+                      />
+                    </div>
+                  </div>
+                )}
 
                 {/* Company Info */}
                 <div className="space-y-3">

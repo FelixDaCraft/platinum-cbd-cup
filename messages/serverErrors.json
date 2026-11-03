@@ -68,7 +68,9 @@
     "quotaFull": "La catégorie « {category} » est complète.",
     "quotaRemaining": "Il ne reste que {remaining} place(s) dans la catégorie « {category} ».",
     "missingScores": "Notes manquantes pour {count} critère(s).",
-    "scoreRange": "La note doit être comprise entre {min} et {max}."
+    "scoreRange": "La note doit être comprise entre {min} et {max}.",
+    "shipmentUnpaid": "Finalisez le paiement de cette inscription avant de déclarer l'envoi de votre colis.",
+    "parcelReceived": "Votre colis a déjà été reçu : contactez l'organisation pour toute correction."
   },
   "en": {
     "codes": {
@@ -139,7 +141,9 @@
     "quotaFull": "The “{category}” category is full.",
     "quotaRemaining": "Only {remaining} spot(s) left in the “{category}” category.",
     "missingScores": "Scores missing for {count} criterion/criteria.",
-    "scoreRange": "The score must be between {min} and {max}."
+    "scoreRange": "The score must be between {min} and {max}.",
+    "shipmentUnpaid": "Complete payment for this entry before declaring your parcel shipped.",
+    "parcelReceived": "Your parcel has already been received: please contact the organisers for any correction."
   },
   "it": {
     "codes": {
@@ -210,7 +214,9 @@
     "quotaFull": "La categoria «{category}» è al completo.",
     "quotaRemaining": "Restano solo {remaining} posto/i nella categoria «{category}».",
     "missingScores": "Voti mancanti per {count} criterio/i.",
-    "scoreRange": "Il voto deve essere compreso tra {min} e {max}."
+    "scoreRange": "Il voto deve essere compreso tra {min} e {max}.",
+    "shipmentUnpaid": "Completa il pagamento di questa iscrizione prima di dichiarare la spedizione del pacco.",
+    "parcelReceived": "Il tuo pacco è già stato ricevuto: contatta l'organizzazione per qualsiasi correzione."
   },
   "de": {
     "codes": {
@@ -281,7 +287,9 @@
     "quotaFull": "Die Kategorie „{category}“ ist ausgebucht.",
     "quotaRemaining": "In der Kategorie „{category}“ sind nur noch {remaining} Platz/Plätze frei.",
     "missingScores": "Bewertungen fehlen für {count} Kriterium/Kriterien.",
-    "scoreRange": "Die Note muss zwischen {min} und {max} liegen."
+    "scoreRange": "Die Note muss zwischen {min} und {max} liegen.",
+    "shipmentUnpaid": "Schließen Sie die Zahlung dieser Anmeldung ab, bevor Sie den Versand Ihres Pakets melden.",
+    "parcelReceived": "Ihr Paket ist bereits eingegangen: Für Korrekturen wenden Sie sich bitte an die Organisation."
   },
   "cs": {
     "codes": {
@@ -352,7 +360,9 @@
     "quotaFull": "Kategorie „{category}“ je obsazena.",
     "quotaRemaining": "V kategorii „{category}“ zbývá jen {remaining} míst(o).",
     "missingScores": "Chybí hodnocení u {count} kritérií.",
-    "scoreRange": "Hodnocení musí být mezi {min} a {max}."
+    "scoreRange": "Hodnocení musí být mezi {min} a {max}.",
+    "shipmentUnpaid": "Před oznámením odeslání balíčku dokončete platbu této přihlášky.",
+    "parcelReceived": "Váš balíček už byl přijat: s případnými opravami se obraťte na organizátory."
   },
   "nl": {
     "codes": {
@@ -423,7 +433,9 @@
     "quotaFull": "De categorie ‘{category}’ is volzet.",
     "quotaRemaining": "Er zijn nog maar {remaining} plaats(en) vrij in de categorie ‘{category}’.",
     "missingScores": "Scores ontbreken voor {count} criterium/criteria.",
-    "scoreRange": "De score moet tussen {min} en {max} liggen."
+    "scoreRange": "De score moet tussen {min} en {max} liggen.",
+    "shipmentUnpaid": "Rond eerst de betaling van deze inschrijving af voordat je de verzending van je pakket meldt.",
+    "parcelReceived": "Je pakket is al ontvangen: neem voor correcties contact op met de organisatie."
   },
   "es": {
     "codes": {
@@ -494,6 +506,8 @@
     "quotaFull": "La categoría «{category}» está completa.",
     "quotaRemaining": "Solo quedan {remaining} plaza(s) en la categoría «{category}».",
     "missingScores": "Faltan notas para {count} criterio(s).",
-    "scoreRange": "La nota debe estar entre {min} y {max}."
+    "scoreRange": "La nota debe estar entre {min} y {max}.",
+    "shipmentUnpaid": "Completa el pago de esta inscripción antes de declarar el envío de tu paquete.",
+    "parcelReceived": "Tu paquete ya se ha recibido: para cualquier corrección, contacta con la organización."
   }
 }

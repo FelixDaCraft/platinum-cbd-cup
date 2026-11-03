@@ -26,10 +26,14 @@ import {
   getRegistrationSchema,
   getOrCreateRegistrationSchema,
   listByCupSchema,
+  declareShipmentSchema,
+  clearShipmentSchema,
+  type DeclareShipmentInput,
 } from "~/lib/validations/registration";
+import { carrierLabel, isParcelInHands, parcelState } from "~/lib/parcel-shipment";
 import { anonymizeRegistrationProducts } from "~/server/services/anonymization.service";
 import { assertJurorMayCompete } from "~/server/api/helpers/jury";
-import { checkoutState, isFailureEventId } from "~/lib/registration-checkout";
+import { checkoutState, isCompeting, isFailureEventId } from "~/lib/registration-checkout";
 import { logActivity } from "~/server/services/activity-logger";
 
 /**
@@ -297,6 +301,96 @@ async function applyRecalculatedTotal(
     paymentOrderInvalidated,
     staleOrderCode: paymentOrderInvalidated ? previous.paymentOrderCode : null,
   };
+}
+
+/**
+ * Inscription visée par une déclaration d'expédition. Côté producteur, la
+ * requête filtre sur son propre profil : l'inscription d'un autre est
+ * introuvable, au même titre qu'un identifiant inventé.
+ */
+async function findShipmentRegistration(
+  ctx: ProtectedContext,
+  registrationId: string,
+  producerId?: string
+) {
+  const registration = await ctx.db.query.registrations.findFirst({
+    where: producerId
+      ? drizzleAnd(
+          eq(schema.registrations.id, registrationId),
+          eq(schema.registrations.producerId, producerId)
+        )
+      : eq(schema.registrations.id, registrationId),
+    columns: { id: true, cupId: true, producerId: true, status: true, shippedAt: true },
+    with: {
+      cup: { columns: { name: true } },
+      producer: { columns: { brandName: true } },
+      products: { columns: { status: true } },
+    },
+  });
+
+  if (!registration) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Inscription non trouvée" });
+  }
+  return registration;
+}
+
+/** Le producteur ne déclare un colis que pour une inscription payée, et pas une fois reçu. */
+function assertProducerMayEditShipment(registration: {
+  status: string;
+  products: { status: string }[];
+}) {
+  if (registration.status !== "confirmed") {
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message: "Finalisez le paiement de cette inscription avant de déclarer l'envoi de votre colis.",
+    });
+  }
+  if (isParcelInHands(registration.products.map((p) => p.status))) {
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message: "Votre colis a déjà été reçu : contactez l'organisation pour toute correction.",
+    });
+  }
+}
+
+type ShipmentRegistration = Awaited<ReturnType<typeof findShipmentRegistration>>;
+
+async function saveShipment(
+  ctx: ProtectedContext,
+  registration: ShipmentRegistration,
+  input: DeclareShipmentInput | null,
+  by: "producer" | "organizer"
+) {
+  const shipment = {
+    shippedAt: input ? (input.shippedAt ?? new Date()) : null,
+    shippingCarrier: input?.carrier ?? null,
+    trackingNumber: input?.trackingNumber ?? null,
+  };
+
+  await ctx.db
+    .update(schema.registrations)
+    .set({ ...shipment, updatedAt: new Date() })
+    .where(eq(schema.registrations.id, registration.id));
+
+  const who = by === "organizer" ? " (saisi par l'organisation)" : "";
+  const carrier = carrierLabel(shipment.shippingCarrier);
+  void logActivity({
+    userId: ctx.userId,
+    action: "other",
+    description: input
+      ? `Colis déclaré expédié : ${registration.producer.brandName} — ${registration.cup.name}${carrier ? ` (${carrier})` : ""}${who}`
+      : `Déclaration d'expédition annulée : ${registration.producer.brandName} — ${registration.cup.name}${who}`,
+    metadata: {
+      kind: input ? "shipment_declared" : "shipment_cleared",
+      by,
+      registrationId: registration.id,
+      cupId: registration.cupId,
+      producerId: registration.producerId,
+      ...shipment,
+    },
+  });
+
+  return { registrationId: registration.id, ...shipment };
 }
 
 export const registrationRouter = createTRPCRouter({
@@ -799,6 +893,9 @@ export const registrationRouter = createTRPCRouter({
         currency: true,
         invoiceNumber: true,
         invoiceGeneratedAt: true,
+        shippedAt: true,
+        shippingCarrier: true,
+        trackingNumber: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -1437,6 +1534,45 @@ export const registrationRouter = createTRPCRouter({
       return { deleted: true as const };
     }),
 
+  /**
+   * Le producteur déclare avoir expédié son colis d'échantillons (un par
+   * inscription). Il peut corriger ou annuler tant que rien n'est reçu.
+   */
+  declareShipment: producerProcedure
+    .input(declareShipmentSchema)
+    .mutation(async ({ ctx, input }) => {
+      const registration = await findShipmentRegistration(ctx, input.registrationId, ctx.producer.id);
+      assertProducerMayEditShipment(registration);
+      return saveShipment(ctx, registration, input, "producer");
+    }),
+
+  clearShipment: producerProcedure
+    .input(clearShipmentSchema)
+    .mutation(async ({ ctx, input }) => {
+      const registration = await findShipmentRegistration(ctx, input.registrationId, ctx.producer.id);
+      assertProducerMayEditShipment(registration);
+      return saveShipment(ctx, registration, null, "producer");
+    }),
+
+  /**
+   * Saisie par l'organisation, quand le producteur prévient par téléphone.
+   * Sans restriction d'état : c'est aussi la voie de correction après
+   * réception.
+   */
+  declareShipmentByOrganizer: organizerProcedure
+    .input(declareShipmentSchema)
+    .mutation(async ({ ctx, input }) => {
+      const registration = await findShipmentRegistration(ctx, input.registrationId);
+      return saveShipment(ctx, registration, input, "organizer");
+    }),
+
+  clearShipmentByOrganizer: organizerProcedure
+    .input(clearShipmentSchema)
+    .mutation(async ({ ctx, input }) => {
+      const registration = await findShipmentRegistration(ctx, input.registrationId);
+      return saveShipment(ctx, registration, null, "organizer");
+    }),
+
   listByCup: organizerProcedure
     .input(listByCupSchema)
     .query(async ({ ctx, input }) => {
@@ -1505,17 +1641,33 @@ export const registrationRouter = createTRPCRouter({
       }
 
       // Return registrations with computed fields
-      return filteredRegistrations.map((reg) => ({
+      const now = new Date();
+      return filteredRegistrations.map((reg) => {
+        const state = checkoutState({ ...reg, productCount: reg.products.length });
+        return {
         id: reg.id,
         status: reg.status,
         invoiceNumber: reg.invoiceNumber,
         checkout: {
-          state: checkoutState({ ...reg, productCount: reg.products.length }),
+          state,
           failureCode: reg.lastPaymentFailureCode,
           failureAt: reg.lastPaymentFailureAt,
           lastAttemptAt: reg.lastPaymentAttemptAt,
           paymentAttempts: reg.paymentAttempts,
           registrationCreatedAt: reg.createdAt,
+        },
+        shipment: {
+          state: parcelState(
+            {
+              competing: isCompeting(state),
+              shippedAt: reg.shippedAt,
+              productStatuses: reg.products.map((p) => p.status),
+            },
+            now
+          ),
+          shippedAt: reg.shippedAt,
+          carrier: reg.shippingCarrier,
+          trackingNumber: reg.trackingNumber,
         },
         totalAmount: reg.totalAmount,
         currency: reg.currency,
@@ -1540,6 +1692,7 @@ export const registrationRouter = createTRPCRouter({
           category: p.category,
         })),
         productCount: reg.products.length,
-      }));
+        };
+      });
     }),
 });

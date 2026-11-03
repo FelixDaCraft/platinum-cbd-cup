@@ -71,6 +71,8 @@ const EXACT: Record<string, string> = Object.fromEntries(
       ["Certaines catégories sont invalides", "invalidCategories"],
       ["Cette catégorie n'appartient pas à cette cup", "invalidCategories"],
       ["Des produits de cette inscription ont déjà été notés : elle ne peut plus être supprimée.", "registrationRated"],
+      ["Finalisez le paiement de cette inscription avant de déclarer l'envoi de votre colis.", "shipmentUnpaid"],
+      ["Votre colis a déjà été reçu : contactez l'organisation pour toute correction.", "parcelReceived"],
       ["Un profil producteur existe déjà", "producerExists"],
       ["Vous devez avoir un profil producteur", "producerRequired"],
       ["Code non trouvé", "codeInvalid"],

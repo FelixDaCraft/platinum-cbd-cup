@@ -20,6 +20,7 @@ import { cn } from "~/lib/utils";
 import { api } from "~/trpc/react";
 import { QRCodeDisplay } from "~/components/features/products/qr-code-display";
 import { CoaControl } from "~/components/features/products/coa-control";
+import { ParcelShipmentPanel } from "~/components/producer/parcel-shipment-panel";
 import {
   convertScoreToScale,
 } from "~/lib/validations/labels";
@@ -49,6 +50,17 @@ const productStatusConfig = {
     tagStyle: undefined,
   },
 } as const;
+
+/**
+ * Libellé d'un statut produit. Un produit encore « à envoyer » dont le colis
+ * est déclaré expédié s'affiche « expédié » : il n'y a plus rien à faire.
+ */
+function statusLabelKey(
+  status: keyof typeof productStatusConfig,
+  shipped: boolean
+): string {
+  return status === "pending" && shipped ? "statusShipped" : productStatusConfig[status].labelKey;
+}
 
 function formatCurrency(amountInCents: number, currency: string, locale: Locale): string {
   return new Intl.NumberFormat(intlLocale(locale), {
@@ -135,7 +147,9 @@ export default function ProducerRegistrationsPage() {
         (r.cup.status === "completed" || r.cup.resultsPublishedAt)
     );
     const pendingPayments = registrations.filter((r) => r.status === "pending_payment");
+    // Un colis déclaré expédié n'est plus « à envoyer ».
     const productsToSend = activeCompetitions.reduce((count, reg) => {
+      if (reg.shippedAt) return count;
       return count + reg.products.filter((p) => p.status === "pending").length;
     }, 0);
     const resultsAvailable = registrations.filter(
@@ -466,7 +480,7 @@ export default function ProducerRegistrationsPage() {
                                     className="n-tag"
                                     style={statusConf.tagStyle}
                                   >
-                                    {t(statusConf.labelKey)}
+                                    {t(statusLabelKey(overallStatus as keyof typeof productStatusConfig, !!registration.shippedAt))}
                                   </span>
                                 )}
                               </div>
@@ -530,7 +544,7 @@ export default function ProducerRegistrationsPage() {
                                   className="n-tag"
                                   style={conf.tagStyle}
                                 >
-                                  {count} {t(conf.labelKey)}
+                                  {count} {t(statusLabelKey(status as keyof typeof productStatusConfig, !!registration.shippedAt))}
                                 </span>
                               );
                             })}
@@ -543,6 +557,17 @@ export default function ProducerRegistrationsPage() {
                           </div>
                         </div>
                       </CollapsibleTrigger>
+
+                      {/* Hors du déclencheur : toujours visible, et un clic
+                          dans le formulaire ne replie pas la carte. */}
+                      <ParcelShipmentPanel
+                        registrationId={registration.id}
+                        shippedAt={registration.shippedAt}
+                        carrier={registration.shippingCarrier}
+                        trackingNumber={registration.trackingNumber}
+                        productStatuses={registration.products.map((p) => p.status)}
+                        onChanged={() => void refetch()}
+                      />
 
                       <CollapsibleContent>
                         <div
@@ -607,7 +632,7 @@ export default function ProducerRegistrationsPage() {
                                   )}
                                   {pConf && (
                                     <span className="n-tag" style={pConf.tagStyle}>
-                                      {t(pConf.labelKey)}
+                                      {t(statusLabelKey(product.status as keyof typeof productStatusConfig, !!registration.shippedAt))}
                                     </span>
                                   )}
                                 </div>
