@@ -4,7 +4,10 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { useTranslations } from "next-intl";
 import { useRouter } from "~/i18n/navigation";
+import { useServerError } from "~/i18n/server-error";
+import { translateValidation } from "~/i18n/validation";
 import { api } from "~/trpc/react";
 import { GdprSettings } from "~/components/profile/gdpr-settings";
 import { authClient } from "~/lib/auth-client";
@@ -22,7 +25,7 @@ const EXPERTISE_OPTIONS = [
 ] as const;
 
 const profileSchema = z.object({
-  name: z.string().min(1, "Nom requis").max(100),
+  name: z.string().min(1, "Le nom est requis").max(100),
   email: z.string().email("Email invalide"),
   displayName: z.string().max(100).optional(),
   expertiseSelect: z.string().optional(),
@@ -195,6 +198,10 @@ type SaveStatus =
   | "email_sent";
 
 export default function JuryProfileEditPage() {
+  const t = useTranslations("juryProfile");
+  const tc = useTranslations("jurySpace");
+  const tv = useTranslations("validation");
+  const serverError = useServerError();
   const router = useRouter();
   const utils = api.useUtils();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -223,7 +230,7 @@ export default function JuryProfileEditPage() {
     },
     onError: (err) => {
       setSaveStatus("error");
-      setSaveError(err.message);
+      setSaveError(serverError(err));
       setTimeout(() => setSaveStatus("idle"), 3000);
     },
   });
@@ -316,7 +323,7 @@ export default function JuryProfileEditPage() {
         const json = (await res.json()) as { url?: string; error?: string };
 
         if (!res.ok || !json.url) {
-          throw new Error(json.error ?? "Erreur upload");
+          throw new Error(json.error ?? t("uploadError"));
         }
 
         setPendingImageUrl(json.url);
@@ -325,7 +332,7 @@ export default function JuryProfileEditPage() {
         // Revert on error
         setAvatarPreview(data?.user?.image ?? null);
         setSaveStatus("error");
-        setSaveError(err instanceof Error ? err.message : "Erreur upload avatar");
+        setSaveError(err instanceof Error ? err.message : t("avatarError"));
         setTimeout(() => setSaveStatus("idle"), 3000);
       } finally {
         setUploadingAvatar(false);
@@ -364,7 +371,7 @@ export default function JuryProfileEditPage() {
         setEmailChanged(true);
       } catch {
         setSaveStatus("error");
-        setSaveError("Impossible d'envoyer le mail de confirmation d'email");
+        setSaveError(t("emailConfirmError"));
         return;
       }
     }
@@ -407,7 +414,7 @@ export default function JuryProfileEditPage() {
           className="n-font-data n-label"
           style={{ color: "var(--n-text-secondary)", fontSize: 13 }}
         >
-          [LOADING...]
+          {tc("loading")}
         </span>
       </div>
     );
@@ -433,10 +440,10 @@ export default function JuryProfileEditPage() {
           className="n-font-data n-label"
           style={{ color: "var(--n-text-secondary)", fontSize: 13 }}
         >
-          [ERREUR] VOTRE PROFIL N&apos;A PAS PU ÊTRE CHARGÉ
+          {t("error")}
         </span>
         <button type="button" className="n-btn-secondary text-xs" onClick={() => void refetch()}>
-          RÉESSAYER
+          {tc("retry")}
         </button>
       </div>
     );
@@ -452,13 +459,13 @@ export default function JuryProfileEditPage() {
       {/* Header */}
       <div style={{ marginBottom: 32 }}>
         <p className="n-label" style={{ color: "var(--n-text-secondary)", marginBottom: 4 }}>
-          JURY · PROFIL
+          {t("eyebrow")}
         </p>
         <h1
           className="n-font-body"
           style={{ fontSize: 28, fontWeight: 600, color: "var(--n-text-display)", lineHeight: 1.1 }}
         >
-          MON PROFIL — EDITION
+          {t("title")}
         </h1>
       </div>
 
@@ -478,12 +485,12 @@ export default function JuryProfileEditPage() {
         <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
 
           {/* ── IDENTITE ── */}
-          <SectionLabel>IDENTITE</SectionLabel>
+          <SectionLabel>{t("identity")}</SectionLabel>
 
           {/* Avatar */}
           <div style={{ marginBottom: 24 }}>
             <p className="n-label" style={{ color: "var(--n-text-secondary)", marginBottom: 12 }}>
-              AVATAR
+              {t("avatar")}
             </p>
             <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
               <button
@@ -514,7 +521,7 @@ export default function JuryProfileEditPage() {
                   (e.currentTarget as HTMLButtonElement).style.borderColor =
                     "var(--n-border-visible)";
                 }}
-                aria-label="Changer l'avatar"
+                aria-label={t("changeAvatar")}
               >
                 {avatarPreview ? (
                   // 80x80 : la taille du bouton qui l'encadre. L'aperçu est
@@ -562,13 +569,13 @@ export default function JuryProfileEditPage() {
                   className="n-font-body"
                   style={{ fontSize: 13, color: "var(--n-text-secondary)", lineHeight: 1.5 }}
                 >
-                  Cliquer sur l'avatar pour changer la photo.
+                  {t("avatarHint")}
                 </p>
                 <p
                   className="n-font-body"
                   style={{ fontSize: 12, color: "var(--n-text-disabled)", lineHeight: 1.5, marginTop: 4 }}
                 >
-                  JPG, PNG ou WebP · Max 10 Mo · Converti en WebP
+                  {t("avatarFormats")}
                 </p>
               </div>
             </div>
@@ -578,7 +585,7 @@ export default function JuryProfileEditPage() {
               accept="image/jpeg,image/png,image/webp"
               style={{ display: "none" }}
               onChange={handleAvatarFileChange}
-              aria-label="Fichier avatar"
+              aria-label={t("avatarFile")}
             />
           </div>
 
@@ -589,13 +596,13 @@ export default function JuryProfileEditPage() {
               className="n-label"
               style={{ color: "var(--n-text-secondary)", display: "block", marginBottom: 4 }}
             >
-              NOM COMPLET
+              {t("fullName")}
             </label>
             <input
               id="edit-name"
               className="n-input n-font-body"
               style={{ fontSize: 15 }}
-              placeholder="Votre nom complet"
+              placeholder={t("fullNamePlaceholder")}
               {...register("name")}
             />
             {errors.name && (
@@ -603,7 +610,7 @@ export default function JuryProfileEditPage() {
                 className="n-font-data"
                 style={{ fontSize: 11, color: "var(--n-accent)", marginTop: 4 }}
               >
-                {errors.name.message}
+                {translateValidation(errors.name.message, tv)}
               </p>
             )}
           </div>
@@ -615,7 +622,7 @@ export default function JuryProfileEditPage() {
               className="n-label"
               style={{ color: "var(--n-text-secondary)", display: "block", marginBottom: 4 }}
             >
-              EMAIL
+              {t("email")}
             </label>
             <input
               id="edit-email"
@@ -630,7 +637,7 @@ export default function JuryProfileEditPage() {
                 className="n-font-data"
                 style={{ fontSize: 11, color: "var(--n-accent)", marginTop: 4 }}
               >
-                {errors.email.message}
+                {translateValidation(errors.email.message, tv)}
               </p>
             )}
           </div>
@@ -643,7 +650,7 @@ export default function JuryProfileEditPage() {
               marginBottom: 20,
             }}
           >
-            Un mail de confirmation sera envoye a la nouvelle adresse avant que le changement ne soit effectif.
+            {t("emailHint")}
           </p>
 
           {/* ── PROFIL PUBLIC ──
@@ -653,7 +660,7 @@ export default function JuryProfileEditPage() {
               toggle that does nothing for their account type. */}
           {data?.juryProfile.juryType === "pro" && (
           <>
-          <SectionLabel>PROFIL PUBLIC</SectionLabel>
+          <SectionLabel>{t("publicProfile")}</SectionLabel>
 
           {/* Expertise */}
           <div style={{ marginBottom: 20 }}>
@@ -662,7 +669,7 @@ export default function JuryProfileEditPage() {
               className="n-label"
               style={{ color: "var(--n-text-secondary)", display: "block", marginBottom: 4 }}
             >
-              EXPERTISE
+              {t("expertiseLabel")}
             </label>
             <div style={{ position: "relative" }}>
               <select
@@ -684,7 +691,7 @@ export default function JuryProfileEditPage() {
                 {...register("expertiseSelect")}
               >
                 <option value="" style={{ background: "#111111", color: "#E8E8E8" }}>
-                  — Choisir une expertise —
+                  {t("chooseExpertise")}
                 </option>
                 {EXPERTISE_OPTIONS.map((opt) => (
                   <option
@@ -692,7 +699,7 @@ export default function JuryProfileEditPage() {
                     value={opt}
                     style={{ background: "#111111", color: "#E8E8E8" }}
                   >
-                    {opt}
+                    {t(`expertise.${opt}`)}
                   </option>
                 ))}
               </select>
@@ -717,13 +724,13 @@ export default function JuryProfileEditPage() {
                   className="n-label"
                   style={{ color: "var(--n-text-secondary)", display: "block", marginBottom: 4 }}
                 >
-                  PRECISION (MAX 150 CAR.)
+                  {t("precision")}
                 </label>
                 <input
                   id="edit-expertise-custom"
                   className="n-input n-font-body"
                   style={{ fontSize: 14 }}
-                  placeholder="Decrivez votre expertise"
+                  placeholder={t("describeExpertise")}
                   maxLength={150}
                   {...register("expertiseCustom")}
                 />
@@ -738,13 +745,13 @@ export default function JuryProfileEditPage() {
               className="n-label"
               style={{ color: "var(--n-text-secondary)", display: "block", marginBottom: 4 }}
             >
-              NOM AFFICHE
+              {t("displayName")}
             </label>
             <input
               id="edit-displayname"
               className="n-input n-font-body"
               style={{ fontSize: 15 }}
-              placeholder="Alias public optionnel"
+              placeholder={t("displayNamePlaceholder")}
               {...register("displayName")}
             />
           </div>
@@ -757,7 +764,7 @@ export default function JuryProfileEditPage() {
               marginBottom: 20,
             }}
           >
-            Si vide, votre nom complet sera utilise sur les pages publiques.
+            {t("displayNameHint")}
           </p>
 
           {/* Bio */}
@@ -775,7 +782,7 @@ export default function JuryProfileEditPage() {
                 className="n-label"
                 style={{ color: "var(--n-text-secondary)" }}
               >
-                BIO
+                {t("bio")}
               </label>
               <span
                 className="n-font-data"
@@ -796,7 +803,7 @@ export default function JuryProfileEditPage() {
               className="n-textarea"
               rows={4}
               maxLength={300}
-              placeholder="Quelques mots sur votre parcours..."
+              placeholder={t("bioPlaceholder")}
               {...register("bio")}
             />
           </div>
@@ -806,8 +813,8 @@ export default function JuryProfileEditPage() {
             <NothingToggle
               checked={watchedShowPublic ?? false}
               onChange={(v) => setValue("showOnPublicResults", v, { shouldDirty: true })}
-              label="APPARAITRE SUR RESULTATS PUBLICS"
-              helperText="Si active, votre nom et votre bio seront visibles sur les pages de resultats publiques."
+              label={t("showPublic")}
+              helperText={t("showPublicHint")}
               helperColor="var(--n-accent)"
             />
           </div>
@@ -830,7 +837,7 @@ export default function JuryProfileEditPage() {
               className="n-btn-primary"
               disabled={!isFormDirty || saveStatus === "saving" || uploadingAvatar}
             >
-              {saveStatus === "saving" ? "[ENREGISTREMENT...]" : "ENREGISTRER TOUT"}
+              {saveStatus === "saving" ? t("saving") : t("saveAll")}
             </button>
 
             {/* Inline status */}
@@ -839,7 +846,7 @@ export default function JuryProfileEditPage() {
                 className="n-font-data"
                 style={{ fontSize: 12, color: "var(--n-text-disabled)", letterSpacing: "0.06em" }}
               >
-                [SAUVEGARDE]
+                {t("saved")}
               </span>
             )}
             {saveStatus === "email_sent" && (
@@ -847,7 +854,7 @@ export default function JuryProfileEditPage() {
                 className="n-font-data"
                 style={{ fontSize: 12, color: "var(--n-warning)", letterSpacing: "0.06em" }}
               >
-                [MAIL DE CONFIRMATION ENVOYE]
+                {t("emailSent")}
               </span>
             )}
             {saveStatus === "error" && (
@@ -855,7 +862,7 @@ export default function JuryProfileEditPage() {
                 className="n-font-data"
                 style={{ fontSize: 12, color: "var(--n-accent)", letterSpacing: "0.06em" }}
               >
-                [ERREUR: {saveError}]
+                {t("saveError", { message: saveError })}
               </span>
             )}
           </div>
@@ -870,7 +877,7 @@ export default function JuryProfileEditPage() {
           <div className="n-card" style={{ marginBottom: 16 }}>
             <div style={{ borderBottom: "1px solid var(--n-border)", paddingBottom: 12, marginBottom: 0 }}>
               <p className="n-label" style={{ color: "var(--n-text-secondary)" }}>
-                STATISTIQUES
+                {t("stats")}
               </p>
             </div>
 
@@ -898,8 +905,8 @@ export default function JuryProfileEditPage() {
               </div>
             </div>
 
-            <StatRow label="NOTES SOUMISES" value={myStats?.totalRatings ?? totalRatings} />
-            <StatRow label="PRODUITS ASSIGNES" value={totalProducts} />
+            <StatRow label={t("submitted")} value={myStats?.totalRatings ?? totalRatings} />
+            <StatRow label={t("assigned")} value={totalProducts} />
 
             {/* Progress */}
             {totalProducts > 0 && (
@@ -913,7 +920,7 @@ export default function JuryProfileEditPage() {
                   }}
                 >
                   <span className="n-label" style={{ color: "var(--n-text-secondary)" }}>
-                    PROGRESSION
+                    {t("progress")}
                   </span>
                   <span
                     className="n-font-data"
@@ -931,7 +938,7 @@ export default function JuryProfileEditPage() {
           <div className="n-card" style={{ marginBottom: 16 }}>
             <div style={{ borderBottom: "1px solid var(--n-border)", paddingBottom: 12 }}>
               <p className="n-label" style={{ color: "var(--n-text-secondary)" }}>
-                NOTIFICATIONS
+                {t("notifications")}
               </p>
             </div>
             <div style={{ paddingTop: 4 }}>
@@ -939,20 +946,20 @@ export default function JuryProfileEditPage() {
                 <NothingToggle
                   checked={watchedNotifyInvitation ?? true}
                   onChange={(v) => setValue("notifyOnInvitation", v, { shouldDirty: true })}
-                  label="INVITATION"
+                  label={t("invitation")}
                 />
               </div>
               <div style={{ borderBottom: "1px solid var(--n-border)" }}>
                 <NothingToggle
                   checked={watchedNotifyAssignment ?? true}
                   onChange={(v) => setValue("notifyOnAssignment", v, { shouldDirty: true })}
-                  label="ASSIGNATION"
+                  label={t("assignment")}
                 />
               </div>
               <NothingToggle
                 checked={watchedNotifyReminder ?? true}
                 onChange={(v) => setValue("notifyOnReminder", v, { shouldDirty: true })}
-                label="RAPPELS"
+                label={t("reminders")}
               />
             </div>
           </div>
@@ -962,12 +969,12 @@ export default function JuryProfileEditPage() {
             <div className="n-card" style={{ marginBottom: 16 }}>
               <div style={{ borderBottom: "1px solid var(--n-border)", paddingBottom: 12 }}>
                 <p className="n-label" style={{ color: "var(--n-text-secondary)" }}>
-                  TYPE DE JURY
+                  {t("juryType")}
                 </p>
               </div>
               <div style={{ paddingTop: 12 }}>
                 <span className="n-tag active">
-                  {data.juryProfile.juryType === "pro" ? "PRO" : "PUBLIC"}
+                  {data.juryProfile.juryType === "pro" ? t("pro") : t("public")}
                 </span>
               </div>
             </div>
@@ -981,7 +988,7 @@ export default function JuryProfileEditPage() {
               style={{ width: "100%" }}
               onClick={handleLogout}
             >
-              SE DECONNECTER
+              {t("logout")}
             </button>
           </div>
         </div>

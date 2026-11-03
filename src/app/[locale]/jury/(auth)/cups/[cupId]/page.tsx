@@ -1,7 +1,10 @@
 "use client";
 
 import { useParams } from "next/navigation";
+import { useLocale, useTranslations } from "next-intl";
 import { Link } from "~/i18n/navigation";
+import { useServerError } from "~/i18n/server-error";
+import { intlLocale, type Locale } from "~/i18n/locales";
 import { toast } from "sonner";
 
 import { api } from "~/trpc/react";
@@ -10,6 +13,10 @@ export default function PortalJuryCupPage() {
   const params = useParams();
   const cupId = params.cupId as string;
   const utils = api.useUtils();
+  const t = useTranslations("juryCup");
+  const tc = useTranslations("jurySpace");
+  const locale = useLocale() as Locale;
+  const serverError = useServerError();
 
   // Get jury cup data
   const {
@@ -24,11 +31,11 @@ export default function PortalJuryCupPage() {
   // Confirm samples mutation
   const confirmMutation = api.jury.confirmSamplesReceived.useMutation({
     onSuccess: () => {
-      toast.success("Réception des échantillons confirmée");
+      toast.success(t("samplesConfirmed"));
       void utils.jury.getMyJuryCup.invalidate({ cupId });
     },
     onError: (err) => {
-      toast.error(err.message);
+      toast.error(serverError(err));
     },
   });
 
@@ -49,7 +56,7 @@ export default function PortalJuryCupPage() {
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "400px" }}>
         <span className="n-font-data" style={{ color: "var(--n-text-disabled)", fontSize: "14px", letterSpacing: "0.1em" }}>
-          [LOADING...]
+          {tc("loading")}
         </span>
       </div>
     );
@@ -60,15 +67,15 @@ export default function PortalJuryCupPage() {
       <div style={{ maxWidth: "480px", margin: "0 auto" }}>
         <div className="n-card" style={{ padding: "32px", textAlign: "center" }}>
           <p className="n-font-data" style={{ color: "var(--n-accent)", fontSize: "12px", letterSpacing: "0.1em", marginBottom: "12px" }}>
-            [ERROR]
+            {t("error")}
           </p>
           <p className="n-font-body" style={{ color: "var(--n-text-primary)", fontSize: "18px", fontWeight: 600, marginBottom: "8px" }}>
-            Accès refusé
+            {t("accessDenied")}
           </p>
           <p className="n-font-body" style={{ color: "var(--n-text-secondary)", fontSize: "14px", marginBottom: "24px" }}>
-            {error.message}
+            {serverError(error)}
           </p>
-          <Link href="/jury" className="n-btn-secondary">Retour au dashboard</Link>
+          <Link href="/jury" className="n-btn-secondary">{t("backDashboard")}</Link>
         </div>
       </div>
     );
@@ -86,31 +93,36 @@ export default function PortalJuryCupPage() {
       <div style={{ maxWidth: "560px", margin: "0 auto" }}>
         <div className="n-card" style={{ padding: "32px" }}>
           {/* Heading */}
-          <p className="n-label" style={{ marginBottom: "8px" }}>CONFIRMATION REQUISE</p>
+          <p className="n-label" style={{ marginBottom: "8px" }}>{t("confirmRequired")}</p>
           <h1 className="n-font-body" style={{ color: "var(--n-text-display)", fontSize: "22px", fontWeight: 600, marginBottom: "4px" }}>
-            Confirmation de réception
+            {t("confirmTitle")}
           </h1>
           <p className="n-font-body" style={{ color: "var(--n-text-secondary)", fontSize: "14px", marginBottom: "24px" }}>
-            Avant de commencer à noter, confirmez avoir reçu vos échantillons pour{" "}
-            <span style={{ color: "var(--n-text-primary)", fontWeight: 500 }}>{cup.name}</span>
+            {t.rich("confirmText", {
+              cup: cup.name,
+              b: (chunks) => (
+                <span style={{ color: "var(--n-text-primary)", fontWeight: 500 }}>{chunks}</span>
+              ),
+            })}
           </p>
 
           {/* Org */}
           <div style={{ borderBottom: "1px solid var(--n-border)", paddingBottom: "20px", marginBottom: "20px" }}>
             <p className="n-font-body" style={{ color: "var(--n-text-secondary)", fontSize: "13px" }}>
-              Organisé par{" "}
-              <span style={{ color: "var(--n-text-primary)" }}>Platinum CBD Cup</span>
+              {t.rich("organizedBy", {
+                b: (chunks) => <span style={{ color: "var(--n-text-primary)" }}>{chunks}</span>,
+              })}
             </p>
           </div>
 
           {/* Checklist */}
           <div style={{ marginBottom: "24px" }}>
-            <p className="n-label" style={{ marginBottom: "12px" }}>AVANT DE CONFIRMER</p>
+            <p className="n-label" style={{ marginBottom: "12px" }}>{t("beforeConfirm")}</p>
             <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
               {[
-                "Vous avez bien reçu tous vos échantillons",
-                "Les échantillons sont en bon état",
-                "Vous êtes prêt à commencer la notation",
+                t("check1"),
+                t("check2"),
+                t("check3"),
               ].map((item) => (
                 <div key={item} style={{ display: "flex", alignItems: "flex-start", gap: "10px", paddingBottom: "10px", borderBottom: "1px solid var(--n-border)" }}>
                   <span className="n-font-data" style={{ color: "var(--n-text-disabled)", fontSize: "11px", marginTop: "2px", flexShrink: 0 }}>—</span>
@@ -123,14 +135,14 @@ export default function PortalJuryCupPage() {
           {/* Category list */}
           {jury.categoryAssignments.length > 0 && (
             <div style={{ marginBottom: "28px" }}>
-              <p className="n-label" style={{ marginBottom: "10px" }}>CATÉGORIES À NOTER</p>
+              <p className="n-label" style={{ marginBottom: "10px" }}>{t("categoriesToRate")}</p>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "8px" }}>
                 {jury.categoryAssignments.map((cat) => (
                   <span key={cat.id} className="n-tag">{cat.categoryName}</span>
                 ))}
               </div>
               <p className="n-font-data" style={{ color: "var(--n-text-disabled)", fontSize: "11px", letterSpacing: "0.08em" }}>
-                {totalProductsToRate} PRODUIT{totalProductsToRate !== 1 ? "S" : ""} À NOTER
+                {t("productsToRate", { count: totalProductsToRate })}
               </p>
             </div>
           )}
@@ -142,7 +154,7 @@ export default function PortalJuryCupPage() {
             onClick={handleConfirmSamples}
             disabled={confirmMutation.isPending}
           >
-            {confirmMutation.isPending ? "[CONFIRMATION...]" : "Je confirme avoir reçu mes échantillons"}
+            {confirmMutation.isPending ? t("confirming") : t("confirm")}
           </button>
         </div>
       </div>
@@ -166,7 +178,7 @@ export default function PortalJuryCupPage() {
         {daysRemaining !== null && (
           <div style={{ textAlign: "right", flexShrink: 0 }}>
             {isDeadlinePassed ? (
-              <span className="n-tag accent">TERMINÉ</span>
+              <span className="n-tag accent">{t("finished")}</span>
             ) : isDeadlineNear ? (
               <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "2px" }}>
                 <span
@@ -176,7 +188,7 @@ export default function PortalJuryCupPage() {
                   {daysRemaining}
                 </span>
                 <span className="n-label" style={{ color: "var(--n-warning)" }}>
-                  JOUR{daysRemaining !== 1 ? "S" : ""} RESTANT{daysRemaining !== 1 ? "S" : ""}
+                  {t("daysLeft", { count: daysRemaining })}
                 </span>
               </div>
             ) : (
@@ -188,7 +200,7 @@ export default function PortalJuryCupPage() {
                   {daysRemaining}
                 </span>
                 <span className="n-label">
-                  JOUR{daysRemaining !== 1 ? "S" : ""} RESTANT{daysRemaining !== 1 ? "S" : ""}
+                  {t("daysLeft", { count: daysRemaining })}
                 </span>
               </div>
             )}
@@ -199,24 +211,24 @@ export default function PortalJuryCupPage() {
       {/* Deadline banners */}
       {isDeadlinePassed && (
         <p className="n-font-body" style={{ color: "var(--n-accent)", fontSize: "14px", fontWeight: 500 }}>
-          Phase de notation terminée. La date limite est passée, vous ne pouvez plus modifier vos notations.
+          {t("deadlinePassed")}
         </p>
       )}
 
       {isDeadlineNear && !isDeadlinePassed && (
         <p className="n-font-body" style={{ color: "var(--n-warning)", fontSize: "14px", fontWeight: 500 }}>
-          Date limite proche — il vous reste {daysRemaining} jour{daysRemaining !== 1 ? "s" : ""} pour terminer vos notations.
+          {t("deadlineNear", { count: daysRemaining })}
         </p>
       )}
 
       {/* Progress card */}
       <div className="n-card" style={{ padding: "24px" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
-          <p className="n-label">VOTRE PROGRESSION</p>
+          <p className="n-label">{t("yourProgress")}</p>
           <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-            <span className="n-tag success">ÉCHANTILLONS REÇUS</span>
+            <span className="n-tag success">{t("samplesReceived")}</span>
             {progressPercent === 100 && (
-              <span className="n-tag success">TERMINÉ</span>
+              <span className="n-tag success">{t("finished")}</span>
             )}
           </div>
         </div>
@@ -234,7 +246,7 @@ export default function PortalJuryCupPage() {
           >
             {ratedProductsCount} / {totalProductsToRate}
           </p>
-          <p className="n-label">PRODUITS NOTÉS</p>
+          <p className="n-label">{t("productsRated")}</p>
         </div>
 
         <div className="n-progress-bar" style={{ marginBottom: "12px" }}>
@@ -259,28 +271,32 @@ export default function PortalJuryCupPage() {
                 : "var(--n-text-disabled)",
             }}
           >
-            DATE LIMITE :{" "}
-            {new Date(cup.ratingEndDate).toLocaleDateString("fr-FR", {
-              weekday: "long",
-              day: "numeric",
-              month: "long",
-              year: "numeric",
-            }).toUpperCase()}
+            {t("deadline", {
+              date: new Date(cup.ratingEndDate)
+                .toLocaleDateString(intlLocale(locale), {
+                  weekday: "long",
+                  day: "numeric",
+                  month: "long",
+                  year: "numeric",
+                  timeZone: "Europe/Paris",
+                })
+                .toUpperCase(),
+            })}
           </p>
         )}
       </div>
 
       {/* Categories */}
       <div>
-        <p className="n-label" style={{ marginBottom: "12px" }}>CATÉGORIES À NOTER</p>
+        <p className="n-label" style={{ marginBottom: "12px" }}>{t("categoriesToRate")}</p>
 
         {jury.categoryAssignments.length === 0 ? (
           <div className="n-card" style={{ padding: "32px", textAlign: "center" }}>
             <p className="n-font-body" style={{ color: "var(--n-text-secondary)", fontSize: "14px", marginBottom: "4px" }}>
-              Aucune catégorie assignée
+              {t("noCategory")}
             </p>
             <p className="n-font-body" style={{ color: "var(--n-text-disabled)", fontSize: "13px" }}>
-              L&apos;organisateur doit vous assigner des catégories
+              {t("noCategoryText")}
             </p>
           </div>
         ) : (

@@ -1,0 +1,296 @@
+{
+  "fr": {
+    "modal": {
+      "allDone": "TOUTES LES NOTATIONS TERMINÉES",
+      "allDoneText": "Vous avez noté tous les produits qui vous sont assignés. Merci pour votre contribution.",
+      "categoryDone": "CATÉGORIE TERMINÉE",
+      "categoryDoneText": "Toutes vos notations pour cette catégorie sont enregistrées.",
+      "submitted": "NOTATION SOUMISE",
+      "submittedText": "Votre notation a bien été enregistrée et verrouillée.",
+      "draft": "BROUILLON ENREGISTRÉ",
+      "draftText": "Votre progression est sauvegardée. Vous pouvez reprendre plus tard.",
+      "labelSubmitted": "SOUMIS",
+      "labelDraft": "BROUILLON",
+      "next": "PRODUIT SUIVANT",
+      "dashboard": "VOIR LE TABLEAU DE BORD",
+      "backCategory": "RETOUR À LA CATÉGORIE"
+    },
+    "ratings": {
+      "error": "ERREUR",
+      "title": "NOTES SOUMISES",
+      "subtitle": "Historique de vos évaluations",
+      "submitted": "NOTES SOUMISES",
+      "competitions": "ÉDITIONS",
+      "empty": "AUCUNE NOTE SOUMISE",
+      "emptyText": "Rendez-vous dans « Noter » pour commencer.",
+      "deadline": "LIMITE : {date}",
+      "noDeadline": "PAS DE DATE LIMITE",
+      "count": "{count, plural, one {# NOTE} other {# NOTES}}",
+      "category": "CATÉGORIE",
+      "action": "ACTION",
+      "view": "Voir",
+      "noCategory": "Aucune catégorie assignée"
+    },
+    "results": {
+      "error": "[ERREUR] LES RÉSULTATS N'ONT PAS PU ÊTRE CHARGÉS",
+      "title": "RÉSULTATS",
+      "subtitle": "Consultez vos résultats et la correspondance codes / variétés / producteurs",
+      "publishedOn": "PUBLIÉ LE {date}",
+      "products": "{count, plural, one {# PRODUIT} other {# PRODUITS}}",
+      "empty": "AUCUN RÉSULTAT DISPONIBLE",
+      "emptyText": "Les résultats seront disponibles une fois les cups terminées et les résultats publiés."
+    }
+  },
+  "en": {
+    "modal": {
+      "allDone": "ALL SCORING COMPLETE",
+      "allDoneText": "You have scored every product assigned to you. Thank you for your contribution.",
+      "categoryDone": "CATEGORY COMPLETE",
+      "categoryDoneText": "All your scores for this category have been saved.",
+      "submitted": "SCORES SUBMITTED",
+      "submittedText": "Your scores have been saved and locked.",
+      "draft": "DRAFT SAVED",
+      "draftText": "Your progress has been saved. You can pick up where you left off later.",
+      "labelSubmitted": "SUBMITTED",
+      "labelDraft": "DRAFT",
+      "next": "NEXT PRODUCT",
+      "dashboard": "VIEW THE DASHBOARD",
+      "backCategory": "BACK TO THE CATEGORY"
+    },
+    "ratings": {
+      "error": "ERROR",
+      "title": "SUBMITTED SCORES",
+      "subtitle": "History of your evaluations",
+      "submitted": "SCORES SUBMITTED",
+      "competitions": "EDITIONS",
+      "empty": "NO SCORES SUBMITTED",
+      "emptyText": "Go to “Score” to get started.",
+      "deadline": "DEADLINE: {date}",
+      "noDeadline": "NO DEADLINE",
+      "count": "{count, plural, one {# SCORE} other {# SCORES}}",
+      "category": "CATEGORY",
+      "action": "ACTION",
+      "view": "View",
+      "noCategory": "No category assigned"
+    },
+    "results": {
+      "error": "[ERROR] THE RESULTS COULD NOT BE LOADED",
+      "title": "RESULTS",
+      "subtitle": "See your results and how codes match strains and producers",
+      "publishedOn": "PUBLISHED ON {date}",
+      "products": "{count, plural, one {# PRODUCT} other {# PRODUCTS}}",
+      "empty": "NO RESULTS AVAILABLE",
+      "emptyText": "Results will be available once the cups are over and the results have been published."
+    }
+  },
+  "it": {
+    "modal": {
+      "allDone": "TUTTE LE VALUTAZIONI COMPLETATE",
+      "allDoneText": "Hai valutato tutti i prodotti che ti sono stati assegnati. Grazie per il tuo contributo.",
+      "categoryDone": "CATEGORIA COMPLETATA",
+      "categoryDoneText": "Tutte le tue valutazioni per questa categoria sono state salvate.",
+      "submitted": "VALUTAZIONE INVIATA",
+      "submittedText": "La tua valutazione è stata salvata e bloccata.",
+      "draft": "BOZZA SALVATA",
+      "draftText": "I tuoi progressi sono stati salvati. Puoi riprendere più tardi.",
+      "labelSubmitted": "INVIATA",
+      "labelDraft": "BOZZA",
+      "next": "PRODOTTO SUCCESSIVO",
+      "dashboard": "VAI ALLA DASHBOARD",
+      "backCategory": "TORNA ALLA CATEGORIA"
+    },
+    "ratings": {
+      "error": "ERRORE",
+      "title": "VOTI INVIATI",
+      "subtitle": "Lo storico delle tue valutazioni",
+      "submitted": "VOTI INVIATI",
+      "competitions": "EDIZIONI",
+      "empty": "NESSUN VOTO INVIATO",
+      "emptyText": "Vai su «Valuta» per iniziare.",
+      "deadline": "SCADENZA: {date}",
+      "noDeadline": "NESSUNA SCADENZA",
+      "count": "{count, plural, one {# VOTO} other {# VOTI}}",
+      "category": "CATEGORIA",
+      "action": "AZIONE",
+      "view": "Vedi",
+      "noCategory": "Nessuna categoria assegnata"
+    },
+    "results": {
+      "error": "[ERRORE] IMPOSSIBILE CARICARE I RISULTATI",
+      "title": "RISULTATI",
+      "subtitle": "Consulta i tuoi risultati e la corrispondenza tra codici, varietà e produttori",
+      "publishedOn": "PUBBLICATI IL {date}",
+      "products": "{count, plural, one {# PRODOTTO} other {# PRODOTTI}}",
+      "empty": "NESSUN RISULTATO DISPONIBILE",
+      "emptyText": "I risultati saranno disponibili quando le cup saranno concluse e i risultati pubblicati."
+    }
+  },
+  "de": {
+    "modal": {
+      "allDone": "ALLE BEWERTUNGEN ABGESCHLOSSEN",
+      "allDoneText": "Sie haben alle Ihnen zugewiesenen Produkte bewertet. Vielen Dank für Ihren Beitrag.",
+      "categoryDone": "KATEGORIE ABGESCHLOSSEN",
+      "categoryDoneText": "Alle Ihre Bewertungen für diese Kategorie sind gespeichert.",
+      "submitted": "BEWERTUNG ABGEGEBEN",
+      "submittedText": "Ihre Bewertung wurde gespeichert und gesperrt.",
+      "draft": "ENTWURF GESPEICHERT",
+      "draftText": "Ihr Fortschritt ist gespeichert. Sie können später weitermachen.",
+      "labelSubmitted": "ABGEGEBEN",
+      "labelDraft": "ENTWURF",
+      "next": "NÄCHSTES PRODUKT",
+      "dashboard": "ZUM DASHBOARD",
+      "backCategory": "ZURÜCK ZUR KATEGORIE"
+    },
+    "ratings": {
+      "error": "FEHLER",
+      "title": "ABGEGEBENE BEWERTUNGEN",
+      "subtitle": "Verlauf Ihrer Bewertungen",
+      "submitted": "ABGEGEBENE BEWERTUNGEN",
+      "competitions": "AUSGABEN",
+      "empty": "KEINE BEWERTUNGEN ABGEGEBEN",
+      "emptyText": "Gehen Sie zu „Bewerten“, um zu beginnen.",
+      "deadline": "FRIST: {date}",
+      "noDeadline": "KEINE FRIST",
+      "count": "{count, plural, one {# BEWERTUNG} other {# BEWERTUNGEN}}",
+      "category": "KATEGORIE",
+      "action": "AKTION",
+      "view": "Ansehen",
+      "noCategory": "Keine Kategorie zugewiesen"
+    },
+    "results": {
+      "error": "[FEHLER] DIE ERGEBNISSE KONNTEN NICHT GELADEN WERDEN",
+      "title": "ERGEBNISSE",
+      "subtitle": "Sehen Sie Ihre Ergebnisse und die Zuordnung von Codes, Sorten und Produzenten",
+      "publishedOn": "VERÖFFENTLICHT AM {date}",
+      "products": "{count, plural, one {# PRODUKT} other {# PRODUKTE}}",
+      "empty": "KEINE ERGEBNISSE VERFÜGBAR",
+      "emptyText": "Die Ergebnisse sind verfügbar, sobald die Cups beendet und die Ergebnisse veröffentlicht sind."
+    }
+  },
+  "cs": {
+    "modal": {
+      "allDone": "VŠECHNA HODNOCENÍ DOKONČENA",
+      "allDoneText": "Ohodnotili jste všechny přidělené produkty. Děkujeme za váš přínos.",
+      "categoryDone": "KATEGORIE DOKONČENA",
+      "categoryDoneText": "Všechna vaše hodnocení v této kategorii jsou uložena.",
+      "submitted": "HODNOCENÍ ODESLÁNO",
+      "submittedText": "Vaše hodnocení bylo uloženo a uzamčeno.",
+      "draft": "KONCEPT ULOŽEN",
+      "draftText": "Váš postup je uložen. Můžete pokračovat později.",
+      "labelSubmitted": "ODESLÁNO",
+      "labelDraft": "KONCEPT",
+      "next": "DALŠÍ PRODUKT",
+      "dashboard": "ZOBRAZIT PŘEHLED",
+      "backCategory": "ZPĚT NA KATEGORII"
+    },
+    "ratings": {
+      "error": "CHYBA",
+      "title": "ODESLANÁ HODNOCENÍ",
+      "subtitle": "Historie vašich hodnocení",
+      "submitted": "ODESLANÁ HODNOCENÍ",
+      "competitions": "ROČNÍKY",
+      "empty": "ŽÁDNÉ ODESLANÉ HODNOCENÍ",
+      "emptyText": "Začněte v sekci „Hodnotit“.",
+      "deadline": "TERMÍN: {date}",
+      "noDeadline": "BEZ TERMÍNU",
+      "count": "{count, plural, one {# HODNOCENÍ} few {# HODNOCENÍ} other {# HODNOCENÍ}}",
+      "category": "KATEGORIE",
+      "action": "AKCE",
+      "view": "Zobrazit",
+      "noCategory": "Žádná přidělená kategorie"
+    },
+    "results": {
+      "error": "[CHYBA] VÝSLEDKY SE NEPODAŘILO NAČÍST",
+      "title": "VÝSLEDKY",
+      "subtitle": "Prohlédněte si své výsledky a přiřazení kódů k odrůdám a pěstitelům",
+      "publishedOn": "ZVEŘEJNĚNO {date}",
+      "products": "{count, plural, one {# PRODUKT} few {# PRODUKTY} other {# PRODUKTŮ}}",
+      "empty": "ŽÁDNÉ VÝSLEDKY K DISPOZICI",
+      "emptyText": "Výsledky budou k dispozici po skončení cupů a zveřejnění výsledků."
+    }
+  },
+  "nl": {
+    "modal": {
+      "allDone": "ALLE BEOORDELINGEN AFGEROND",
+      "allDoneText": "Je hebt alle aan jou toegewezen producten beoordeeld. Bedankt voor je bijdrage.",
+      "categoryDone": "CATEGORIE AFGEROND",
+      "categoryDoneText": "Al je beoordelingen voor deze categorie zijn opgeslagen.",
+      "submitted": "BEOORDELING INGEDIEND",
+      "submittedText": "Je beoordeling is opgeslagen en vergrendeld.",
+      "draft": "CONCEPT OPGESLAGEN",
+      "draftText": "Je voortgang is opgeslagen. Je kunt later verdergaan.",
+      "labelSubmitted": "INGEDIEND",
+      "labelDraft": "CONCEPT",
+      "next": "VOLGEND PRODUCT",
+      "dashboard": "NAAR HET DASHBOARD",
+      "backCategory": "TERUG NAAR DE CATEGORIE"
+    },
+    "ratings": {
+      "error": "FOUT",
+      "title": "INGEDIENDE SCORES",
+      "subtitle": "Geschiedenis van je beoordelingen",
+      "submitted": "INGEDIENDE SCORES",
+      "competitions": "EDITIES",
+      "empty": "GEEN SCORES INGEDIEND",
+      "emptyText": "Ga naar ‘Beoordelen’ om te beginnen.",
+      "deadline": "DEADLINE: {date}",
+      "noDeadline": "GEEN DEADLINE",
+      "count": "{count, plural, one {# SCORE} other {# SCORES}}",
+      "category": "CATEGORIE",
+      "action": "ACTIE",
+      "view": "Bekijken",
+      "noCategory": "Geen categorie toegewezen"
+    },
+    "results": {
+      "error": "[FOUT] DE RESULTATEN KONDEN NIET WORDEN GELADEN",
+      "title": "RESULTATEN",
+      "subtitle": "Bekijk je resultaten en welke codes bij welke rassen en producenten horen",
+      "publishedOn": "GEPUBLICEERD OP {date}",
+      "products": "{count, plural, one {# PRODUCT} other {# PRODUCTEN}}",
+      "empty": "GEEN RESULTATEN BESCHIKBAAR",
+      "emptyText": "De resultaten zijn beschikbaar zodra de cups voorbij zijn en de resultaten zijn gepubliceerd."
+    }
+  },
+  "es": {
+    "modal": {
+      "allDone": "TODAS LAS EVALUACIONES TERMINADAS",
+      "allDoneText": "Has evaluado todos los productos que tenías asignados. Gracias por tu contribución.",
+      "categoryDone": "CATEGORÍA TERMINADA",
+      "categoryDoneText": "Todas tus evaluaciones de esta categoría se han guardado.",
+      "submitted": "EVALUACIÓN ENVIADA",
+      "submittedText": "Tu evaluación se ha guardado y bloqueado.",
+      "draft": "BORRADOR GUARDADO",
+      "draftText": "Tu progreso se ha guardado. Puedes continuar más tarde.",
+      "labelSubmitted": "ENVIADO",
+      "labelDraft": "BORRADOR",
+      "next": "PRODUCTO SIGUIENTE",
+      "dashboard": "VER EL PANEL",
+      "backCategory": "VOLVER A LA CATEGORÍA"
+    },
+    "ratings": {
+      "error": "ERROR",
+      "title": "NOTAS ENVIADAS",
+      "subtitle": "Historial de tus evaluaciones",
+      "submitted": "NOTAS ENVIADAS",
+      "competitions": "EDICIONES",
+      "empty": "NINGUNA NOTA ENVIADA",
+      "emptyText": "Ve a «Evaluar» para empezar.",
+      "deadline": "FECHA LÍMITE: {date}",
+      "noDeadline": "SIN FECHA LÍMITE",
+      "count": "{count, plural, one {# NOTA} other {# NOTAS}}",
+      "category": "CATEGORÍA",
+      "action": "ACCIÓN",
+      "view": "Ver",
+      "noCategory": "Ninguna categoría asignada"
+    },
+    "results": {
+      "error": "[ERROR] NO SE HAN PODIDO CARGAR LOS RESULTADOS",
+      "title": "RESULTADOS",
+      "subtitle": "Consulta tus resultados y la correspondencia entre códigos, variedades y productores",
+      "publishedOn": "PUBLICADO EL {date}",
+      "products": "{count, plural, one {# PRODUCTO} other {# PRODUCTOS}}",
+      "empty": "NINGÚN RESULTADO DISPONIBLE",
+      "emptyText": "Los resultados estarán disponibles cuando las cups hayan terminado y se hayan publicado los resultados."
+    }
+  }
+}

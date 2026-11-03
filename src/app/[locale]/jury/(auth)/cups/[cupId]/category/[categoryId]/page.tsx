@@ -1,7 +1,9 @@
 "use client";
 
 import { useParams } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { Link } from "~/i18n/navigation";
+import { useServerError } from "~/i18n/server-error";
 
 import { api } from "~/trpc/react";
 import { getMaxScoreForScale } from "~/lib/validations/labels";
@@ -11,6 +13,9 @@ export default function PortalCategoryProductsPage() {
   const params = useParams();
   const cupId = params.cupId as string;
   const categoryId = params.categoryId as string;
+  const t = useTranslations("juryCup");
+  const tc = useTranslations("jurySpace");
+  const serverError = useServerError();
 
   // Reuse getMyJuryCup query
   const {
@@ -35,7 +40,7 @@ export default function PortalCategoryProductsPage() {
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "400px" }}>
         <span className="n-font-data" style={{ color: "var(--n-text-disabled)", fontSize: "14px", letterSpacing: "0.1em" }}>
-          [LOADING...]
+          {tc("loading")}
         </span>
       </div>
     );
@@ -46,15 +51,15 @@ export default function PortalCategoryProductsPage() {
       <div style={{ maxWidth: "480px", margin: "0 auto" }}>
         <div className="n-card" style={{ padding: "32px", textAlign: "center" }}>
           <p className="n-font-data" style={{ color: "var(--n-accent)", fontSize: "12px", letterSpacing: "0.1em", marginBottom: "12px" }}>
-            [ERROR]
+            {t("error")}
           </p>
           <p className="n-font-body" style={{ color: "var(--n-text-primary)", fontSize: "18px", fontWeight: 600, marginBottom: "8px" }}>
-            Accès refusé
+            {t("accessDenied")}
           </p>
           <p className="n-font-body" style={{ color: "var(--n-text-secondary)", fontSize: "14px", marginBottom: "24px" }}>
-            {error.message}
+            {serverError(error)}
           </p>
-          <Link href={`/jury/cups/${cupId}`} className="n-btn-secondary">Retour</Link>
+          <Link href={`/jury/cups/${cupId}`} className="n-btn-secondary">{t("back")}</Link>
         </div>
       </div>
     );
@@ -75,15 +80,15 @@ export default function PortalCategoryProductsPage() {
       <div style={{ maxWidth: "480px", margin: "0 auto" }}>
         <div className="n-card" style={{ padding: "32px", textAlign: "center" }}>
           <p className="n-font-data" style={{ color: "var(--n-accent)", fontSize: "12px", letterSpacing: "0.1em", marginBottom: "12px" }}>
-            [ERROR]
+            {t("error")}
           </p>
           <p className="n-font-body" style={{ color: "var(--n-text-primary)", fontSize: "18px", fontWeight: 600, marginBottom: "8px" }}>
-            Catégorie non trouvée
+            {t("categoryNotFound")}
           </p>
           <p className="n-font-body" style={{ color: "var(--n-text-secondary)", fontSize: "14px", marginBottom: "24px" }}>
-            Vous n&apos;êtes pas assigné à cette catégorie
+            {t("notAssigned")}
           </p>
-          <Link href={`/jury/cups/${cupId}`} className="n-btn-secondary">Retour</Link>
+          <Link href={`/jury/cups/${cupId}`} className="n-btn-secondary">{t("back")}</Link>
         </div>
       </div>
     );
@@ -145,11 +150,11 @@ export default function PortalCategoryProductsPage() {
         {daysRemaining !== null && (
           <div style={{ flexShrink: 0 }}>
             {isDeadlinePassed ? (
-              <span className="n-tag accent">TERMINÉ</span>
+              <span className="n-tag accent">{t("finished")}</span>
             ) : daysRemaining <= 3 ? (
-              <span className="n-tag warning">{daysRemaining}J</span>
+              <span className="n-tag warning">{t("daysShort", { count: daysRemaining })}</span>
             ) : (
-              <span className="n-tag">{daysRemaining}J</span>
+              <span className="n-tag">{t("daysShort", { count: daysRemaining })}</span>
             )}
           </div>
         )}
@@ -158,7 +163,7 @@ export default function PortalCategoryProductsPage() {
       {/* Deadline warning */}
       {isDeadlinePassed && (
         <p className="n-font-body" style={{ color: "var(--n-accent)", fontSize: "14px", fontWeight: 500 }}>
-          Phase de notation terminée. Vous ne pouvez plus modifier vos notations.
+          {t("ratingOver")}
         </p>
       )}
 
@@ -180,10 +185,10 @@ export default function PortalCategoryProductsPage() {
             >
               {ratedCount} / {categoryProducts.length}
             </p>
-            <p className="n-label">PRODUITS NOTÉS</p>
+            <p className="n-label">{t("productsRated")}</p>
           </div>
           {ratedCount === categoryProducts.length && categoryProducts.length > 0 && (
-            <span className="n-tag success">TERMINÉ</span>
+            <span className="n-tag success">{t("finished")}</span>
           )}
         </div>
         <div className="n-progress-bar">
@@ -198,12 +203,12 @@ export default function PortalCategoryProductsPage() {
 
       {/* Products list */}
       <div>
-        <p className="n-label" style={{ marginBottom: "12px" }}>PRODUITS À NOTER</p>
+        <p className="n-label" style={{ marginBottom: "12px" }}>{t("productsToRateLabel")}</p>
 
         {categoryProducts.length === 0 ? (
           <div className="n-card" style={{ padding: "32px", textAlign: "center" }}>
             <p className="n-font-body" style={{ color: "var(--n-text-secondary)", fontSize: "14px" }}>
-              Aucun produit dans cette catégorie
+              {t("noProducts")}
             </p>
           </div>
         ) : (
@@ -227,10 +232,10 @@ export default function PortalCategoryProductsPage() {
 
               const stateLabel =
                 state === "rated"
-                  ? "NOTE SOUMISE"
+                  ? t("stateRated")
                   : state === "draft"
-                  ? "BROUILLON"
-                  : "À NOTER";
+                  ? t("stateDraft")
+                  : t("statePending");
 
               return (
                 <Link

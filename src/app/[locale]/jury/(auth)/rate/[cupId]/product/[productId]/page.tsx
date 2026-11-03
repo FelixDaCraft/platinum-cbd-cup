@@ -3,7 +3,9 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams } from "next/navigation";
 import { Link, useRouter } from "~/i18n/navigation";
+import { useTranslations } from "next-intl";
 import { toast } from "sonner";
+import { useServerError } from "~/i18n/server-error";
 
 import { api } from "~/trpc/react";
 import { authClient } from "~/lib/auth-client";
@@ -17,6 +19,9 @@ type ModalState =
   | { open: true; mode: PostRatingChoiceModalProps["mode"]; nextProductId: string | null; allCategoryComplete: boolean; allComplete: boolean };
 
 export default function RatingPage() {
+  const t = useTranslations("juryRate");
+  const tc = useTranslations("jurySpace");
+  const serverError = useServerError();
   const params = useParams();
   const router = useRouter();
   const cupId = params.cupId as string;
@@ -80,7 +85,7 @@ export default function RatingPage() {
       }
     },
     onError: (error) => {
-      toast.error(error.message);
+      toast.error(serverError(error));
     },
   });
 
@@ -122,8 +127,8 @@ export default function RatingPage() {
         if (Date.now() - payload.timestamp < 24 * 60 * 60 * 1000) {
           setScores(new Map(payload.scores));
           setComment(payload.comment);
-          toast.info("Brouillon local restaure", {
-            description: "Vos notes precedentes ont ete recuperees",
+          toast.info(t("draftRestored"), {
+            description: t("draftRestoredText"),
           });
         }
       }
@@ -200,7 +205,7 @@ export default function RatingPage() {
 
   const handleSaveDraft = () => {
     if (scores.size === 0) {
-      toast.error("Veuillez noter au moins un critere");
+      toast.error(t("rateOne"));
       return;
     }
 
@@ -223,7 +228,7 @@ export default function RatingPage() {
     const missing = allCriteria.filter((id) => !scores.has(id));
 
     if (missing.length > 0) {
-      toast.error(`Veuillez noter tous les criteres (${missing.length} manquant${missing.length > 1 ? "s" : ""})`);
+      toast.error(t("rateAll", { count: missing.length }));
       return;
     }
 
@@ -275,7 +280,7 @@ export default function RatingPage() {
             letterSpacing: "0.1em",
           }}
         >
-          [LOADING...]
+          {tc("loading")}
         </span>
       </div>
     );
@@ -309,7 +314,7 @@ export default function RatingPage() {
               marginBottom: "8px",
             }}
           >
-            ACCES REQUIS
+            {t("accessRequired")}
           </p>
           <p
             style={{
@@ -320,7 +325,7 @@ export default function RatingPage() {
               lineHeight: 1.5,
             }}
           >
-            Vous devez etre connecte pour acceder a l&apos;interface de notation.
+            {t("mustLogin")}
           </p>
           <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
             <Link
@@ -328,7 +333,7 @@ export default function RatingPage() {
               className="n-btn-primary"
               style={{ textAlign: "center", textDecoration: "none" }}
             >
-              SE CONNECTER
+              {t("login")}
             </Link>
             <Link
               href="/"
@@ -374,10 +379,10 @@ export default function RatingPage() {
               marginBottom: "8px",
             }}
           >
-            {isUnauthorized && "CONNEXION REQUISE"}
-            {isForbidden && "ACCES REFUSE"}
-            {isPrecondition && "ECHANTILLONS NON CONFIRMES"}
-            {!isUnauthorized && !isForbidden && !isPrecondition && "ERREUR"}
+            {isUnauthorized && t("loginRequired")}
+            {isForbidden && t("accessDenied")}
+            {isPrecondition && t("samplesNotConfirmed")}
+            {!isUnauthorized && !isForbidden && !isPrecondition && t("error")}
           </p>
           <p
             style={{
@@ -388,7 +393,7 @@ export default function RatingPage() {
               lineHeight: 1.5,
             }}
           >
-            {error.message}
+            {serverError(error)}
           </p>
           <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
             {isPrecondition && (
@@ -397,7 +402,7 @@ export default function RatingPage() {
                 className="n-btn-primary"
                 style={{ textAlign: "center", textDecoration: "none" }}
               >
-                CONFIRMER LA RECEPTION
+                {t("confirmReceipt")}
               </Link>
             )}
             <Link
@@ -405,7 +410,7 @@ export default function RatingPage() {
               className="n-btn-ghost"
               style={{ textAlign: "center", textDecoration: "none" }}
             >
-              RETOUR AU DASHBOARD
+              {t("backDashboard")}
             </Link>
           </div>
         </div>
@@ -431,22 +436,22 @@ export default function RatingPage() {
   // Auto-save status label
   const autoSaveLabel =
     autoSaveStatus === "saving"
-      ? "[SAVING...]"
+      ? t("saving")
       : autoSaveStatus === "saved"
-        ? "[SAVED]"
+        ? t("saved")
         : autoSaveStatus === "error"
-          ? "[ERROR]"
+          ? t("saveError")
           : null;
 
-  // Le libellé visible est en anglais télégraphique ; on double d'un texte
-  // français lisible pour les lecteurs d'écran.
+  // Le libellé visible est télégraphique ; on double d'un texte lisible
+  // pour les lecteurs d'écran.
   const autoSaveSpokenLabel =
     autoSaveStatus === "saving"
-      ? "Enregistrement en cours"
+      ? t("savingSpoken")
       : autoSaveStatus === "saved"
-        ? "Notes enregistrées"
+        ? t("savedSpoken")
         : autoSaveStatus === "error"
-          ? "Échec de l'enregistrement"
+          ? t("saveErrorSpoken")
           : "";
 
   return (
@@ -492,7 +497,7 @@ export default function RatingPage() {
                   letterSpacing: "0.1em",
                 }}
               >
-                [SUBMITTED]
+                {t("submitted")}
               </span>
             )}
             {/* Région live rendue en permanence : un lecteur d'écran n'annonce
@@ -582,7 +587,7 @@ export default function RatingPage() {
                 letterSpacing: "0.1em",
               }}
             >
-              [SUBMITTED] — Les modifications ne sont plus possibles.
+              {t("submittedNotice")}
             </p>
           </div>
         )}
@@ -604,10 +609,10 @@ export default function RatingPage() {
               color: "var(--n-text-primary)",
             }}
           >
-            Notation
+            {t("rating")}
           </p>
           <span className="n-label">
-            {scoredCount} / {totalCount} CRITERE{totalCount !== 1 ? "S" : ""}
+            {t("criteriaCount", { scored: scoredCount, total: totalCount })}
           </span>
         </div>
 
@@ -629,7 +634,7 @@ export default function RatingPage() {
                 letterSpacing: "0.1em",
               }}
             >
-              AUCUN CRITERE CONFIGURE
+              {t("noCriteria")}
             </p>
             <p
               style={{
@@ -639,7 +644,7 @@ export default function RatingPage() {
                 marginTop: "8px",
               }}
             >
-              L&apos;organisateur doit configurer les criteres de notation
+              {t("noCriteriaText")}
             </p>
           </div>
         )}
@@ -726,7 +731,7 @@ export default function RatingPage() {
                         key={score}
                         type="button"
                         aria-pressed={isSelected}
-                        aria-label={`${criterion.name} : ${score} sur ${maxScore}`}
+                        aria-label={t("scoreAria", { criterion: criterion.name, score, max: maxScore })}
                         onClick={() => handleScoreChange(criterion.id, score)}
                         disabled={isSubmitted || submitMutation.isPending}
                         style={{
@@ -803,7 +808,7 @@ export default function RatingPage() {
                   color: "var(--n-text-secondary)",
                 }}
               >
-                SCORE MOYEN PONDERE
+                {t("weightedAverage")}
               </span>
             </div>
 
@@ -843,11 +848,11 @@ export default function RatingPage() {
                   color: "var(--n-text-primary)",
                 }}
               >
-                Commentaire{" "}
+                {t("comment")}{" "}
                 <span
                   style={{ fontWeight: 400, color: "var(--n-text-secondary)" }}
                 >
-                  (optionnel)
+                  {t("optional")}
                 </span>
               </label>
               <span
@@ -868,7 +873,7 @@ export default function RatingPage() {
               id="rating-comment"
               className="n-textarea"
               maxLength={500}
-              placeholder="Vos remarques sur ce produit..."
+              placeholder={t("commentPlaceholder")}
               value={comment}
               onChange={(e) => setComment(e.target.value.slice(0, 500))}
               disabled={isSubmitted || submitMutation.isPending}
@@ -903,8 +908,8 @@ export default function RatingPage() {
                 }}
               >
                 {submitMutation.isPending && submitMutation.variables?.submit
-                  ? "[SUBMITTING...]"
-                  : "VALIDER LA NOTATION"}
+                  ? t("submitting")
+                  : t("submit")}
               </button>
               <button
                 className="n-btn-secondary"
@@ -916,8 +921,8 @@ export default function RatingPage() {
                 }}
               >
                 {submitMutation.isPending && !submitMutation.variables?.submit
-                  ? "[SAVING...]"
-                  : "SAUVEGARDER LE BROUILLON"}
+                  ? t("saving")
+                  : t("saveDraft")}
               </button>
             </>
           )}
@@ -926,7 +931,7 @@ export default function RatingPage() {
             className="n-btn-ghost"
             style={{ textAlign: "center", textDecoration: "none" }}
           >
-            ANNULER
+            {t("cancel")}
           </Link>
         </div>
 
@@ -944,7 +949,7 @@ export default function RatingPage() {
               className="n-label"
               style={{ fontSize: "11px", letterSpacing: "0.15em" }}
             >
-              PRODUIT {data.progress.current} / {data.progress.total}
+              {t("productOf", { current: data.progress.current, total: data.progress.total })}
             </p>
             <p
               className="n-label"
@@ -953,7 +958,7 @@ export default function RatingPage() {
                 color: "var(--n-text-disabled)",
               }}
             >
-              {data.progress.rated} NOTE{data.progress.rated !== 1 ? "S" : ""} SOUMISE{data.progress.rated !== 1 ? "S" : ""}
+              {t("ratedCount", { count: data.progress.rated })}
             </p>
           </div>
         )}

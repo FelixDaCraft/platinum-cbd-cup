@@ -16,7 +16,9 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
+import { useTranslations } from "next-intl";
 import { cn } from "~/lib/utils";
+import { LanguageSwitcher } from "~/components/portal/platinum/language-switcher";
 import { useOrganization, usePortalTheme } from "~/lib/portal/context";
 import { authClient } from "~/lib/auth-client";
 import { api } from "~/trpc/react";
@@ -299,20 +301,22 @@ const nothingCss = `
 
 interface NavItem {
   href: string;
-  label: string;
+  /** Clé dans `jurySpace.nav`. */
+  label: "home" | "rate" | "results" | "profile";
   icon: LucideIcon;
 }
 
 const juryNavItems: NavItem[] = [
-  { href: "/jury", label: "ACCUEIL", icon: Home },
-  { href: "/jury/assignments", label: "NOTER", icon: ClipboardList },
-  { href: "/jury/results", label: "RÉSULTATS", icon: Trophy },
-  { href: "/jury/profile", label: "PROFIL", icon: User },
+  { href: "/jury", label: "home", icon: Home },
+  { href: "/jury/assignments", label: "rate", icon: ClipboardList },
+  { href: "/jury/results", label: "results", icon: Trophy },
+  { href: "/jury/profile", label: "profile", icon: User },
 ];
 
 // ─── Sidebar ────────────────────────────────────────────────────────────────
 
 function NothingSidebar() {
+  const t = useTranslations("jurySpace");
   const pathname = usePathname();
   const router = useRouter();
   const organization = useOrganization();
@@ -344,12 +348,12 @@ function NothingSidebar() {
     if (roles.organizer) {
       dashboardLinks.push({
         href: roles.organizer.href ?? "/dashboard",
-        label: "ORGANISATEUR",
+        label: t("organizer"),
         icon: Building2,
       });
     }
     if (roles.producer) {
-      dashboardLinks.push({ href: "/producer/dashboard", label: "PRODUCTEUR", icon: Package });
+      dashboardLinks.push({ href: "/producer/dashboard", label: t("producer"), icon: Package });
     }
   }
 
@@ -396,7 +400,7 @@ function NothingSidebar() {
               className="n-font-data text-xs uppercase tracking-[0.08em] font-bold truncate"
               style={{ color: "var(--n-text-display)" }}
             >
-              ESPACE JURY
+              {t("spaceTitle")}
             </p>
             <p
               className="text-xs truncate mt-0.5"
@@ -408,11 +412,20 @@ function NothingSidebar() {
         )}
       </div>
 
+      {/* Langue de l'espace (et des e-mails à venir). */}
+      {!isCollapsed && (
+        <div className="st-lang-scope px-4 pt-3">
+          <React.Suspense fallback={null}>
+            <LanguageSwitcher />
+          </React.Suspense>
+        </div>
+      )}
+
       {/* Navigation */}
-      <nav aria-label="Navigation jury" className="flex-1 overflow-y-auto p-3 space-y-1">
+      <nav aria-label={t("navAria")} className="flex-1 overflow-y-auto p-3 space-y-1">
         {!isCollapsed && (
           <p className="n-label px-3 mb-3" style={{ color: "var(--n-text-disabled)" }}>
-            NAVIGATION
+            {t("navigation")}
           </p>
         )}
         {juryNavItems.map((item) => {
@@ -433,8 +446,9 @@ function NothingSidebar() {
                 fontFamily: "'Space Mono', monospace",
                 fontSize: "12px",
                 letterSpacing: "0.06em",
+                textTransform: "uppercase",
               }}
-              title={isCollapsed ? item.label : undefined}
+              title={isCollapsed ? t(`nav.${item.label}`) : undefined}
             >
               {active && (
                 <div
@@ -443,7 +457,7 @@ function NothingSidebar() {
                 />
               )}
               <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={1.5} />
-              {!isCollapsed && <span>{item.label}</span>}
+              {!isCollapsed && <span>{t(`nav.${item.label}`)}</span>}
             </Link>
           );
         })}
@@ -453,7 +467,7 @@ function NothingSidebar() {
       {!isCollapsed && dashboardLinks.length > 0 && (
         <div className="px-3 pb-2 space-y-1 border-t" style={{ borderColor: "var(--n-border)" }}>
           <p className="n-label px-3 pt-3 pb-1" style={{ color: "var(--n-text-disabled)" }}>
-            MES ESPACES
+            {t("mySpaces")}
           </p>
           {dashboardLinks.map((link) => {
             const LinkIcon = link.icon;
@@ -467,6 +481,7 @@ function NothingSidebar() {
                   color: "var(--n-text-disabled)",
                   fontFamily: "'Space Mono', monospace",
                   letterSpacing: "0.06em",
+                  textTransform: "uppercase",
                 }}
               >
                 <LinkIcon className="h-4 w-4" strokeWidth={1.5} />
@@ -495,7 +510,7 @@ function NothingSidebar() {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-medium truncate" style={{ color: "var(--n-text-primary)" }}>
-                  {session.user.name ?? "Utilisateur"}
+                  {session.user.name ?? t("user")}
                 </p>
                 <p className="text-[10px] truncate" style={{ color: "var(--n-text-disabled)" }}>
                   {session.user.email}
@@ -505,7 +520,8 @@ function NothingSidebar() {
                 onClick={handleLogout}
                 className="p-2 transition-colors duration-200"
                 style={{ color: "var(--n-text-disabled)" }}
-                title="Déconnexion"
+                title={t("logout")}
+                aria-label={t("logout")}
               >
                 <LogOut className="h-4 w-4" strokeWidth={1.5} />
               </button>
@@ -515,7 +531,8 @@ function NothingSidebar() {
               onClick={handleLogout}
               className="w-full flex justify-center p-2 transition-colors duration-200"
               style={{ color: "var(--n-text-disabled)" }}
-              title="Déconnexion"
+              title={t("logout")}
+              aria-label={t("logout")}
             >
               <LogOut className="h-5 w-5" strokeWidth={1.5} />
             </button>
@@ -539,7 +556,7 @@ function NothingSidebar() {
           ) : (
             <>
               <ChevronLeft className="h-4 w-4" strokeWidth={1.5} />
-              <span className="uppercase">REDUIRE</span>
+              <span className="uppercase">{t("collapse")}</span>
             </>
           )}
         </button>
@@ -551,6 +568,7 @@ function NothingSidebar() {
 // ─── Bottom Navigation (Mobile) ─────────────────────────────────────────────
 
 function NothingBottomNav() {
+  const t = useTranslations("jurySpace");
   const pathname = usePathname();
 
   const isActive = (href: string) => {
@@ -562,7 +580,7 @@ function NothingBottomNav() {
 
   return (
     <nav
-      aria-label="Navigation jury (mobile)"
+      aria-label={t("navAriaMobile")}
       className="lg:hidden fixed bottom-0 left-0 right-0 z-50 border-t safe-area-bottom"
       style={{
         backgroundColor: "var(--n-black)",
@@ -606,7 +624,7 @@ function NothingBottomNav() {
                   color: active ? "var(--n-text-display)" : "var(--n-text-disabled)",
                 }}
               >
-                {item.label}
+                {t(`nav.${item.label}`)}
               </span>
             </Link>
           );
@@ -623,6 +641,7 @@ interface NothingJuryLayoutProps {
 }
 
 export function NothingJuryLayout({ children }: NothingJuryLayoutProps) {
+  const t = useTranslations("jurySpace");
   return (
     <PWAWrapper>
       <style dangerouslySetInnerHTML={{ __html: withPortalScope(nothingCss, "nothing-jury") }} />
@@ -630,9 +649,15 @@ export function NothingJuryLayout({ children }: NothingJuryLayoutProps) {
         {/* Premier élément focusable : permet de sauter la barre latérale,
             répétée à l'identique sur chaque écran. */}
         <a href="#contenu-principal" className="n-skip-link">
-          Aller au contenu
+          {t("skip")}
         </a>
         <NothingSidebar />
+        {/* Mobile : pas de barre latérale, le sélecteur de langue va en haut. */}
+        <div className="st-lang-scope is-end lg:hidden flex justify-end px-4 pt-3">
+          <React.Suspense fallback={null}>
+            <LanguageSwitcher />
+          </React.Suspense>
+        </div>
         <div className="lg:pl-64 transition-all duration-200">
           <main id="contenu-principal" tabIndex={-1} className="min-h-screen">
             <div className="container mx-auto px-4 lg:px-8 py-8 pb-24 lg:pb-8">

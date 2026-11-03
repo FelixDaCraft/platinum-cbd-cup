@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { Link, usePathname, useRouter } from "~/i18n/navigation";
 import { LogOut, User, Loader2, Building2, Package, Star } from "lucide-react";
 import { toast } from "sonner";
@@ -34,6 +35,7 @@ export function UserMenu({
   hideSettings = false,
   dropdownSide,
 }: UserMenuProps) {
+  const t = useTranslations("jurySpace");
   const router = useRouter();
   const pathname = usePathname();
   const { data: session } = useSession();
@@ -83,7 +85,7 @@ export function UserMenu({
     if (roles.organizer) {
       dashboardLinks.push({
         href: roles.organizer.href ?? "/dashboard",
-        label: "Espace Organisateur",
+        label: t("menu.organizerSpace"),
         icon: Building2,
         isActive: pathname.startsWith("/dashboard"),
       });
@@ -91,7 +93,7 @@ export function UserMenu({
     if (roles.producer) {
       dashboardLinks.push({
         href: "/producer/dashboard",
-        label: "Espace Producteur",
+        label: t("menu.producerSpace"),
         icon: Package,
         isActive: pathname.startsWith("/producer"),
       });
@@ -99,7 +101,7 @@ export function UserMenu({
     if (roles.jury) {
       dashboardLinks.push({
         href: "/jury/dashboard",
-        label: "Espace Jury",
+        label: t("menu.jurySpace"),
         icon: Star,
         isActive: pathname.startsWith("/jury"),
       });
@@ -126,7 +128,7 @@ export function UserMenu({
         },
       });
     } catch {
-      toast.error("Erreur lors de la déconnexion");
+      toast.error(t("menu.logoutError"));
       setIsLoggingOut(false);
     }
   };
@@ -201,7 +203,7 @@ export function UserMenu({
             <DropdownMenuItem asChild>
               <Link href={profileHref} className="cursor-pointer rounded-lg hover:bg-white/5">
                 <User className="mr-2 h-4 w-4" />
-                <span>Mon profil</span>
+                <span>{t("menu.myProfile")}</span>
               </Link>
             </DropdownMenuItem>
           )}
@@ -209,7 +211,7 @@ export function UserMenu({
             <DropdownMenuItem asChild>
               <Link href={settingsHref} className="cursor-pointer rounded-lg hover:bg-white/5">
                 <User className="mr-2 h-4 w-4" />
-                <span>Gérer mon compte</span>
+                <span>{t("menu.manageAccount")}</span>
               </Link>
             </DropdownMenuItem>
           )}
@@ -226,7 +228,7 @@ export function UserMenu({
             ) : (
               <LogOut className="mr-2 h-4 w-4" />
             )}
-            <span>Se déconnecter</span>
+            <span>{t("menu.logout")}</span>
           </DropdownMenuItem>
         </div>
       </DropdownMenuContent>

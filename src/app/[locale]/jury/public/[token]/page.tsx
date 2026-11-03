@@ -2,7 +2,10 @@
 
 import { useParams } from "next/navigation";
 import { Link, useRouter } from "~/i18n/navigation";
+import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
+import { useServerError } from "~/i18n/server-error";
+import { intlLocale, type Locale } from "~/i18n/locales";
 
 import { api } from "~/trpc/react";
 import { authClient } from "~/lib/auth-client";
@@ -95,6 +98,9 @@ const btnSecondaryStyle: React.CSSProperties = {
 };
 
 export default function PublicJuryTokenPage() {
+  const t = useTranslations("juryPublicToken");
+  const locale = useLocale() as Locale;
+  const serverError = useServerError();
   const params = useParams();
   const router = useRouter();
   const token = params.token as string;
@@ -109,18 +115,18 @@ export default function PublicJuryTokenPage() {
   const claimMutation = api.jury.claimPublicJuryToken.useMutation({
     onSuccess: (result) => {
       if (result.alreadyClaimed) {
-        toast.info("Token déjà utilisé", {
-          description: "Ce token a déjà été associé à votre compte",
+        toast.info(t("alreadyUsed"), {
+          description: t("alreadyUsedText"),
         });
       } else {
-        toast.success("Bienvenue!", {
-          description: result.message,
+        toast.success(t("welcome"), {
+          description: t("welcomeText"),
         });
       }
       router.push(`/jury/cups/${result.cupId}`);
     },
     onError: (err) => {
-      toast.error(err.message);
+      toast.error(serverError(err));
     },
   });
 
@@ -135,7 +141,7 @@ export default function PublicJuryTokenPage() {
         <div style={cardStyle}>
           <div style={{ textAlign: "center", padding: "24px 0" }}>
             <p style={{ ...labelStyle, color: N.textDisabled }}>
-              [CHARGEMENT...]
+              {t("loading")}
             </p>
           </div>
         </div>
@@ -153,13 +159,13 @@ export default function PublicJuryTokenPage() {
         <div style={cardStyle}>
           <div>
             <p style={{ ...labelStyle, color: N.accent, marginBottom: "8px" }}>
-              {isNotFound ? "TOKEN INVALIDE" : isExpired ? "TOKEN EXPIRÉ" : "ERREUR"}
+              {isNotFound ? t("invalid") : isExpired ? t("expired") : t("error")}
             </p>
             <p style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: "14px", color: N.textDisabled }}>
-              {error.message}
+              {serverError(error)}
             </p>
           </div>
-          <Link href="/" style={btnSecondaryStyle}>Retour à l&apos;accueil</Link>
+          <Link href="/" style={btnSecondaryStyle}>{t("home")}</Link>
         </div>
       </div>
     );
@@ -174,23 +180,23 @@ export default function PublicJuryTokenPage() {
         <div style={cardStyle}>
           <div>
             <p style={{ ...labelStyle, color: N.warning, marginBottom: "8px" }}>
-              TOKEN DÉJÀ UTILISÉ
+              {t("usedTitle")}
             </p>
             <p style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: "14px", color: N.textDisabled }}>
-              Ce token a déjà été associé à un compte.
+              {t("usedText")}
             </p>
           </div>
 
           {/* Cup info */}
           <div style={{ borderTop: `1px solid ${N.border}` }}>
             <div style={statRowStyle}>
-              <span style={labelStyle}>CUP</span>
+              <span style={labelStyle}>{t("cup")}</span>
               <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: "14px", color: N.textPrimary }}>
                 {data.cup?.name}
               </span>
             </div>
             <div style={{ ...statRowStyle, borderBottom: "none" }}>
-              <span style={labelStyle}>CATÉGORIE</span>
+              <span style={labelStyle}>{t("category")}</span>
               <span style={{ fontFamily: "'Space Mono', monospace", fontSize: "12px", color: N.textPrimary }}>
                 {data.category?.name}
               </span>
@@ -199,10 +205,10 @@ export default function PublicJuryTokenPage() {
 
           {session?.user ? (
             <Link href={`/jury/cups/${data.cup?.id}`} style={btnPrimaryStyle}>
-              Accéder à ma notation
+              {t("goRate")}
             </Link>
           ) : (
-            <Link href="/login" style={btnPrimaryStyle}>Se connecter</Link>
+            <Link href="/login" style={btnPrimaryStyle}>{t("login")}</Link>
           )}
         </div>
       </div>
@@ -218,7 +224,7 @@ export default function PublicJuryTokenPage() {
         {/* Heading */}
         <div>
           <p style={{ ...labelStyle, color: N.textSecondary, marginBottom: "8px" }}>
-            INVITATION JURY
+            {t("invitation")}
           </p>
           <h1 style={{
             fontFamily: "'Space Grotesk', sans-serif",
@@ -228,38 +234,41 @@ export default function PublicJuryTokenPage() {
             marginBottom: "6px",
             lineHeight: 1.1,
           }}>
-            DEVENEZ JURY PUBLIC
+            {t("become")}
           </h1>
           <p style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: "14px", color: N.textSecondary }}>
-            Participez à la notation de{" "}
-            <span style={{ color: N.textPrimary, fontWeight: 600 }}>{data.cup?.name}</span>
+            {t.rich("join", {
+              cup: data.cup?.name ?? "",
+              b: (chunks) => <span style={{ color: N.textPrimary, fontWeight: 600 }}>{chunks}</span>,
+            })}
           </p>
         </div>
 
         {/* Cup info stat rows */}
         <div>
           <div style={statRowStyle}>
-            <span style={labelStyle}>CUP</span>
+            <span style={labelStyle}>{t("cup")}</span>
             <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: "14px", color: N.textPrimary }}>
               {data.cup?.name}
             </span>
           </div>
           <div style={statRowStyle}>
-            <span style={labelStyle}>ORGANISATEUR</span>
+            <span style={labelStyle}>{t("organizer")}</span>
             <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: "14px", color: N.textPrimary }}>
               Platinum CBD Cup
             </span>
           </div>
           <div style={statRowStyle}>
-            <span style={labelStyle}>CATÉGORIE</span>
+            <span style={labelStyle}>{t("category")}</span>
             <span style={{ fontFamily: "'Space Mono', monospace", fontSize: "12px", color: N.textPrimary }}>
               {data.category?.name}
             </span>
           </div>
           <div style={{ ...statRowStyle, borderBottom: "none" }}>
-            <span style={labelStyle}>EXPIRE LE</span>
+            <span style={labelStyle}>{t("expires")}</span>
             <span style={{ fontFamily: "'Space Mono', monospace", fontSize: "12px", color: N.textSecondary }}>
-              {new Date(data.token.expiresAt).toLocaleDateString("fr-FR", {
+              {new Date(data.token.expiresAt).toLocaleDateString(intlLocale(locale), {
+                timeZone: "Europe/Paris",
                 day: "numeric",
                 month: "long",
                 year: "numeric",
@@ -270,14 +279,16 @@ export default function PublicJuryTokenPage() {
 
         {/* What you can do */}
         <div style={{ borderTop: `1px solid ${N.border}`, paddingTop: "20px" }}>
-          <p style={{ ...labelStyle, marginBottom: "12px" }}>EN UTILISANT CE TOKEN :</p>
+          <p style={{ ...labelStyle, marginBottom: "12px" }}>{t("using")}</p>
           <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
             <p style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: "13px", color: N.textSecondary }}>
-              — Noter les produits de la catégorie{" "}
-              <span style={{ color: N.textPrimary }}>{data.category?.name}</span>
+              {t.rich("rateCategory", {
+                category: data.category?.name ?? "",
+                b: (chunks) => <span style={{ color: N.textPrimary }}>{chunks}</span>,
+              })}
             </p>
             <p style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: "13px", color: N.textSecondary }}>
-              — Contribuer aux résultats officiels de la cup
+              {t("contribute")}
             </p>
           </div>
         </div>
@@ -292,17 +303,17 @@ export default function PublicJuryTokenPage() {
             gap: "12px",
           }}>
             <p style={{ ...labelStyle, color: N.warning }}>
-              CONNEXION REQUISE
+              {t("loginRequired")}
             </p>
             <p style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: "13px", color: N.textDisabled }}>
-              Connectez-vous ou créez un compte pour continuer.
+              {t("loginText")}
             </p>
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
               <Link href={`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`} style={btnSecondaryStyle}>
-                Se connecter
+                {t("login")}
               </Link>
               <Link href={`/register?callbackUrl=${encodeURIComponent(callbackUrl)}`} style={btnPrimaryStyle}>
-                Créer un compte
+                {t("register")}
               </Link>
             </div>
           </div>
@@ -314,7 +325,7 @@ export default function PublicJuryTokenPage() {
             alignItems: "center",
             justifyContent: "space-between",
           }}>
-            <span style={labelStyle}>CONNECTÉ</span>
+            <span style={labelStyle}>{t("connected")}</span>
             <span style={{ fontFamily: "'Space Mono', monospace", fontSize: "12px", color: N.success }}>
               {session.user.email}
             </span>
@@ -332,11 +343,11 @@ export default function PublicJuryTokenPage() {
             onClick={handleClaim}
             disabled={claimMutation.isPending}
           >
-            {claimMutation.isPending ? "[TRAITEMENT...]" : "Utiliser ce token et devenir jury"}
+            {claimMutation.isPending ? t("processing") : t("claim")}
           </button>
         ) : (
           <p style={{ textAlign: "center", fontFamily: "'Space Mono', monospace", fontSize: "11px", color: N.textDisabled }}>
-            VEUILLEZ VOUS CONNECTER POUR CONTINUER
+            {t("pleaseLogin")}
           </p>
         )}
       </div>

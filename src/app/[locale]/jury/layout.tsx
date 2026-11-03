@@ -1,14 +1,19 @@
 import type { Metadata, Viewport } from "next";
+import { getTranslations } from "next-intl/server";
 
-export const metadata: Metadata = {
-  title: "Platinum CBD Cup — Jury",
-  description: "Espace jury - Notez les produits en compétition",
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: "black-translucent",
-    title: "Jury",
-  },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("jurySpace");
+  return {
+    title: t("metaTitle"),
+    description: t("metaDescription"),
+    robots: { index: false, follow: false },
+    appleWebApp: {
+      capable: true,
+      statusBarStyle: "black-translucent",
+      title: t("appTitle"),
+    },
+  };
+}
 
 // Pas de maximumScale ni userScalable: false — le pinch-zoom doit rester
 // possible (WCAG 1.4.4), l'espace jury étant utilisé sur tablette pendant les

@@ -1,6 +1,9 @@
 "use client";
 
+import { useLocale, useTranslations } from "next-intl";
 import { Link } from "~/i18n/navigation";
+import { useServerError } from "~/i18n/server-error";
+import { intlLocale, type Locale } from "~/i18n/locales";
 import { api } from "~/trpc/react";
 
 /**
@@ -8,6 +11,10 @@ import { api } from "~/trpc/react";
  * Shows all submitted ratings by the jury
  */
 export default function JuryRatingsPage() {
+  const t = useTranslations("juryMisc.ratings");
+  const tc = useTranslations("jurySpace");
+  const locale = useLocale() as Locale;
+  const serverError = useServerError();
   // Get all jury cups with their products
   const { data: juryCups, isLoading, error } = api.jury.getMyJuryCups.useQuery();
 
@@ -20,7 +27,8 @@ export default function JuryRatingsPage() {
   // Format date
   const formatDate = (date: Date | null | undefined) => {
     if (!date) return "-";
-    return new Date(date).toLocaleDateString("fr-FR", {
+    return new Date(date).toLocaleDateString(intlLocale(locale), {
+      timeZone: "Europe/Paris",
       day: "numeric",
       month: "short",
       year: "numeric",
@@ -31,7 +39,7 @@ export default function JuryRatingsPage() {
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "400px" }}>
         <span className="n-font-data" style={{ color: "var(--n-text-disabled)", fontSize: "12px", letterSpacing: "0.08em" }}>
-          [LOADING...]
+          {tc("loading")}
         </span>
       </div>
     );
@@ -40,8 +48,8 @@ export default function JuryRatingsPage() {
   if (error) {
     return (
       <div className="n-card" style={{ maxWidth: "480px", margin: "32px auto", padding: "32px", textAlign: "center" }}>
-        <p className="n-label" style={{ color: "var(--n-accent)", marginBottom: "8px" }}>ERREUR</p>
-        <p className="n-font-body" style={{ color: "var(--n-text-disabled)", fontSize: "14px" }}>{error.message}</p>
+        <p className="n-label" style={{ color: "var(--n-accent)", marginBottom: "8px" }}>{t("error")}</p>
+        <p className="n-font-body" style={{ color: "var(--n-text-disabled)", fontSize: "14px" }}>{serverError(error)}</p>
       </div>
     );
   }
@@ -53,10 +61,10 @@ export default function JuryRatingsPage() {
       {/* Header */}
       <div>
         <h1 className="n-font-body" style={{ fontSize: "24px", fontWeight: 600, color: "var(--n-text-display)", marginBottom: "4px" }}>
-          NOTES SOUMISES
+          {t("title")}
         </h1>
         <p className="n-font-body" style={{ color: "var(--n-text-secondary)", fontSize: "14px" }}>
-          Historique de vos évaluations
+          {t("subtitle")}
         </p>
       </div>
 
@@ -66,22 +74,22 @@ export default function JuryRatingsPage() {
           <p className="n-font-data" style={{ fontSize: "40px", color: "var(--n-text-display)", lineHeight: 1, marginBottom: "8px" }}>
             {totalRatings}
           </p>
-          <p className="n-label" style={{ color: "var(--n-text-secondary)" }}>NOTES SOUMISES</p>
+          <p className="n-label" style={{ color: "var(--n-text-secondary)" }}>{t("submitted")}</p>
         </div>
         <div style={{ background: "var(--n-surface)", padding: "24px" }}>
           <p className="n-font-data" style={{ fontSize: "40px", color: "var(--n-text-display)", lineHeight: 1, marginBottom: "8px" }}>
             {orgCups.length}
           </p>
-          <p className="n-label" style={{ color: "var(--n-text-secondary)" }}>COMPETITIONS</p>
+          <p className="n-label" style={{ color: "var(--n-text-secondary)" }}>{t("competitions")}</p>
         </div>
       </div>
 
       {/* Ratings by Cup */}
       {hasNoRatings ? (
         <div style={{ textAlign: "center", padding: "64px 24px" }}>
-          <p className="n-label" style={{ color: "var(--n-text-primary)", marginBottom: "8px" }}>AUCUNE NOTE SOUMISE</p>
+          <p className="n-label" style={{ color: "var(--n-text-primary)", marginBottom: "8px" }}>{t("empty")}</p>
           <p className="n-font-body" style={{ color: "var(--n-text-disabled)", fontSize: "14px" }}>
-            Rendez-vous dans &quot;Mes évaluations&quot; pour commencer à noter.
+            {t("emptyText")}
           </p>
         </div>
       ) : (
@@ -107,11 +115,11 @@ export default function JuryRatingsPage() {
                       {cup.cupName}
                     </p>
                     <p className="n-font-data" style={{ fontSize: "11px", color: "var(--n-text-disabled)" }}>
-                      {cup.ratingEndAt ? `LIMITE: ${formatDate(cup.ratingEndAt)}` : "PAS DE DATE LIMITE"}
+                      {cup.ratingEndAt ? t("deadline", { date: formatDate(cup.ratingEndAt) }) : t("noDeadline")}
                     </p>
                   </div>
                   <span className="n-tag success">
-                    {ratedCount} NOTE{ratedCount > 1 ? "S" : ""}
+                    {t("count", { count: ratedCount })}
                   </span>
                 </div>
 
@@ -126,10 +134,10 @@ export default function JuryRatingsPage() {
                       <thead>
                         <tr style={{ borderBottom: "1px solid var(--n-border-visible)" }}>
                           <th scope="col" style={{ padding: "10px 20px", textAlign: "left" }}>
-                            <span className="n-label" style={{ color: "var(--n-text-secondary)" }}>CATÉGORIE</span>
+                            <span className="n-label" style={{ color: "var(--n-text-secondary)" }}>{t("category")}</span>
                           </th>
                           <th scope="col" style={{ padding: "10px 20px", textAlign: "right" }}>
-                            <span className="n-label" style={{ color: "var(--n-text-secondary)" }}>ACTION</span>
+                            <span className="n-label" style={{ color: "var(--n-text-secondary)" }}>{t("action")}</span>
                           </th>
                         </tr>
                       </thead>
@@ -146,7 +154,7 @@ export default function JuryRatingsPage() {
                             </td>
                             <td style={{ padding: "12px 20px", textAlign: "right" }}>
                               <Link href={`/jury/cups/${cup.cupId}`} className="n-btn-ghost" style={{ padding: "4px 12px", fontSize: "12px" }}>
-                                Voir
+                                {t("view")}
                               </Link>
                             </td>
                           </tr>
@@ -157,7 +165,7 @@ export default function JuryRatingsPage() {
                 ) : (
                   <div style={{ padding: "24px", textAlign: "center" }}>
                     <p className="n-font-body" style={{ color: "var(--n-text-disabled)", fontSize: "14px" }}>
-                      Aucune catégorie assignée
+                      {t("noCategory")}
                     </p>
                   </div>
                 )}

@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { useRouter } from "~/i18n/navigation";
 
@@ -60,6 +61,7 @@ export function PostRatingChoiceModal({
   allComplete,
   onClose,
 }: PostRatingChoiceModalProps) {
+  const t = useTranslations("juryMisc.modal");
   const router = useRouter();
 
   let title: string;
@@ -67,21 +69,18 @@ export function PostRatingChoiceModal({
 
   if (mode === "submitted") {
     if (allComplete) {
-      title = "TOUTES LES NOTATIONS TERMINÉES";
-      description =
-        "Vous avez noté tous vos produits assignés. Excellente contribution.";
+      title = t("allDone");
+      description = t("allDoneText");
     } else if (allCategoryComplete) {
-      title = "CATÉGORIE TERMINÉE";
-      description =
-        "Toutes vos notations pour cette catégorie sont enregistrées.";
+      title = t("categoryDone");
+      description = t("categoryDoneText");
     } else {
-      title = "NOTATION SOUMISE";
-      description = "Votre notation a bien été enregistrée et verrouillée.";
+      title = t("submitted");
+      description = t("submittedText");
     }
   } else {
-    title = "BROUILLON ENREGISTRÉ";
-    description =
-      "Votre progression est sauvegardee. Vous pouvez reprendre plus tard.";
+    title = t("draft");
+    description = t("draftText");
   }
 
   const showNextProduct =
@@ -104,7 +103,7 @@ export function PostRatingChoiceModal({
   };
 
   const dotColor = mode === "submitted" ? TOKENS.success : TOKENS.warning;
-  const labelText = mode === "submitted" ? "SOUMIS" : "BROUILLON";
+  const labelText = mode === "submitted" ? t("labelSubmitted") : t("labelDraft");
 
   const labelStyle: React.CSSProperties = {
     fontFamily: MONO,
@@ -240,15 +239,15 @@ export function PostRatingChoiceModal({
             }}
           >
             {showNextProduct && nextProductId && (
-              <PrimaryBtn onClick={goNextProduct}>PRODUIT SUIVANT</PrimaryBtn>
+              <PrimaryBtn onClick={goNextProduct}>{t("next")}</PrimaryBtn>
             )}
             {showDashboard && (
               <PrimaryBtn onClick={goDashboard}>
-                VOIR LE TABLEAU DE BORD
+                {t("dashboard")}
               </PrimaryBtn>
             )}
             <SecondaryBtn onClick={goCategory}>
-              RETOUR À LA CATÉGORIE
+              {t("backCategory")}
             </SecondaryBtn>
           </div>
         </DialogPrimitive.Content>

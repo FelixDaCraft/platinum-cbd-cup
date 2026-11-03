@@ -2,7 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { Link, useRouter } from "~/i18n/navigation";
+import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
+import { useServerError } from "~/i18n/server-error";
+import { formatDate as formatLocaleDate, type Locale } from "~/i18n/locales";
 import { cn } from "~/lib/utils";
 import { api } from "~/trpc/react";
 import { useOrganization, usePortalTheme } from "~/lib/portal/context";
@@ -112,6 +115,7 @@ function NothingCountdown({
   targetDate: Date;
   type: "opening" | "closing";
 }) {
+  const t = useTranslations("juryDashboard");
   const [timeLeft, setTimeLeft] = useState(() => calculateTimeLeft(targetDate));
 
   useEffect(() => {
@@ -133,7 +137,7 @@ function NothingCountdown({
       ? "var(--n-warning)"
       : "var(--n-text-primary)";
 
-  const label = type === "opening" ? "OUVRE DANS" : isCritical ? "URGENT" : isWarning ? "FIN BIENTOT" : "RESTE";
+  const label = type === "opening" ? t("opensIn") : isCritical ? t("urgent") : isWarning ? t("endingSoon") : t("remaining");
 
   return (
     <div
@@ -158,19 +162,19 @@ function NothingCountdown({
         <span style={{ fontSize: 22, fontWeight: 700, color: valueColor, letterSpacing: "-0.02em" }}>
           {String(timeLeft.days).padStart(2, "0")}
         </span>
-        <span style={{ fontSize: 14, color: "var(--n-text-disabled)", margin: "0 2px" }}>j</span>
+        <span style={{ fontSize: 14, color: "var(--n-text-disabled)", margin: "0 2px" }}>{t("unitD")}</span>
         <span style={{ fontSize: 22, fontWeight: 700, color: valueColor, letterSpacing: "-0.02em" }}>
           {String(timeLeft.hours).padStart(2, "0")}
         </span>
-        <span style={{ fontSize: 14, color: "var(--n-text-disabled)", margin: "0 2px" }}>h</span>
+        <span style={{ fontSize: 14, color: "var(--n-text-disabled)", margin: "0 2px" }}>{t("unitH")}</span>
         <span style={{ fontSize: 22, fontWeight: 700, color: valueColor, letterSpacing: "-0.02em" }}>
           {String(timeLeft.minutes).padStart(2, "0")}
         </span>
-        <span style={{ fontSize: 14, color: "var(--n-text-disabled)", margin: "0 2px" }}>m</span>
+        <span style={{ fontSize: 14, color: "var(--n-text-disabled)", margin: "0 2px" }}>{t("unitM")}</span>
         <span style={{ fontSize: 22, fontWeight: 700, color: valueColor, letterSpacing: "-0.02em" }}>
           {String(timeLeft.seconds).padStart(2, "0")}
         </span>
-        <span style={{ fontSize: 14, color: "var(--n-text-disabled)", marginLeft: 2 }}>s</span>
+        <span style={{ fontSize: 14, color: "var(--n-text-disabled)", marginLeft: 2 }}>{t("unitS")}</span>
       </div>
     </div>
   );
@@ -241,6 +245,10 @@ function StatCell({
 // ============================================================================
 
 export default function PortalJuryDashboardPage() {
+  const t = useTranslations("juryDashboard");
+  const tc = useTranslations("jurySpace");
+  const locale = useLocale() as Locale;
+  const serverError = useServerError();
   const organization = useOrganization();
   const theme = usePortalTheme();
   const router = useRouter();
@@ -259,22 +267,22 @@ export default function PortalJuryDashboardPage() {
 
   const activateMutation = api.juryCodes.activate.useMutation({
     onSuccess: (result) => {
-      toast.success("Code active!", {
-        description: `Vous avez maintenant acces a ${result.categoriesCount} categorie${result.categoriesCount !== 1 ? "s" : ""}`,
+      toast.success(t("codeActivated"), {
+        description: t("codeAccess", { count: result.categoriesCount }),
       });
       setInvitationCode("");
       void utils.jury.getMyJuryCups.invalidate();
       router.push(`/jury/cups/${result.cupId}`);
     },
     onError: (err) => {
-      toast.error(err.message);
+      toast.error(serverError(err));
     },
   });
 
   const handleActivateCode = () => {
     const code = invitationCode.trim().toUpperCase();
     if (!code) {
-      toast.error("Veuillez entrer un code");
+      toast.error(t("enterCode"));
       return;
     }
     activateMutation.mutate({ code });
@@ -294,7 +302,7 @@ export default function PortalJuryDashboardPage() {
           className="n-font-data n-label"
           style={{ color: "var(--n-text-secondary)", fontSize: 13 }}
         >
-          [LOADING...]
+          {tc("loading")}
         </span>
       </div>
     );
@@ -320,10 +328,10 @@ export default function PortalJuryDashboardPage() {
           className="n-font-data n-label"
           style={{ color: "var(--n-text-secondary)", fontSize: 13 }}
         >
-          [ERREUR] VOS CUPS N&apos;ONT PAS PU ÊTRE CHARGÉES
+          {t("error")}
         </span>
         <button type="button" className="n-btn-secondary text-xs" onClick={() => void refetch()}>
-          RÉESSAYER
+          {tc("retry")}
         </button>
       </div>
     );
@@ -345,11 +353,11 @@ export default function PortalJuryDashboardPage() {
 
   const formatDate = (date: Date | null) => {
     if (!date) return "";
-    return new Intl.DateTimeFormat("fr-FR", {
+    return formatLocaleDate(new Date(date), locale, {
       day: "numeric",
       month: "short",
       year: "numeric",
-    }).format(new Date(date));
+    });
   };
 
   return (
@@ -391,7 +399,7 @@ export default function PortalJuryDashboardPage() {
               marginTop: 4,
             }}
           >
-            Espace Jury
+            {t("title")}
           </h1>
         </div>
 
@@ -421,7 +429,7 @@ export default function PortalJuryDashboardPage() {
             <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
               <SegmentedProgress value={globalPercentage} segments={24} />
               <p className="n-label" style={{ color: "var(--n-text-secondary)" }}>
-                {ratedProducts} / {totalProducts} PRODUITS NOTES
+                {t("productsRated", { rated: ratedProducts, total: totalProducts })}
               </p>
             </div>
           </div>
@@ -444,16 +452,16 @@ export default function PortalJuryDashboardPage() {
       >
         <StatCell
           value={pendingProducts}
-          label="A NOTER"
+          label={t("toRate")}
           accent={pendingProducts > 0}
         />
         <StatCell
           value={myStats?.totalRatings ?? ratedProducts}
-          label="NOTES SOUMISES"
+          label={t("submitted")}
         />
         <StatCell
           value={activeCups.length}
-          label="CUPS ACTIVES"
+          label={t("activeCups")}
         />
         <div style={{ padding: "16px", display: "flex", flexDirection: "column", gap: 4 }}>
           <span
@@ -469,7 +477,7 @@ export default function PortalJuryDashboardPage() {
             {orgCupsWithResults.length}
           </span>
           <span className="n-label" style={{ color: "var(--n-text-secondary)" }}>
-            RESULTATS PUBLIES
+            {t("published")}
           </span>
         </div>
       </div>
@@ -494,13 +502,13 @@ export default function PortalJuryDashboardPage() {
                 }}
               >
                 <p className="n-label" style={{ color: "var(--n-text-secondary)", marginBottom: 2 }}>
-                  EN COURS
+                  {t("ongoing")}
                 </p>
                 <p
                   className="n-font-body"
                   style={{ color: "var(--n-text-primary)", fontWeight: 500, fontSize: 15 }}
                 >
-                  Competitions actives
+                  {t("activeTitle")}
                 </p>
               </div>
               <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 16 }}>
@@ -541,12 +549,12 @@ export default function PortalJuryDashboardPage() {
                             </p>
                             {isBlocked && (
                               <span className="n-tag" style={{ fontSize: 10 }}>
-                                PAS ENCORE OUVERT
+                                {t("notOpen")}
                               </span>
                             )}
                           </div>
                           <p className="n-label" style={{ color: "var(--n-text-secondary)" }}>
-                            {cup.assignedCategories.length} CATEGORIE{cup.assignedCategories.length > 1 ? "S" : ""} ASSIGNEE{cup.assignedCategories.length > 1 ? "S" : ""}
+                            {t("assignedCategories", { count: cup.assignedCategories.length })}
                           </p>
                         </div>
                         {!isBlocked && (
@@ -565,7 +573,7 @@ export default function PortalJuryDashboardPage() {
                               {remaining}
                             </span>
                             <span className="n-label" style={{ color: "var(--n-text-secondary)" }}>
-                              A NOTER
+                              {t("toRate")}
                             </span>
                           </div>
                         )}
@@ -598,7 +606,7 @@ export default function PortalJuryDashboardPage() {
                             fontWeight: 500,
                           }}
                         >
-                          CONTINUER &gt;
+                          {t("continue")}
                         </p>
                       )}
                     </div>
@@ -630,17 +638,17 @@ export default function PortalJuryDashboardPage() {
               >
                 <div>
                   <p className="n-label" style={{ color: "var(--n-text-secondary)", marginBottom: 2 }}>
-                    TERMINEES
+                    {t("finished")}
                   </p>
                   <p
                     className="n-font-body"
                     style={{ color: "var(--n-text-primary)", fontWeight: 500, fontSize: 15 }}
                   >
-                    Resultats publies
+                    {t("publishedTitle")}
                   </p>
                 </div>
                 <span className="n-tag">
-                  {orgCupsWithResults.length} COMPETITION{orgCupsWithResults.length > 1 ? "S" : ""}
+                  {t("editions", { count: orgCupsWithResults.length })}
                 </span>
               </div>
               <div style={{ padding: "8px 0" }}>
@@ -663,11 +671,11 @@ export default function PortalJuryDashboardPage() {
                         {cup.cupName}
                       </p>
                       <p className="n-label" style={{ color: "var(--n-text-secondary)" }}>
-                        PUBLIE LE {formatDate(cup.resultsPublishedAt).toUpperCase()} — {cup.totalProducts} PRODUIT{cup.totalProducts > 1 ? "S" : ""}
+                        {t("publishedOn", { date: formatDate(cup.resultsPublishedAt).toUpperCase(), count: cup.totalProducts })}
                       </p>
                     </div>
                     <Link href={`/jury/results/${cup.cupId}`} style={{ fontSize: 12, padding: "6px 12px", textDecoration: "none" }} className="n-btn-ghost">
-                      VOIR COMPARAISON &gt;
+                      {t("seeComparison")}
                     </Link>
                   </div>
                 ))}
@@ -685,13 +693,13 @@ export default function PortalJuryDashboardPage() {
                 }}
               >
                 <p className="n-label" style={{ color: "var(--n-text-secondary)", marginBottom: 2 }}>
-                  COMPLETEES
+                  {t("completed")}
                 </p>
                 <p
                   className="n-font-body"
                   style={{ color: "var(--n-text-primary)", fontWeight: 500, fontSize: 15 }}
                 >
-                  Evaluations terminees
+                  {t("completedTitle")}
                 </p>
               </div>
               <div style={{ padding: "8px 0" }}>
@@ -717,7 +725,7 @@ export default function PortalJuryDashboardPage() {
                           {cup.cupName}
                         </p>
                         <span className="n-label" style={{ color: "var(--n-text-secondary)" }}>
-                          {cup.progress.total} PRODUIT{cup.progress.total > 1 ? "S" : ""} — EN ATTENTE RESULTATS
+                          {t("awaitingResults", { count: cup.progress.total })}
                         </span>
                       </div>
                     </Link>
@@ -742,13 +750,13 @@ export default function PortalJuryDashboardPage() {
                 className="n-font-data n-label"
                 style={{ color: "var(--n-text-secondary)", fontSize: 13, letterSpacing: "0.08em" }}
               >
-                AUCUNE EVALUATION
+                {t("empty")}
               </p>
               <p
                 className="n-font-body"
                 style={{ color: "var(--n-text-disabled)", fontSize: 13, textAlign: "center", maxWidth: 320 }}
               >
-                Vous n'avez pas encore d'evaluations assignees. Utilisez un code d'invitation pour rejoindre une competition.
+                {t("emptyText")}
               </p>
             </div>
           )}
@@ -768,19 +776,19 @@ export default function PortalJuryDashboardPage() {
           >
             <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--n-border)" }}>
               <p className="n-label" style={{ color: "var(--n-text-secondary)", marginBottom: 2 }}>
-                REJOINDRE UNE COMPETITION
+                {t("join")}
               </p>
               <p
                 className="n-font-body"
                 style={{ color: "var(--n-text-primary)", fontWeight: 500, fontSize: 15 }}
               >
-                Code d'invitation
+                {t("invitationCode")}
               </p>
             </div>
             <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 12 }}>
               <div>
                 <p className="n-label" style={{ color: "var(--n-text-secondary)", marginBottom: 6 }}>
-                  VOTRE CODE
+                  {t("yourCode")}
                 </p>
                 <input
                   id="invitation-code"
@@ -803,7 +811,7 @@ export default function PortalJuryDashboardPage() {
                 disabled={activateMutation.isPending || !invitationCode.trim()}
                 style={{ width: "100%" }}
               >
-                {activateMutation.isPending ? "[ACTIVATION...]" : "ACTIVER LE CODE"}
+                {activateMutation.isPending ? t("activating") : t("activate")}
               </button>
             </div>
           </div>
@@ -813,16 +821,16 @@ export default function PortalJuryDashboardPage() {
             <div className="n-card">
               <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--n-border)" }}>
                 <p className="n-label" style={{ color: "var(--n-text-secondary)" }}>
-                  MON ACTIVITE
+                  {t("myActivity")}
                 </p>
               </div>
               <div style={{ padding: "0" }}>
                 {[
-                  { label: "MEMBRE DEPUIS", value: formatDate(myStats.memberSince) },
-                  { label: "COMPETITIONS", value: String(myStats.cupsParticipated) },
-                  { label: "NOTES SOUMISES", value: String(myStats.totalRatings) },
+                  { label: t("memberSince"), value: formatDate(myStats.memberSince) },
+                  { label: t("competitions"), value: String(myStats.cupsParticipated) },
+                  { label: t("submitted"), value: String(myStats.totalRatings) },
                   ...(myStats.averageScore !== null
-                    ? [{ label: "NOTE MOYENNE", value: `${myStats.averageScore}/10` }]
+                    ? [{ label: t("averageScore"), value: `${myStats.averageScore}/10` }]
                     : []),
                 ].map((row, idx, arr) => (
                   <div
@@ -854,7 +862,7 @@ export default function PortalJuryDashboardPage() {
           <div className="n-card">
             <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--n-border)" }}>
               <p className="n-label" style={{ color: "var(--n-text-secondary)" }}>
-                ACTIONS RAPIDES
+                {t("quickActions")}
               </p>
             </div>
             <div style={{ padding: "8px 0" }}>
@@ -871,7 +879,7 @@ export default function PortalJuryDashboardPage() {
                   className="nothing-row-hover"
                 >
                   <span className="n-label" style={{ color: "var(--n-text-primary)", letterSpacing: "0.04em" }}>
-                    MES NOTES SOUMISES
+                    {t("mySubmitted")}
                   </span>
                   <span style={{ color: "var(--n-text-secondary)", fontSize: 14 }}>&gt;</span>
                 </div>
@@ -888,7 +896,7 @@ export default function PortalJuryDashboardPage() {
                   className="nothing-row-hover"
                 >
                   <span className="n-label" style={{ color: "var(--n-text-primary)", letterSpacing: "0.04em" }}>
-                    MON PROFIL JURY
+                    {t("myProfile")}
                   </span>
                   <span style={{ color: "var(--n-text-secondary)", fontSize: 14 }}>&gt;</span>
                 </div>
@@ -906,13 +914,13 @@ export default function PortalJuryDashboardPage() {
             }}
           >
             <p className="n-label" style={{ color: "var(--n-text-secondary)", marginBottom: 6 }}>
-              BESOIN D'AIDE ?
+              {t("help")}
             </p>
             <p
               className="n-font-body"
               style={{ fontSize: 13, color: "var(--n-text-disabled)", lineHeight: 1.5 }}
             >
-              Contactez l'organisateur si vous avez des questions sur vos evaluations.
+              {t("helpText")}
             </p>
           </div>
         </div>

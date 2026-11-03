@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { Link } from "~/i18n/navigation";
+import { useServerError } from "~/i18n/server-error";
 
 import { api } from "~/trpc/react";
 import { cn } from "~/lib/utils";
@@ -114,6 +116,7 @@ function MechanicalCountdown({
   targetDate: Date;
   type: "opening" | "closing";
 }) {
+  const t = useTranslations("juryAssignments");
   const [timeLeft, setTimeLeft] = useState(() => calculateTimeLeft(targetDate));
 
   useEffect(() => {
@@ -135,12 +138,12 @@ function MechanicalCountdown({
 
   const timeString =
     timeLeft.days > 0
-      ? `${formatSegment(timeLeft.days, "J")} ${formatSegment(timeLeft.hours, "H")} ${formatSegment(timeLeft.minutes, "M")}`
+      ? `${formatSegment(timeLeft.days, t("d"))} ${formatSegment(timeLeft.hours, t("h"))} ${formatSegment(timeLeft.minutes, t("m"))}`
       : timeLeft.hours > 0
-        ? `${formatSegment(timeLeft.hours, "H")} ${formatSegment(timeLeft.minutes, "M")} ${formatSegment(timeLeft.seconds, "S")}`
-        : `${formatSegment(timeLeft.minutes, "M")} ${formatSegment(timeLeft.seconds, "S")}`;
+        ? `${formatSegment(timeLeft.hours, t("h"))} ${formatSegment(timeLeft.minutes, t("m"))} ${formatSegment(timeLeft.seconds, t("s"))}`
+        : `${formatSegment(timeLeft.minutes, t("m"))} ${formatSegment(timeLeft.seconds, t("s"))}`;
 
-  const label = type === "opening" ? "OUVERTURE DANS" : urgency === "critical" ? "FERMETURE DANS" : urgency === "warning" ? "FIN DANS" : "TEMPS RESTANT";
+  const label = type === "opening" ? t("opensIn") : urgency === "critical" ? t("closesIn") : urgency === "warning" ? t("endsIn") : t("timeLeft");
 
   return (
     <div
@@ -189,22 +192,23 @@ function CupStatusTag({
   ratingStartAt: Date | null;
   ratingEndAt: Date | null;
 }) {
+  const t = useTranslations("juryAssignments");
   if (status === "closed") {
-    return <span className="n-tag">FERME</span>;
+    return <span className="n-tag">{t("closed")}</span>;
   }
 
   if (status === "not_started") {
-    return <span className="n-tag">NON OUVERT</span>;
+    return <span className="n-tag">{t("notOpen")}</span>;
   }
 
   if (status === "ending_soon" && ratingEndAt) {
     const timeLeft = calculateTimeLeft(new Date(ratingEndAt));
     const label =
       timeLeft.days > 0
-        ? `FIN DANS ${timeLeft.days}J`
+        ? t("endsInShort", { value: `${timeLeft.days}${t("d")}` })
         : timeLeft.hours > 0
-          ? `FIN DANS ${timeLeft.hours}H`
-          : `FIN DANS ${timeLeft.minutes}M`;
+          ? t("endsInShort", { value: `${timeLeft.hours}${t("h")}` })
+          : t("endsInShort", { value: `${timeLeft.minutes}${t("m")}` });
     return (
       <span className="n-tag" style={{ borderColor: "var(--n-accent)", color: "var(--n-accent)" }}>
         {label}
@@ -215,12 +219,12 @@ function CupStatusTag({
   if (status === "active") {
     return (
       <span className="n-tag" style={{ borderColor: "var(--n-success)", color: "var(--n-success)" }}>
-        ACTIF
+        {t("active")}
       </span>
     );
   }
 
-  return <span className="n-tag">ACTIF</span>;
+  return <span className="n-tag">{t("active")}</span>;
 }
 
 /**
@@ -228,6 +232,9 @@ function CupStatusTag({
  * Shows all products assigned to the jury for rating, grouped by cup and category
  */
 export default function JuryAssignmentsPage() {
+  const t = useTranslations("juryAssignments");
+  const tc = useTranslations("jurySpace");
+  const serverError = useServerError();
   // Get all jury cups
   const { data: juryCups, isLoading, error } = api.jury.getMyJuryCups.useQuery();
 
@@ -245,7 +252,7 @@ export default function JuryAssignmentsPage() {
         }}
       >
         <span className="n-font-data" style={{ color: "var(--n-text-disabled)", fontSize: "14px" }}>
-          [LOADING...]
+          {tc("loading")}
         </span>
       </div>
     );
@@ -266,10 +273,10 @@ export default function JuryAssignmentsPage() {
           className="n-label"
           style={{ color: "var(--n-accent)", marginBottom: "8px" }}
         >
-          ERREUR
+          {t("error")}
         </p>
         <p style={{ color: "var(--n-text-secondary)", fontSize: "14px" }}>
-          {error.message}
+          {serverError(error)}
         </p>
       </div>
     );
@@ -295,7 +302,7 @@ export default function JuryAssignmentsPage() {
             lineHeight: 1,
           }}
         >
-          NOTER
+          {t("title")}
         </h1>
         <p
           className="n-font-body"
@@ -305,7 +312,7 @@ export default function JuryAssignmentsPage() {
             fontSize: "14px",
           }}
         >
-          Produits assignés pour notation
+          {t("subtitle")}
         </p>
       </div>
 
@@ -321,10 +328,10 @@ export default function JuryAssignmentsPage() {
         }}
       >
         {[
-          { value: totalCups, label: `CUP${totalCups !== 1 ? "S" : ""} ASSIGNEE${totalCups !== 1 ? "S" : ""}` },
-          { value: totalProducts, label: "PRODUITS TOTAL" },
-          { value: pendingProducts, label: "EN ATTENTE" },
-          { value: totalRated, label: "NOTES" },
+          { value: totalCups, label: t("cupsAssigned", { count: totalCups }) },
+          { value: totalProducts, label: t("productsTotal") },
+          { value: pendingProducts, label: t("pending") },
+          { value: totalRated, label: t("rated") },
         ].map((stat, i) => (
           <div
             key={i}
@@ -429,7 +436,7 @@ export default function JuryAssignmentsPage() {
                             color: "var(--n-success)",
                           }}
                         >
-                          COMPLETE
+                          {t("complete")}
                         </span>
                       )}
                     </div>
@@ -442,7 +449,7 @@ export default function JuryAssignmentsPage() {
                         fontVariantNumeric: "tabular-nums",
                       }}
                     >
-                      {cup.progress.rated}/{cup.progress.total} PRODUITS NOTES
+                      {t("productsRated", { rated: cup.progress.rated, total: cup.progress.total })}
                     </p>
                   </div>
 
@@ -513,7 +520,7 @@ export default function JuryAssignmentsPage() {
                       className="n-label"
                       style={{ color: "var(--n-text-disabled)" }}
                     >
-                      LA PERIODE DE NOTATION EST TERMINEE
+                      {t("periodOver")}
                     </span>
                   </div>
                 )}
@@ -565,9 +572,9 @@ export default function JuryAssignmentsPage() {
                             >
                               {isBlocked
                                 ? ratingStatus === "not_started"
-                                  ? "NOTATION PAS ENCORE OUVERTE"
-                                  : "NOTATION TERMINEE"
-                                : "CATEGORIE A EVALUER"}
+                                  ? t("notYetOpen")
+                                  : t("ratingClosed")
+                                : t("toEvaluate")}
                             </p>
                           </div>
 
@@ -577,7 +584,7 @@ export default function JuryAssignmentsPage() {
                               className="n-label"
                               style={{ color: "var(--n-text-disabled)" }}
                             >
-                              VERROUILLE
+                              {t("locked")}
                             </span>
                           ) : (
                             <Link
@@ -589,7 +596,7 @@ export default function JuryAssignmentsPage() {
                                   : undefined
                               }
                             >
-                              {isUrgent ? "NOTER MAINTENANT" : "VOIR"}
+                              {isUrgent ? t("rateNow") : t("view")}
                             </Link>
                           )}
                         </div>
@@ -615,7 +622,7 @@ export default function JuryAssignmentsPage() {
                       padding: "16px 0",
                     }}
                   >
-                    AUCUNE CATEGORIE ASSIGNEE
+                    {t("noCategory")}
                   </p>
                 )}
               </div>
@@ -639,7 +646,7 @@ export default function JuryAssignmentsPage() {
             className="n-label"
             style={{ color: "var(--n-text-secondary)", fontSize: "13px" }}
           >
-            AUCUNE EVALUATION
+            {t("empty")}
           </p>
           <p
             className="n-font-body"
@@ -649,8 +656,7 @@ export default function JuryAssignmentsPage() {
               maxWidth: "360px",
             }}
           >
-            Vous n&apos;avez pas encore de produits assignés pour notation.
-            Attendez qu&apos;un organisateur vous assigne à des catégories.
+            {t("emptyText")}
           </p>
         </div>
       )}

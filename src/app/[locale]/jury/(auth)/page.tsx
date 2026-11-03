@@ -1,8 +1,8 @@
-import { redirect } from "next/navigation";
+import { localizedRedirect } from "~/i18n/server";
 
 /**
  * Jury root page - redirects to dashboard
  */
-export default function JuryPage() {
-  redirect("/jury/dashboard");
+export default async function JuryPage() {
+  return localizedRedirect("/jury/dashboard");
 }

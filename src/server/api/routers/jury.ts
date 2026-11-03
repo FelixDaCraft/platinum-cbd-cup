@@ -4,6 +4,7 @@
  */
 
 import { z } from "zod";
+import { localizedField, localizeRow } from "~/i18n/locales";
 import { TRPCError } from "@trpc/server";
 import { eq, and, desc, inArray, sql, isNotNull } from "drizzle-orm";
 import { nanoid } from "nanoid";
@@ -850,6 +851,7 @@ export const juryRouter = createTRPCRouter({
                 columns: {
                   id: true,
                   name: true,
+                  translations: true,
                 },
               },
             },
@@ -1259,7 +1261,7 @@ export const juryRouter = createTRPCRouter({
           categoriesAssigned: jury.categoryAssignments.length,
           categories: jury.categoryAssignments.map((a) => ({
             id: a.category.id,
-            name: a.category.name,
+            name: localizedField(a.category, "name", ctx.locale),
             productsCount: toRateByCategory.get(a.categoryId) ?? 0,
             productsRated: ratedByCategory.get(a.categoryId) ?? 0,
           })),
@@ -1428,7 +1430,7 @@ export const juryRouter = createTRPCRouter({
       // Flatten products with category info
       const products = confirmedRegistrations.flatMap((r) =>
         r.products.map((p) => ({
-          categoryName: p.category.name,
+          categoryName: localizedField(p.category, "name", ctx.locale),
           // Le code du panel du juré : c'est sous celui-là qu'il note.
           productCode: codeFor(p, jury.panel) ?? `#${p.id.slice(0, 4).toUpperCase()}`,
         }))
@@ -1511,7 +1513,7 @@ export const juryRouter = createTRPCRouter({
       const allProducts = confirmedRegistrations.flatMap((r) =>
         r.products.map((p) => ({
           categoryId: p.categoryId,
-          categoryName: p.category.name,
+          categoryName: localizedField(p.category, "name", ctx.locale),
           fallbackCode: `#${p.id.slice(0, 4).toUpperCase()}`,
           codes: { pro: p.anonymousCodePro, public: p.anonymousCodePublic },
         }))
@@ -1641,6 +1643,7 @@ export const juryRouter = createTRPCRouter({
                           columns: {
                             id: true,
                             name: true,
+                            translations: true,
                             sortOrder: true,
                             coefficient: true,
                           },
@@ -1667,7 +1670,7 @@ export const juryRouter = createTRPCRouter({
                 ? sourceRating.scores
                     .map((s) => ({
                       criterionId: s.criterionId,
-                      criterionName: s.criterion.name,
+                      criterionName: localizedField(s.criterion, "name", ctx.locale),
                       score: s.score,
                       sortOrder: s.criterion.sortOrder,
                       coefficient: s.criterion.coefficient,
@@ -1679,7 +1682,7 @@ export const juryRouter = createTRPCRouter({
                 // Code du panel du juré : le seul qu'il doive connaître.
                 anonymousCode: codeFor(p, juryMembership.panel),
                 categoryId: p.categoryId,
-                categoryName: p.category.name,
+                categoryName: localizedField(p.category, "name", ctx.locale),
                 // Mark as rated if there's a submitted rating
                 isRated: !!submittedRating,
                 // Story 7.19: Mark as draft if there's an unsubmitted rating
@@ -1711,7 +1714,7 @@ export const juryRouter = createTRPCRouter({
           categoryAssignments: juryMembership.categoryAssignments.map((a) => ({
             id: a.id,
             categoryId: a.category.id,
-            categoryName: a.category.name,
+            categoryName: localizedField(a.category, "name", ctx.locale),
           })),
         },
         productsToRate,
@@ -1875,12 +1878,12 @@ export const juryRouter = createTRPCRouter({
           id: product.id,
           anonymousCode: codeFor(product, juryMembership.panel),
           categoryId: product.categoryId,
-          categoryName: product.category.name,
+          categoryName: localizedField(product.category, "name", ctx.locale),
         },
         criteria: product.category.criteria.map((c) => ({
           id: c.id,
-          name: c.name,
-          description: c.description,
+          name: localizedField(c, "name", ctx.locale),
+          description: localizedField(c, "description", ctx.locale),
           coefficient: c.coefficient,
           sortOrder: c.sortOrder,
         })),
@@ -2449,6 +2452,7 @@ export const juryRouter = createTRPCRouter({
             columns: {
               id: true,
               name: true,
+              translations: true,
             },
           },
         },
@@ -2482,7 +2486,7 @@ export const juryRouter = createTRPCRouter({
           token: tokenRecord,
           alreadyClaimed: true,
           cup: tokenRecord.cup,
-          category: tokenRecord.category,
+          category: tokenRecord.category && localizeRow(tokenRecord.category, ctx.locale),
         };
       }
 
@@ -2494,7 +2498,7 @@ export const juryRouter = createTRPCRouter({
         },
         alreadyClaimed: false,
         cup: tokenRecord.cup,
-        category: tokenRecord.category,
+        category: tokenRecord.category && localizeRow(tokenRecord.category, ctx.locale),
       };
     }),
 
@@ -2933,7 +2937,7 @@ export const juryRouter = createTRPCRouter({
           samplesReceivedAt: membership.samplesReceivedAt,
           assignedCategories: membership.categoryAssignments.map((a) => ({
             id: a.category.id,
-            name: a.category.name,
+            name: localizedField(a.category, "name", ctx.locale),
           })),
           progress: {
             total: totalProducts,
@@ -3051,6 +3055,7 @@ export const juryRouter = createTRPCRouter({
           .select({
             labelId: schema.products.labelId,
             labelName: schema.cupLabels.name,
+            labelTranslations: schema.cupLabels.translations,
             labelColor: schema.cupLabels.color,
             labelIcon: schema.cupLabels.icon,
           })
@@ -3076,7 +3081,11 @@ export const juryRouter = createTRPCRouter({
               existing.count++;
             } else {
               labelCounts.set(product.labelId, {
-                name: product.labelName,
+                name: localizedField(
+                  { name: product.labelName, translations: product.labelTranslations },
+                  "name",
+                  ctx.locale
+                ),
                 color: product.labelColor,
                 icon: product.labelIcon,
                 count: 1,
@@ -3195,10 +3204,12 @@ export const juryRouter = createTRPCRouter({
           categoryRank: panelCols.categoryRank,
           categoryId: schema.products.categoryId,
           categoryName: schema.categories.name,
+          categoryTranslations: schema.categories.translations,
           producerName: schema.producers.companyName,
           producerBrand: schema.producers.brandName,
           labelId: schema.cupLabels.id,
           labelName: schema.cupLabels.name,
+          labelTranslations: schema.cupLabels.translations,
           labelColor: schema.cupLabels.color,
           labelIcon: schema.cupLabels.icon,
         })
@@ -3329,7 +3340,11 @@ export const juryRouter = createTRPCRouter({
           productId: product.productId,
           productName: product.productName,
           anonymousCode: product.anonymousCode,
-          categoryName: product.categoryName,
+          categoryName: localizedField(
+            { name: product.categoryName, translations: product.categoryTranslations },
+            "name",
+            ctx.locale
+          ),
           categoryId: product.categoryId,
           categoryRank: product.categoryRank,
           producerName: product.producerName,
@@ -3340,7 +3355,11 @@ export const juryRouter = createTRPCRouter({
           // Les labels sont décernés par le jury public : un juré pro n'en voit pas.
           label: cupJury.panel === "public" && product.labelName
             ? {
-                name: product.labelName,
+                name: localizedField(
+                  { name: product.labelName, translations: product.labelTranslations },
+                  "name",
+                  ctx.locale
+                ),
                 color: product.labelColor,
                 icon: product.labelIcon,
               }
@@ -3388,7 +3407,7 @@ export const juryRouter = createTRPCRouter({
         resultsPublishedAt: cup.resultsPublishedAt,
         categories: cupJury.categoryAssignments.map((a) => ({
           id: a.category.id,
-          name: a.category.name,
+          name: localizedField(a.category, "name", ctx.locale),
         })),
         products: productsWithComparison,
         stats: {
@@ -3446,6 +3465,7 @@ export const juryRouter = createTRPCRouter({
           finalScore: panelColumns(cupJury.panel).finalScore,
           categoryId: schema.products.categoryId,
           categoryName: schema.categories.name,
+          categoryTranslations: schema.categories.translations,
           producerName: schema.producers.companyName,
         })
         .from(schema.products)
@@ -3573,8 +3593,8 @@ export const juryRouter = createTRPCRouter({
 
         return {
           criterionId: criterion.id,
-          criterionName: criterion.name,
-          criterionDescription: criterion.description,
+          criterionName: localizedField(criterion, "name", ctx.locale),
+          criterionDescription: localizedField(criterion, "description", ctx.locale),
           coefficient: criterion.coefficient,
           juryScore: juryScore !== null ? juryScore : null,
           categoryAverage: categoryAverage !== null ? Math.round(categoryAverage * 100) / 100 : null,
@@ -3595,7 +3615,11 @@ export const juryRouter = createTRPCRouter({
         productId: product.productId,
         productName: product.productName,
         anonymousCode: product.anonymousCode,
-        categoryName: product.categoryName,
+        categoryName: localizedField(
+          { name: product.categoryName, translations: product.categoryTranslations },
+          "name",
+          ctx.locale
+        ),
         producerName: product.producerName,
         finalScore: product.finalScore ? parseFloat(product.finalScore) : null,
         juryWeightedAverage:

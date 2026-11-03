@@ -1,6 +1,8 @@
 "use client";
 
+import { useLocale, useTranslations } from "next-intl";
 import { Link } from "~/i18n/navigation";
+import { formatDate as formatLocaleDate, type Locale } from "~/i18n/locales";
 import { api } from "~/trpc/react";
 
 /**
@@ -8,6 +10,9 @@ import { api } from "~/trpc/react";
  * Lists all completed cups where the jury can view results
  */
 export default function JuryResultsListPage() {
+  const t = useTranslations("juryMisc.results");
+  const tc = useTranslations("jurySpace");
+  const locale = useLocale() as Locale;
   const { data: completedCups, isLoading, isError, refetch } =
     api.jury.getCompletedCupsWithResults.useQuery();
 
@@ -16,18 +21,14 @@ export default function JuryResultsListPage() {
 
   const formatDate = (date: Date | null) => {
     if (!date) return "";
-    return new Intl.DateTimeFormat("fr-FR", {
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    }).format(new Date(date));
+    return formatLocaleDate(new Date(date), locale);
   };
 
   if (isLoading) {
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "400px" }}>
         <span className="n-font-data" style={{ color: "var(--n-text-disabled)", fontSize: "12px", letterSpacing: "0.08em" }}>
-          [LOADING...]
+          {tc("loading")}
         </span>
       </div>
     );
@@ -39,10 +40,10 @@ export default function JuryResultsListPage() {
     return (
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "400px", gap: "16px" }}>
         <span role="alert" className="n-font-data" style={{ color: "var(--n-text-secondary)", fontSize: "12px", letterSpacing: "0.08em", textAlign: "center" }}>
-          [ERREUR] LES RÉSULTATS N&apos;ONT PAS PU ÊTRE CHARGÉS
+          {t("error")}
         </span>
         <button type="button" className="n-btn-secondary" onClick={() => void refetch()}>
-          RÉESSAYER
+          {tc("retry")}
         </button>
       </div>
     );
@@ -53,10 +54,10 @@ export default function JuryResultsListPage() {
       {/* Header */}
       <div>
         <h1 className="n-font-body" style={{ fontSize: "24px", fontWeight: 600, color: "var(--n-text-display)", marginBottom: "4px" }}>
-          RÉSULTATS
+          {t("title")}
         </h1>
         <p className="n-font-body" style={{ color: "var(--n-text-secondary)", fontSize: "14px" }}>
-          Consultez vos résultats et la correspondance codes / variétés / producteurs
+          {t("subtitle")}
         </p>
       </div>
 
@@ -92,12 +93,12 @@ export default function JuryResultsListPage() {
                     {cup.cupName}
                   </span>
                   <span className="n-font-data" style={{ fontSize: "11px", color: "var(--n-text-disabled)" }}>
-                    PUBLIÉ LE {formatDate(cup.resultsPublishedAt).toUpperCase()}
+                    {t("publishedOn", { date: formatDate(cup.resultsPublishedAt).toUpperCase() })}
                   </span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "16px", flexShrink: 0 }}>
                   <span className="n-font-data" style={{ fontSize: "12px", color: "var(--n-text-secondary)" }}>
-                    {cup.totalProducts} PRODUIT{cup.totalProducts > 1 ? "S" : ""}
+                    {t("products", { count: cup.totalProducts })}
                   </span>
                   <span className="n-font-body" style={{ color: "var(--n-text-disabled)", fontSize: "16px" }}>›</span>
                 </div>
@@ -107,9 +108,9 @@ export default function JuryResultsListPage() {
         </div>
       ) : (
         <div style={{ textAlign: "center", padding: "64px 24px" }}>
-          <p className="n-label" style={{ color: "var(--n-text-primary)", marginBottom: "8px" }}>AUCUN RÉSULTAT DISPONIBLE</p>
+          <p className="n-label" style={{ color: "var(--n-text-primary)", marginBottom: "8px" }}>{t("empty")}</p>
           <p className="n-font-body" style={{ color: "var(--n-text-disabled)", fontSize: "14px" }}>
-            Les résultats seront disponibles une fois les cups terminées et les résultats publiés.
+            {t("emptyText")}
           </p>
         </div>
       )}

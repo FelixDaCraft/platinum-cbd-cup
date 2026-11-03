@@ -44,6 +44,15 @@ import producerProfile from "./producerProfile.json";
 import producerComponents from "./producerComponents.json";
 import gdpr from "./gdpr.json";
 import widget from "./widget.json";
+import jurySpace from "./jurySpace.json";
+import juryDashboard from "./juryDashboard.json";
+import juryAssignments from "./juryAssignments.json";
+import juryCup from "./juryCup.json";
+import juryRate from "./juryRate.json";
+import juryMisc from "./juryMisc.json";
+import juryComparison from "./juryComparison.json";
+import juryProfile from "./juryProfile.json";
+import juryPublicToken from "./juryPublicToken.json";
 
 export const catalog = {
   about,
@@ -88,4 +97,13 @@ export const catalog = {
   producerComponents,
   gdpr,
   widget,
+  jurySpace,
+  juryDashboard,
+  juryAssignments,
+  juryCup,
+  juryRate,
+  juryMisc,
+  juryComparison,
+  juryProfile,
+  juryPublicToken,
 };

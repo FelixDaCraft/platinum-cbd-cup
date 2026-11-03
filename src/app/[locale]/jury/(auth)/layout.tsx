@@ -1,4 +1,5 @@
-import { redirect } from "next/navigation";
+import { currentLocale, localizedRedirect as redirect } from "~/i18n/server";
+import { syncUserLocale } from "~/server/services/user-locale";
 import { getPortalSession, getUserPortalAccess } from "~/lib/portal/server-auth";
 import { NothingJuryLayout } from "~/components/jury/nothing-layout";
 
@@ -17,8 +18,15 @@ export default async function ProtectedJuryLayout({
   const session = await getPortalSession();
 
   if (!session?.user) {
-    redirect("/login?callbackUrl=/jury/dashboard");
+    return redirect("/login?callbackUrl=/jury/dashboard");
   }
+
+  // Langue des e-mails à venir (rappels, résultats) : celle de l'espace consulté.
+  await syncUserLocale(
+    session.user.id,
+    (session.user as { locale?: string | null }).locale,
+    await currentLocale()
+  );
 
   // Check roles - only jury and organizers can access
   const access = await getUserPortalAccess();
@@ -26,7 +34,7 @@ export default async function ProtectedJuryLayout({
   if (!access.hasAccess) {
     // Signed in but no role or profile at all. Never send them back to
     // /login: it redirects by role and would bounce them straight here.
-    redirect("/");
+    return redirect("/");
   }
 
   // On teste l'appartenance et non le rôle principal : un producteur qui
@@ -35,10 +43,10 @@ export default async function ProtectedJuryLayout({
   if (!access.roles.includes("jury") && !access.roles.includes("organizer")) {
     // User has access but wrong role - redirect to their area
     if (access.roles.includes("producer")) {
-      redirect("/producer");
+      return redirect("/producer");
     }
     // Fallback
-    redirect("/");
+    return redirect("/");
   }
 
   return <NothingJuryLayout>{children}</NothingJuryLayout>;

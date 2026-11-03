@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { Link, useRouter } from "~/i18n/navigation";
 
 import { useSession } from "~/lib/auth-client";
@@ -11,6 +12,7 @@ export default function RateLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const t = useTranslations("jurySpace");
   const router = useRouter();
   const { data: session, isPending: isSessionLoading } = useSession();
 
@@ -39,7 +41,7 @@ export default function RateLayout({
             letterSpacing: "0.1em",
           }}
         >
-          [LOADING...]
+          {t("loading")}
         </span>
       </div>
     );
@@ -64,7 +66,7 @@ export default function RateLayout({
             letterSpacing: "0.1em",
           }}
         >
-          [LOADING...]
+          {t("loading")}
         </span>
       </div>
     );
@@ -115,7 +117,7 @@ export default function RateLayout({
               textTransform: "uppercase",
             }}
           >
-            JURY
+            {t("appTitle").toUpperCase()}
           </span>
         </div>
 
@@ -131,7 +133,7 @@ export default function RateLayout({
               padding: "4px 8px",
             }}
           >
-            &lt; ACCUEIL
+            {t("home")}
           </Link>
           <UserMenu />
         </nav>

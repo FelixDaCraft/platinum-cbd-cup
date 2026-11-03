@@ -1,7 +1,10 @@
 "use client";
 
 import { use, useState } from "react";
+import { useLocale, useTranslations } from "next-intl";
 import { Link } from "~/i18n/navigation";
+import { useServerError } from "~/i18n/server-error";
+import { formatDate as formatLocaleDate, type Locale } from "~/i18n/locales";
 
 import { api } from "~/trpc/react";
 
@@ -17,6 +20,8 @@ interface ProductDetailRowProps {
 }
 
 function ProductDetailRow({ productId, cupId }: ProductDetailRowProps) {
+  const t = useTranslations("juryComparison");
+  const tc = useTranslations("jurySpace");
   const { data, isLoading, error } = api.jury.getJuryProductDetail.useQuery(
     { productId, cupId },
     { staleTime: 5 * 60 * 1000 }
@@ -27,7 +32,7 @@ function ProductDetailRow({ productId, cupId }: ProductDetailRowProps) {
       <tr>
         <td colSpan={6} style={{ padding: "24px", textAlign: "center" }}>
           <span className="n-font-data" style={{ color: "var(--n-text-disabled)", fontSize: "11px" }}>
-            [LOADING...]
+            {tc("loading")}
           </span>
         </td>
       </tr>
@@ -39,7 +44,7 @@ function ProductDetailRow({ productId, cupId }: ProductDetailRowProps) {
       <tr>
         <td colSpan={6} style={{ padding: "16px", textAlign: "center" }}>
           <span className="n-font-body" style={{ color: "var(--n-text-disabled)", fontSize: "13px" }}>
-            Impossible de charger les détails.
+            {t("detailError")}
           </span>
         </td>
       </tr>
@@ -61,7 +66,7 @@ function ProductDetailRow({ productId, cupId }: ProductDetailRowProps) {
           {/* Criteria table */}
           <div>
             <p className="n-label" style={{ color: "var(--n-text-secondary)", marginBottom: "12px" }}>
-              DÉTAIL PAR CRITÈRE
+              {t("byCriterion")}
             </p>
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -71,16 +76,16 @@ function ProductDetailRow({ productId, cupId }: ProductDetailRowProps) {
                 <thead>
                   <tr style={{ borderBottom: "1px solid var(--n-border-visible)" }}>
                     <th scope="col" style={{ padding: "8px 12px", textAlign: "left" }}>
-                      <span className="n-label" style={{ color: "var(--n-text-secondary)" }}>CRITÈRE</span>
+                      <span className="n-label" style={{ color: "var(--n-text-secondary)" }}>{t("criterion")}</span>
                     </th>
                     <th scope="col" style={{ padding: "8px 12px", textAlign: "center" }}>
-                      <span className="n-label" style={{ color: "var(--n-text-secondary)" }}>MA NOTE</span>
+                      <span className="n-label" style={{ color: "var(--n-text-secondary)" }}>{t("myScore")}</span>
                     </th>
                     <th scope="col" style={{ padding: "8px 12px", textAlign: "center" }}>
-                      <span className="n-label" style={{ color: "var(--n-text-secondary)" }}>MOY. CAT.</span>
+                      <span className="n-label" style={{ color: "var(--n-text-secondary)" }}>{t("catAvg")}</span>
                     </th>
                     <th scope="col" style={{ padding: "8px 12px", textAlign: "right" }}>
-                      <span className="n-label" style={{ color: "var(--n-text-secondary)" }}>ÉCART</span>
+                      <span className="n-label" style={{ color: "var(--n-text-secondary)" }}>{t("gap")}</span>
                     </th>
                   </tr>
                 </thead>
@@ -148,7 +153,7 @@ function ProductDetailRow({ productId, cupId }: ProductDetailRowProps) {
           {data.juryComment && data.juryComment.trim().length > 0 && (
             <div>
               <p className="n-label" style={{ color: "var(--n-text-secondary)", marginBottom: "8px" }}>
-                MON COMMENTAIRE
+                {t("myComment")}
               </p>
               <p className="n-font-body" style={{
                 fontSize: "13px",
@@ -170,7 +175,7 @@ function ProductDetailRow({ productId, cupId }: ProductDetailRowProps) {
               rel="noopener noreferrer"
             >
               <button className="n-btn-secondary" style={{ fontSize: "12px", padding: "6px 14px" }}>
-                Télécharger la fiche
+                {t("downloadSheet")}
               </button>
             </a>
           </div>
@@ -188,6 +193,10 @@ function ProductDetailRow({ productId, cupId }: ProductDetailRowProps) {
  * Each product row is expandable to reveal per-criterion breakdown.
  */
 export default function JuryResultsComparisonPage({ params }: PageProps) {
+  const t = useTranslations("juryComparison");
+  const tc = useTranslations("jurySpace");
+  const locale = useLocale() as Locale;
+  const serverError = useServerError();
   const resolvedParams = use(params);
   const [expandedProductId, setExpandedProductId] = useState<string | null>(null);
 
@@ -198,11 +207,7 @@ export default function JuryResultsComparisonPage({ params }: PageProps) {
   // Format date
   const formatDate = (date: Date | null) => {
     if (!date) return "";
-    return new Intl.DateTimeFormat("fr-FR", {
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    }).format(new Date(date));
+    return formatLocaleDate(new Date(date), locale);
   };
 
   // Get difference indicator
@@ -225,7 +230,7 @@ export default function JuryResultsComparisonPage({ params }: PageProps) {
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "400px" }}>
         <span className="n-font-data" style={{ color: "var(--n-text-disabled)", fontSize: "12px", letterSpacing: "0.08em" }}>
-          [LOADING...]
+          {tc("loading")}
         </span>
       </div>
     );
@@ -235,11 +240,11 @@ export default function JuryResultsComparisonPage({ params }: PageProps) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
         <Link href="/jury/dashboard" className="n-btn-ghost" style={{ fontSize: "13px" }}>
-          &lt; Retour au tableau de bord
+          {t("backDashboard")}
         </Link>
         <div style={{ textAlign: "center", padding: "64px 24px" }}>
-          <p className="n-label" style={{ color: "var(--n-accent)", marginBottom: "8px" }}>RÉSULTATS NON DISPONIBLES</p>
-          <p className="n-font-body" style={{ color: "var(--n-text-disabled)", fontSize: "14px" }}>{error.message}</p>
+          <p className="n-label" style={{ color: "var(--n-accent)", marginBottom: "8px" }}>{t("unavailable")}</p>
+          <p className="n-font-body" style={{ color: "var(--n-text-disabled)", fontSize: "14px" }}>{serverError(error)}</p>
         </div>
       </div>
     );
@@ -263,7 +268,7 @@ export default function JuryResultsComparisonPage({ params }: PageProps) {
       {/* Back button */}
       <div>
         <Link href="/jury/dashboard" className="n-btn-ghost" style={{ fontSize: "13px" }}>
-          &lt; Retour
+          {t("back")}
         </Link>
       </div>
 
@@ -273,7 +278,7 @@ export default function JuryResultsComparisonPage({ params }: PageProps) {
           {data.cupName}
         </h1>
         <p className="n-font-data" style={{ fontSize: "11px", color: "var(--n-text-disabled)" }}>
-          RÉSULTATS PUBLIÉS LE {formatDate(data.resultsPublishedAt).toUpperCase()}
+          {t("publishedOn", { date: formatDate(data.resultsPublishedAt).toUpperCase() })}
         </p>
       </div>
 
@@ -281,12 +286,12 @@ export default function JuryResultsComparisonPage({ params }: PageProps) {
       <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
         <a href={`/api/jury-pdf/${resolvedParams.cupId}/all-details`}>
           <button className="n-btn-secondary" style={{ fontSize: "12px" }}>
-            Télécharger toutes les fiches
+            {t("downloadAll")}
           </button>
         </a>
         <a href={`/api/jury-pdf/${resolvedParams.cupId}`}>
           <button className="n-btn-secondary" style={{ fontSize: "12px" }}>
-            Exporter en PDF
+            {t("exportPdf")}
           </button>
         </a>
       </div>
@@ -298,7 +303,7 @@ export default function JuryResultsComparisonPage({ params }: PageProps) {
             {data.stats.ratedByJury}
           </p>
           <p className="n-label" style={{ color: "var(--n-text-secondary)", fontSize: "10px" }}>
-            PRODUITS ÉVALUÉS
+            {t("evaluated")}
           </p>
           <p className="n-font-data" style={{ fontSize: "10px", color: "var(--n-text-disabled)", marginTop: "2px" }}>
             SUR {data.stats.totalProducts}
@@ -309,7 +314,7 @@ export default function JuryResultsComparisonPage({ params }: PageProps) {
             {data.stats.alignmentScore !== null ? `${data.stats.alignmentScore}%` : "-"}
           </p>
           <p className="n-label" style={{ color: "var(--n-text-secondary)", fontSize: "10px" }}>
-            SCORE D'ALIGNEMENT
+            {t("alignment")}
           </p>
         </div>
         <div style={{ background: "var(--n-surface)", padding: "20px" }}>
@@ -319,7 +324,7 @@ export default function JuryResultsComparisonPage({ params }: PageProps) {
               : "-"}
           </p>
           <p className="n-label" style={{ color: "var(--n-text-secondary)", fontSize: "10px" }}>
-            ÉCART MOYEN
+            {t("avgGap")}
           </p>
         </div>
         <div style={{ background: "var(--n-surface)", padding: "20px" }}>
@@ -342,21 +347,21 @@ export default function JuryResultsComparisonPage({ params }: PageProps) {
         border: "1px solid var(--n-border)",
         background: "var(--n-surface)",
       }}>
-        <span className="n-label" style={{ color: "var(--n-text-disabled)" }}>LÉGENDE :</span>
+        <span className="n-label" style={{ color: "var(--n-text-disabled)" }}>{t("legend")}</span>
         <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
           <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#4A90D9", flexShrink: 0 }} />
-          <span className="n-font-data" style={{ fontSize: "11px", color: "#4A90D9" }}>PLUS GÉNÉREUX</span>
+          <span className="n-font-data" style={{ fontSize: "11px", color: "#4A90D9" }}>{t("moreGenerous")}</span>
         </span>
         <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
           <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--n-text-disabled)", flexShrink: 0 }} />
-          <span className="n-font-data" style={{ fontSize: "11px", color: "var(--n-text-disabled)" }}>ALIGNÉ (±1 PT)</span>
+          <span className="n-font-data" style={{ fontSize: "11px", color: "var(--n-text-disabled)" }}>{t("aligned")}</span>
         </span>
         <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
           <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#D4843A", flexShrink: 0 }} />
-          <span className="n-font-data" style={{ fontSize: "11px", color: "#D4843A" }}>PLUS SÉVÈRE</span>
+          <span className="n-font-data" style={{ fontSize: "11px", color: "#D4843A" }}>{t("stricter")}</span>
         </span>
         <span className="n-font-data" style={{ fontSize: "11px", color: "var(--n-text-disabled)", marginLeft: "4px" }}>
-          · CLIQUEZ SUR UN PRODUIT POUR VOIR LE DÉTAIL
+          {t("clickHint")}
         </span>
       </div>
 
@@ -375,7 +380,7 @@ export default function JuryResultsComparisonPage({ params }: PageProps) {
               {categoryName}
             </p>
             <span className="n-font-data" style={{ fontSize: "11px", color: "var(--n-text-disabled)" }}>
-              {products.length} PRODUIT{products.length > 1 ? "S" : ""}
+              {t("products", { count: products.length })}
             </span>
           </div>
 
@@ -390,19 +395,19 @@ export default function JuryResultsComparisonPage({ params }: PageProps) {
                     <span className="n-label" style={{ color: "var(--n-text-secondary)" }}>#</span>
                   </th>
                   <th scope="col" style={{ padding: "10px 12px", textAlign: "left" }}>
-                    <span className="n-label" style={{ color: "var(--n-text-secondary)" }}>PRODUIT</span>
+                    <span className="n-label" style={{ color: "var(--n-text-secondary)" }}>{t("product")}</span>
                   </th>
                   <th scope="col" style={{ padding: "10px 12px", textAlign: "left" }}>
-                    <span className="n-label" style={{ color: "var(--n-text-secondary)" }}>PRODUCTEUR</span>
+                    <span className="n-label" style={{ color: "var(--n-text-secondary)" }}>{t("producer")}</span>
                   </th>
                   <th scope="col" style={{ padding: "10px 12px", textAlign: "right" }}>
-                    <span className="n-label" style={{ color: "var(--n-text-secondary)" }}>MA NOTE</span>
+                    <span className="n-label" style={{ color: "var(--n-text-secondary)" }}>{t("myScore")}</span>
                   </th>
                   <th scope="col" style={{ padding: "10px 12px", textAlign: "right" }}>
-                    <span className="n-label" style={{ color: "var(--n-text-secondary)" }}>SCORE FINAL</span>
+                    <span className="n-label" style={{ color: "var(--n-text-secondary)" }}>{t("finalScore")}</span>
                   </th>
                   <th scope="col" style={{ padding: "10px 12px", textAlign: "right" }}>
-                    <span className="n-label" style={{ color: "var(--n-text-secondary)" }}>ÉCART</span>
+                    <span className="n-label" style={{ color: "var(--n-text-secondary)" }}>{t("gap")}</span>
                   </th>
                 </tr>
               </thead>
@@ -504,13 +509,13 @@ export default function JuryResultsComparisonPage({ params }: PageProps) {
       {/* Summary Card */}
       <div className="n-card" style={{ padding: "24px" }}>
         <p className="n-label" style={{ color: "var(--n-text-secondary)", marginBottom: "24px" }}>
-          RÉSUMÉ DE VOTRE CONTRIBUTION
+          {t("summary")}
         </p>
         <div style={{ display: "grid", gap: "32px", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))" }}>
           {/* Alignment score ring */}
           <div>
             <p className="n-label" style={{ color: "var(--n-text-secondary)", marginBottom: "16px", fontSize: "10px" }}>
-              SCORE D'ALIGNEMENT
+              {t("alignment")}
             </p>
             {data.stats.alignmentScore !== null ? (
               <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
@@ -552,15 +557,15 @@ export default function JuryResultsComparisonPage({ params }: PageProps) {
                   </div>
                 </div>
                 <p className="n-font-body" style={{ fontSize: "13px", color: "var(--n-text-secondary)" }}>
-                  {data.stats.alignmentScore >= 80 && "Excellent alignement avec le consensus."}
-                  {data.stats.alignmentScore >= 60 && data.stats.alignmentScore < 80 && "Bon alignement avec les autres jurys."}
-                  {data.stats.alignmentScore >= 40 && data.stats.alignmentScore < 60 && "Alignement modéré, votre vision est unique."}
-                  {data.stats.alignmentScore < 40 && "Votre évaluation diffère significativement du consensus."}
+                  {data.stats.alignmentScore >= 80 && t("align80")}
+                  {data.stats.alignmentScore >= 60 && data.stats.alignmentScore < 80 && t("align60")}
+                  {data.stats.alignmentScore >= 40 && data.stats.alignmentScore < 60 && t("align40")}
+                  {data.stats.alignmentScore < 40 && t("alignLow")}
                 </p>
               </div>
             ) : (
               <p className="n-font-body" style={{ color: "var(--n-text-disabled)", fontSize: "13px" }}>
-                Pas assez de données pour calculer l'alignement.
+                {t("alignNoData")}
               </p>
             )}
           </div>
@@ -568,7 +573,7 @@ export default function JuryResultsComparisonPage({ params }: PageProps) {
           {/* Tendance */}
           <div>
             <p className="n-label" style={{ color: "var(--n-text-secondary)", marginBottom: "16px", fontSize: "10px" }}>
-              TENDANCE DE NOTATION
+              {t("trend")}
             </p>
             {data.stats.averageDifference !== null ? (
               <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
@@ -586,23 +591,26 @@ export default function JuryResultsComparisonPage({ params }: PageProps) {
                   }} />
                   <span className="n-font-body" style={{ fontSize: "14px", color: "var(--n-text-primary)" }}>
                     {data.stats.averageDifference > 2
-                      ? "Plus généreux que la moyenne"
+                      ? t("trendGenerous")
                       : data.stats.averageDifference < -2
-                        ? "Plus exigeant que la moyenne"
-                        : "Notes très proches de la moyenne"}
+                        ? t("trendStrict")
+                        : t("trendClose")}
                   </span>
                 </div>
                 <p className="n-font-body" style={{ fontSize: "13px", color: "var(--n-text-disabled)" }}>
-                  En moyenne,{" "}
-                  <span className="n-font-data" style={{ color: "var(--n-text-secondary)" }}>
-                    {Math.abs(data.stats.averageDifference).toFixed(1)} pts
-                  </span>{" "}
-                  {data.stats.averageDifference > 0 ? "au-dessus" : "en-dessous"} du score final.
+                  {t.rich(data.stats.averageDifference > 0 ? "trendAbove" : "trendBelow", {
+                    value: Math.abs(data.stats.averageDifference).toFixed(1),
+                    b: (chunks) => (
+                      <span className="n-font-data" style={{ color: "var(--n-text-secondary)" }}>
+                        {chunks}
+                      </span>
+                    ),
+                  })}
                 </p>
               </div>
             ) : (
               <p className="n-font-body" style={{ color: "var(--n-text-disabled)", fontSize: "13px" }}>
-                Pas assez de données pour déterminer la tendance.
+                {t("trendNoData")}
               </p>
             )}
           </div>
@@ -611,7 +619,7 @@ export default function JuryResultsComparisonPage({ params }: PageProps) {
 
       {/* Back button at bottom */}
       <div style={{ display: "flex", justifyContent: "center", paddingTop: "8px" }}>
-        <Link href="/jury/dashboard" className="n-btn-ghost">&lt; Retour au tableau de bord</Link>
+        <Link href="/jury/dashboard" className="n-btn-ghost">{t("backDashboard")}</Link>
       </div>
     </div>
   );
