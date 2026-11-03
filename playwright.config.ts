@@ -23,6 +23,10 @@ export default defineConfig({
 
   use: {
     baseURL: process.env.E2E_BASE_URL ?? "http://localhost:3000",
+    // Les specs décrivent le site français, langue par défaut. Sans cela,
+    // Chromium annonce en-US et la détection Accept-Language sert /en
+    // (tests/e2e/i18n.spec.ts couvre les autres langues).
+    locale: "fr-FR",
     trace: "on-first-retry",
     screenshot: "only-on-failure",
     video: "retain-on-failure",
