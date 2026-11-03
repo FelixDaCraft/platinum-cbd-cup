@@ -20,8 +20,34 @@ import {
   renderHighlight,
   renderParagraph,
   renderQuote,
+  recipientLocale,
   sendEmail,
+  strong,
 } from "./email";
+import { formatDate, localizePath, localizedField, type Locale } from "~/i18n/locales";
+import { translatorFor } from "~/i18n/translator";
+
+/** Traducteur des e-mails jury (espace `emails.jury`). */
+function juryT(locale: Locale) {
+  return translatorFor(locale, "emails.jury");
+}
+
+/**
+ * Langue d'un e-mail adressé à une adresse : celle du compte qui la porte
+ * s'il existe déjà (un producteur invité au jury, un juré d'une édition
+ * précédente), sinon le français.
+ */
+async function localeForEmail(email: string): Promise<Locale> {
+  try {
+    const user = await db.query.users.findFirst({
+      where: eq(schema.users.email, email.toLowerCase()),
+      columns: { locale: true },
+    });
+    return recipientLocale(user?.locale);
+  } catch {
+    return "fr";
+  }
+}
 
 // Invitation expires after 14 days
 const INVITATION_EXPIRY_DAYS = 14;
@@ -54,9 +80,15 @@ function invitationExpiry(): Date {
   return expiresAt;
 }
 
-/** Nom affiché dans l'email : prénom (et nom) saisis, sinon « Jury ». */
-function formatJuryName(firstName?: string | null, lastName?: string | null): string {
-  return firstName ? `${firstName}${lastName ? ` ${lastName}` : ""}` : "Jury";
+/** Nom affiché dans l'email : prénom (et nom) saisis, sinon « Juré ». */
+function formatJuryName(
+  firstName?: string | null,
+  lastName?: string | null,
+  locale: Locale = "fr"
+): string {
+  return firstName
+    ? `${firstName}${lastName ? ` ${lastName}` : ""}`
+    : translatorFor(locale, "emails")("defaultJuror");
 }
 
 /** Envoie l'email d'invitation initial (premier envoi ou invitation rouverte). */
@@ -70,7 +102,8 @@ async function sendInitialInvitationEmail(params: {
   customMessage?: string | null;
   expiresAt: Date;
 }): Promise<SendInvitationResult> {
-  const invitationUrl = `${getPortalBaseUrl()}/jury-invite/${params.token}`;
+  const locale = await localeForEmail(params.email);
+  const invitationUrl = `${getPortalBaseUrl()}${localizePath(`/jury-invite/${params.token}`, locale)}`;
 
   if (env.NODE_ENV === "development") {
     console.log("\n" + "=".repeat(60));
@@ -88,9 +121,10 @@ async function sendInitialInvitationEmail(params: {
     scope: "Jury Invitation",
     ref: `invitation ${params.invitationId}`,
     to: params.email,
-    subject: `Invitation jury - ${params.cupName}`,
+    subject: juryT(locale)("invitationSubject", { cup: params.cupName }),
     html: buildInvitationEmailHtml({
-      juryName: formatJuryName(params.firstName, params.lastName),
+      locale,
+      juryName: formatJuryName(params.firstName, params.lastName, locale),
       cupName: params.cupName,
       organizerName: ORGANIZER_NAME,
       customMessage: params.customMessage ?? undefined,
@@ -312,9 +346,10 @@ export async function resendInvitation(invitationId: string): Promise<SendInvita
 
     // Build invitation URL
     const portalBaseUrl = getPortalBaseUrl();
-    const invitationUrl = `${portalBaseUrl}/jury-invite/${invitation.token}`;
+    const locale = await localeForEmail(invitation.email);
+    const invitationUrl = `${portalBaseUrl}${localizePath(`/jury-invite/${invitation.token}`, locale)}`;
 
-    const juryName = formatJuryName(invitation.firstName, invitation.lastName);
+    const juryName = formatJuryName(invitation.firstName, invitation.lastName, locale);
 
     // Log in dev mode
     if (env.NODE_ENV === "development") {
@@ -333,8 +368,9 @@ export async function resendInvitation(invitationId: string): Promise<SendInvita
       scope: "Jury Invitation Reminder",
       ref: `invitation ${invitationId}`,
       to: invitation.email,
-      subject: `Rappel: Invitation jury - ${cup.name}`,
+      subject: juryT(locale)("reminderSubject", { cup: cup.name }),
       html: buildReminderEmailHtml({
+        locale,
         juryName,
         cupName: cup.name,
         organizerName: ORGANIZER_NAME,
@@ -411,6 +447,7 @@ export async function sendBulkInvitations(
 // Email HTML builders
 
 interface InvitationEmailParams {
+  locale: Locale;
   juryName: string;
   cupName: string;
   organizerName: string;
@@ -420,12 +457,8 @@ interface InvitationEmailParams {
 }
 
 /** Date d'expiration en toutes lettres, telle qu'affichée dans l'email. */
-function formatExpiry(expiresAt: Date): string {
-  return expiresAt.toLocaleDateString("fr-FR", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
+function formatExpiry(expiresAt: Date, locale: Locale): string {
+  return formatDate(expiresAt, locale);
 }
 
 /**
@@ -436,46 +469,45 @@ function buildInvitationEmailHtml(
   params: InvitationEmailParams,
   variant: "initial" | "reminder" = "initial"
 ): string {
-  const { invitationUrl, expiresAt, customMessage } = params;
-  const cupName = escapeHtml(params.cupName);
-  const organizerName = escapeHtml(params.organizerName);
+  const { invitationUrl, expiresAt, customMessage, locale } = params;
+  const t = juryT(locale);
+  const cupName = strong(params.cupName);
+  const organizerName = strong(params.organizerName);
   const isReminder = variant === "reminder";
 
   const intro = isReminder
-    ? `Vous avez ete invite par <strong>${organizerName}</strong> a participer
-        en tant que jury a la competition <strong>${cupName}</strong>.`
-    : `<strong>${organizerName}</strong> vous invite a participer en tant que jury
-        a la competition <strong>${cupName}</strong>.`;
+    ? t("reminderIntro", { organizer: organizerName, cup: cupName })
+    : t("invitationIntro", { organizer: organizerName, cup: cupName });
 
   const highlight = isReminder
-    ? renderHighlight(`<strong>Votre reponse est attendue !</strong>
+    ? renderHighlight(`<strong>${escapeHtml(t("awaited"))}</strong>
           <br />
-          L'organisateur compte sur votre participation.`)
+          ${escapeHtml(t("counting"))}`)
     : renderHighlight(
         `<p style="color: #92400e; margin: 0; font-size: 14px;">
-          <strong>En tant que jury, vous pourrez :</strong>
+          <strong>${escapeHtml(t("asJuror"))}</strong>
         </p>
         <ul style="color: #92400e; margin: 8px 0 0 0; padding-left: 20px; font-size: 14px;">
-          <li>Noter les produits selon des criteres definis</li>
-          <li>Ajouter des commentaires detailles</li>
-          <li>Contribuer au classement final</li>
+          <li>${escapeHtml(t("can1"))}</li>
+          <li>${escapeHtml(t("can2"))}</li>
+          <li>${escapeHtml(t("can3"))}</li>
         </ul>`,
         true
       );
 
-  const expiryNotice = isReminder
-    ? `Cette invitation expire le <strong>${formatExpiry(expiresAt)}</strong>.`
-    : `Cette invitation expire le <strong>${formatExpiry(expiresAt)}</strong>.
-        Si vous ne souhaitez pas participer, ignorez simplement cet email.`;
+  const expires = t("expires", { date: strong(formatExpiry(expiresAt, locale)) });
+  const expiryNotice = isReminder ? expires : `${expires}
+        ${escapeHtml(t("ignore"))}`;
 
   return renderEmailLayout({
-    title: isReminder ? "Rappel : Invitation jury en attente" : "Invitation jury",
+    locale,
+    title: isReminder ? t("reminderTitle") : t("invitationTitle"),
     body: `
-      ${renderGreeting(params.juryName)}
+      ${renderGreeting(params.juryName, locale)}
       ${renderParagraph(intro)}
       ${customMessage ? renderQuote(customMessage) : ""}
-      ${renderButton(invitationUrl, "Accepter l'invitation")}
-      ${renderFallbackLink(invitationUrl)}
+      ${renderButton(invitationUrl, t("accept"))}
+      ${renderFallbackLink(invitationUrl, locale)}
       ${highlight}
 
       <p style="color: #9ca3af; font-size: 14px; line-height: 1.5;">
@@ -485,6 +517,7 @@ function buildInvitationEmailHtml(
 }
 
 interface ReminderEmailParams {
+  locale: Locale;
   juryName: string;
   cupName: string;
   organizerName: string;
@@ -556,7 +589,8 @@ export async function sendRatingReminder(
 
     // Build rating URL
     const portalBaseUrl = getPortalBaseUrl();
-    const ratingUrl = `${portalBaseUrl}/jury/cups/${cup.id}`;
+    const locale = recipientLocale(user.locale);
+    const ratingUrl = `${portalBaseUrl}${localizePath(`/jury/cups/${cup.id}`, locale)}`;
 
     // Log in dev mode
     if (env.NODE_ENV === "development") {
@@ -579,9 +613,10 @@ export async function sendRatingReminder(
       scope: "Jury Rating Reminder",
       ref: `user ${user.id}`,
       to: user.email,
-      subject: `Rappel: Notation en attente - ${cup.name}`,
+      subject: juryT(locale)("ratingSubject", { cup: cup.name }),
       html: buildRatingReminderEmailHtml({
-        juryName: user.name ?? "Jury",
+        locale,
+        juryName: user.name ?? translatorFor(locale, "emails")("defaultJuror"),
         cupName: cup.name,
         organizerName: ORGANIZER_NAME,
         ratingUrl,
@@ -647,6 +682,7 @@ export async function sendBulkRatingReminders(
  * Build rating reminder email HTML
  */
 interface RatingReminderEmailParams {
+  locale: Locale;
   juryName: string;
   cupName: string;
   organizerName: string;
@@ -659,42 +695,49 @@ interface RatingReminderEmailParams {
 }
 
 function buildRatingReminderEmailHtml(params: RatingReminderEmailParams): string {
-  const { ratingUrl, completionStats } = params;
-  const cupName = escapeHtml(params.cupName);
-  const organizerName = escapeHtml(params.organizerName);
+  const { ratingUrl, completionStats, locale } = params;
+  const t = juryT(locale);
 
   const progressHtml = completionStats
     ? `
       <div style="background-color: #f3f4f6; border-radius: 8px; padding: 16px; margin-bottom: 24px;">
         <p style="color: #374151; margin: 0 0 8px 0; font-size: 14px; font-weight: 600;">
-          Votre progression :
+          ${escapeHtml(t("progress"))}
         </p>
         <div style="background-color: #e5e7eb; border-radius: 4px; height: 8px; overflow: hidden;">
           <div style="background-color: #d4af37; height: 100%; width: ${completionStats.completionRate}%;"></div>
         </div>
         <p style="color: #6b7280; margin: 8px 0 0 0; font-size: 12px;">
-          ${completionStats.productsRated} / ${completionStats.totalProductsToRate} produits notes (${completionStats.completionRate}%)
+          ${escapeHtml(
+            t("progressCount", {
+              rated: completionStats.productsRated,
+              total: completionStats.totalProductsToRate,
+              rate: completionStats.completionRate,
+            })
+          )}
         </p>
       </div>
     `
     : "";
 
   return renderEmailLayout({
-    title: "Rappel : Notation en attente",
+    locale,
+    title: t("ratingTitle"),
     body: `
-      ${renderGreeting(params.juryName)}
-      ${renderParagraph(`<strong>${organizerName}</strong> vous rappelle que vous avez des produits
-        a noter pour la competition <strong>${cupName}</strong>.`)}
+      ${renderGreeting(params.juryName, locale)}
+      ${renderParagraph(t("ratingIntro", { organizer: strong(params.organizerName), cup: strong(params.cupName) }))}
       ${progressHtml}
-      ${renderHighlight(`<strong>Vos notes sont importantes !</strong>
+      ${renderHighlight(`<strong>${escapeHtml(t("important"))}</strong>
           <br />
-          Elles contribuent au classement final de la competition.`)}
-      ${renderButton(ratingUrl, "Continuer la notation")}`,
+          ${escapeHtml(t("importantText"))}`)}
+      ${renderButton(ratingUrl, t("continue"))}`,
     // Le lien de préférences pointe vers le profil du juré : un `href="#"`
     // laissait croire à un désabonnement possible depuis l'email.
-    footerHtml: `${escapeHtml(ORGANIZER_NAME)} - Le concours de reference des meilleurs CBD
+    footerHtml: `${escapeHtml(ORGANIZER_NAME)} - ${escapeHtml(t("footerTagline"))}
         <br />
-        <a href="${getPortalBaseUrl()}/jury/profile" style="color: #9ca3af;">Gerer mes preferences de notification</a>`,
+        <a href="${getPortalBaseUrl()}${localizePath("/jury/profile", locale)}" style="color: #9ca3af;">${escapeHtml(
+          translatorFor(locale, "emails.productStatus")("preferences")
+        )}</a>`,
   });
 }
 
@@ -757,7 +800,8 @@ export async function sendRatingSheet(
 
     // Build rating URL
     const portalBaseUrl = getPortalBaseUrl();
-    const ratingUrl = `${portalBaseUrl}/jury/cups/${cup.id}`;
+    const locale = recipientLocale(user.locale);
+    const ratingUrl = `${portalBaseUrl}${localizePath(`/jury/cups/${cup.id}`, locale)}`;
 
     // Group products by category for email
     const productsByCategory = new Map<string, string[]>();
@@ -786,13 +830,14 @@ export async function sendRatingSheet(
       scope: "Jury Rating Sheet",
       ref: `user ${user.id}`,
       to: user.email,
-      subject: `Fiche de notation - ${cup.name}`,
+      subject: juryT(locale)("sheetSubject", { cup: cup.name }),
       html: buildRatingSheetEmailHtml({
-        juryName: user.name ?? "Jury",
+        locale,
+        juryName: user.name ?? translatorFor(locale, "emails")("defaultJuror"),
         cupName: cup.name,
         organizerName: ORGANIZER_NAME,
         ratingUrl,
-        categories: jury.categoryAssignments.map((a) => a.category.name),
+        categories: jury.categoryAssignments.map((a) => localizedField(a.category, "name", locale)),
         productsByCategory,
         totalProducts: products.length,
       }),
@@ -847,6 +892,7 @@ export async function sendBulkRatingSheets(
  * Build rating sheet email HTML
  */
 interface RatingSheetEmailParams {
+  locale: Locale;
   juryName: string;
   cupName: string;
   organizerName: string;
@@ -857,9 +903,8 @@ interface RatingSheetEmailParams {
 }
 
 function buildRatingSheetEmailHtml(params: RatingSheetEmailParams): string {
-  const { ratingUrl, productsByCategory, totalProducts } = params;
-  const cupName = escapeHtml(params.cupName);
-  const organizerName = escapeHtml(params.organizerName);
+  const { ratingUrl, productsByCategory, totalProducts, locale } = params;
+  const t = juryT(locale);
   const categories = params.categories.map(escapeHtml);
 
   // Build category list HTML
@@ -868,7 +913,7 @@ function buildRatingSheetEmailHtml(params: RatingSheetEmailParams): string {
     categoryListHtml += `
       <div style="margin-bottom: 16px;">
         <p style="color: #374151; margin: 0 0 8px 0; font-weight: 600;">
-          ${escapeHtml(categoryName)} (${productCodes.length} produit${productCodes.length !== 1 ? "s" : ""})
+          ${escapeHtml(t("categoryProducts", { category: categoryName, count: productCodes.length }))}
         </p>
         <div style="display: flex; flex-wrap: wrap; gap: 8px;">
           ${productCodes.map((code) => `
@@ -882,15 +927,15 @@ function buildRatingSheetEmailHtml(params: RatingSheetEmailParams): string {
   }
 
   return renderEmailLayout({
-    title: "Fiche de notation",
+    locale,
+    title: t("sheetTitle"),
     body: `
-      ${renderGreeting(params.juryName)}
-      ${renderParagraph(`Voici votre fiche de notation pour la competition <strong>${cupName}</strong>
-        organisee par <strong>${organizerName}</strong>.`)}
+      ${renderGreeting(params.juryName, locale)}
+      ${renderParagraph(t("sheetIntro", { cup: strong(params.cupName), organizer: strong(params.organizerName) }))}
 
       <div style="background-color: #f9fafb; border-radius: 8px; padding: 20px; margin-bottom: 24px;">
         <p style="color: #374151; margin: 0 0 16px 0; font-size: 16px; font-weight: 600;">
-          Vos categories assignees :
+          ${escapeHtml(t("categories"))}
         </p>
         <ul style="color: #4b5563; margin: 0; padding-left: 20px; font-size: 14px;">
           ${categories.map((cat) => `<li>${cat}</li>`).join("")}
@@ -899,16 +944,15 @@ function buildRatingSheetEmailHtml(params: RatingSheetEmailParams): string {
 
       <div style="background-color: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin-bottom: 24px;">
         <p style="color: #374151; margin: 0 0 16px 0; font-size: 16px; font-weight: 600;">
-          Produits a noter (${totalProducts} au total) :
+          ${escapeHtml(t("toRate", { count: totalProducts }))}
         </p>
         ${categoryListHtml}
       </div>
 
-      ${renderHighlight(`<strong>Instructions :</strong>
+      ${renderHighlight(`<strong>${escapeHtml(t("instructions"))}</strong>
           <br />
-          Cliquez sur le bouton ci-dessous pour acceder a l'interface de notation.
-          Vous pourrez noter chaque produit selon les criteres definis.`)}
-      ${renderButton(ratingUrl, "Commencer la notation")}`,
+          ${escapeHtml(t("instructionsText"))}`)}
+      ${renderButton(ratingUrl, t("start"))}`,
   });
 }
 
@@ -952,8 +996,9 @@ export async function sendJuryWelcomeEmail(
 
     // Build dashboard URL
     const portalBaseUrl = getPortalBaseUrl();
-    const dashboardUrl = `${portalBaseUrl}/jury/dashboard`;
-    const loginUrl = `${portalBaseUrl}/login`;
+    const locale = recipientLocale(user.locale);
+    const dashboardUrl = `${portalBaseUrl}${localizePath("/jury/dashboard", locale)}`;
+    const loginUrl = `${portalBaseUrl}${localizePath("/login", locale)}`;
 
     // Log in dev mode
     if (env.NODE_ENV === "development") {
@@ -973,8 +1018,9 @@ export async function sendJuryWelcomeEmail(
       scope: "Jury Welcome Email",
       ref: `user ${user.id}`,
       to: user.email,
-      subject: `Bienvenue dans le jury - ${cup.name}`,
+      subject: juryT(locale)("welcomeSubject", { cup: cup.name }),
       html: buildJuryWelcomeEmailHtml({
+        locale,
         juryName: user.name,
         cupName: cup.name,
         organizerName: ORGANIZER_NAME,
@@ -999,6 +1045,7 @@ export async function sendJuryWelcomeEmail(
  * Build jury welcome email HTML
  */
 interface JuryWelcomeEmailParams {
+  locale: Locale;
   juryName: string;
   cupName: string;
   organizerName: string;
@@ -1007,31 +1054,30 @@ interface JuryWelcomeEmailParams {
 }
 
 function buildJuryWelcomeEmailHtml(params: JuryWelcomeEmailParams): string {
-  const { loginUrl } = params;
-  const cupName = escapeHtml(params.cupName);
-  const organizerName = escapeHtml(params.organizerName);
+  const { loginUrl, locale } = params;
+  const t = juryT(locale);
 
   return renderEmailLayout({
-    title: "Bienvenue dans le jury !",
+    locale,
+    title: t("welcomeTitle"),
     body: `
-      ${renderGreeting(params.juryName)}
-      ${renderParagraph(`Votre compte a ete cree avec succes ! Vous faites maintenant partie du jury
-        de la competition <strong>${cupName}</strong> organisee par <strong>${organizerName}</strong>.`)}
+      ${renderGreeting(params.juryName, locale)}
+      ${renderParagraph(t("welcomeIntro", { cup: strong(params.cupName), organizer: strong(params.organizerName) }))}
       ${renderHighlight(
         `<p style="color: #92400e; margin: 0; font-size: 14px;">
-          <strong>Prochaines etapes :</strong>
+          <strong>${escapeHtml(t("next"))}</strong>
         </p>
         <ul style="color: #92400e; margin: 8px 0 0 0; padding-left: 20px; font-size: 14px;">
-          <li>Connectez-vous a votre espace jury</li>
-          <li>Attendez l'ouverture de la phase de notation</li>
-          <li>Notez les produits selon les criteres definis</li>
+          <li>${escapeHtml(t("next1"))}</li>
+          <li>${escapeHtml(t("next2"))}</li>
+          <li>${escapeHtml(t("next3"))}</li>
         </ul>`,
         true
       )}
-      ${renderButton(loginUrl, "Acceder a mon espace jury")}
+      ${renderButton(loginUrl, t("access"))}
 
       <p style="color: #9ca3af; font-size: 14px; line-height: 1.5; margin-top: 32px;">
-        Conservez cet email, il contient le lien vers votre espace jury.
+        ${escapeHtml(t("keep"))}
       </p>`,
   });
 }
@@ -1053,7 +1099,7 @@ export async function sendJuryAddedToCupEmail(
   try {
     const user = await db.query.users.findFirst({
       where: eq(schema.users.id, params.userId),
-      columns: { id: true, name: true, email: true },
+      columns: { id: true, name: true, email: true, locale: true },
     });
     if (!user) {
       return { success: false, error: "Utilisateur non trouve" };
@@ -1067,7 +1113,8 @@ export async function sendJuryAddedToCupEmail(
       return { success: false, error: "Cup non trouvee" };
     }
 
-    const dashboardUrl = `${getPortalBaseUrl()}/jury/dashboard`;
+    const locale = recipientLocale(user.locale);
+    const dashboardUrl = `${getPortalBaseUrl()}${localizePath("/jury/dashboard", locale)}`;
 
     if (env.NODE_ENV === "development") {
       console.log("\n" + "=".repeat(60));
@@ -1083,8 +1130,9 @@ export async function sendJuryAddedToCupEmail(
       scope: "Jury Added To Cup",
       ref: `user ${user.id} cup ${cup.id}`,
       to: user.email,
-      subject: `Vous faites partie du jury - ${cup.name}`,
+      subject: juryT(locale)("addedSubject", { cup: cup.name }),
       html: buildJuryAddedToCupEmailHtml({
+        locale,
         juryName: user.name,
         cupName: cup.name,
         panel: params.panel,
@@ -1107,26 +1155,29 @@ export function buildJuryAddedToCupEmailHtml(params: {
   panel: "pro" | "public";
   categoryNames: string[];
   dashboardUrl: string;
+  locale?: Locale;
 }): string {
-  const cupName = escapeHtml(params.cupName);
-  const panelLabel = params.panel === "pro" ? "professionnel" : "public";
+  const locale = params.locale ?? "fr";
+  const t = juryT(locale);
+  const panelLabel = params.panel === "pro" ? t("panelPro") : t("panelPublic");
   const categories =
     params.categoryNames.length > 0
       ? renderParagraph(
-          `Catégorie${params.categoryNames.length > 1 ? "s" : ""} à noter : <strong>${params.categoryNames
-            .map(escapeHtml)
-            .join(", ")}</strong>.`
+          t("categoriesToRate", {
+            count: params.categoryNames.length,
+            list: `<strong>${params.categoryNames.map(escapeHtml).join(", ")}</strong>`,
+          })
         )
       : "";
 
   return renderEmailLayout({
-    title: "Vous faites partie du jury",
+    locale,
+    title: t("addedTitle"),
     body: `
-      ${renderGreeting(params.juryName)}
-      ${renderParagraph(`Vous avez été ajouté au jury <strong>${panelLabel}</strong>
-        de la cup <strong>${cupName}</strong>.`)}
+      ${renderGreeting(params.juryName, locale)}
+      ${renderParagraph(t("addedIntro", { panel: strong(panelLabel), cup: strong(params.cupName) }))}
       ${categories}
-      ${renderButton(params.dashboardUrl, "Accéder à mon espace jury")}
-      ${renderFallbackLink(params.dashboardUrl)}`,
+      ${renderButton(params.dashboardUrl, t("access"))}
+      ${renderFallbackLink(params.dashboardUrl, locale)}`,
   });
 }

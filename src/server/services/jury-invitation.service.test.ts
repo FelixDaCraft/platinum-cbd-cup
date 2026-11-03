@@ -234,3 +234,52 @@ describe("buildJuryAddedToCupEmailHtml", () => {
     expect(html).toContain("https://test.platinumcbdcup.eu/jury/dashboard");
   });
 });
+
+describe("e-mails jury dans la langue du destinataire", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockInvitationFindFirst.mockResolvedValue(undefined);
+    mockInsertValues.mockResolvedValue(undefined);
+    mockSend.mockResolvedValue({ data: { id: "email-1" }, error: null });
+    mockCupFindFirst.mockResolvedValue({ id: "cup-1", name: "Platinum 2026", status: "published" });
+  });
+
+  it("invite en allemand l'adresse d'un compte germanophone, lien préfixé /de", async () => {
+    mockUserFindFirst.mockResolvedValue({ locale: "de" });
+
+    await sendJuryInvitation(baseParams);
+
+    const payload = mockSend.mock.calls[0]?.[0] as { html: string; subject: string };
+    expect(payload.subject).toBe("Jury-Einladung - Platinum 2026");
+    expect(payload.html).toContain("Guten Tag Jean Dupont,");
+    expect(payload.html).toContain('lang="de"');
+    expect(payload.html).toMatch(/\/de\/jury-invite\//);
+  });
+
+  it("reste en français sans compte connu pour l'adresse", async () => {
+    mockUserFindFirst.mockResolvedValue(undefined);
+
+    await sendJuryInvitation(baseParams);
+
+    const payload = mockSend.mock.calls[0]?.[0] as { html: string; subject: string };
+    expect(payload.subject).toBe("Invitation jury - Platinum 2026");
+    expect(payload.html).toContain("Bonjour Jean Dupont,");
+    expect(payload.html).not.toMatch(/\/(en|de|it|cs|nl|es)\/jury-invite\//);
+  });
+
+  it("ajout à une cup en anglais : panel et catégories traduits, valeurs échappées", () => {
+    const html = buildJuryAddedToCupEmailHtml({
+      juryName: "Jane",
+      cupName: "Cup <b>2026</b>",
+      panel: "pro",
+      categoryNames: ["Indoor Flowers", "Hash & co"],
+      dashboardUrl: "https://test.platinumcbdcup.eu/en/jury/dashboard",
+      locale: "en",
+    });
+
+    expect(html).toContain("Hello Jane,");
+    expect(html).toContain("<strong>pro</strong> jury");
+    expect(html).toContain("Categories to score: <strong>Indoor Flowers, Hash &amp; co</strong>.");
+    expect(html).toContain("Cup &lt;b&gt;2026&lt;/b&gt;");
+  });
+});

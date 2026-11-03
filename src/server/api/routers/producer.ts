@@ -858,7 +858,7 @@ export const producerRouter = createTRPCRouter({
 
       // Generate PDF
       try {
-        const result = await generateProductSynthesisPdf(productId);
+        const result = await generateProductSynthesisPdf(productId, { locale: ctx.locale });
 
         return {
           success: true,
@@ -932,7 +932,7 @@ export const producerRouter = createTRPCRouter({
 
       // Generate PDF
       try {
-        const result = await generateProducerSynthesisPdf(registrationId);
+        const result = await generateProducerSynthesisPdf(registrationId, { locale: ctx.locale });
 
         return {
           success: true,
@@ -1018,7 +1018,7 @@ export const producerRouter = createTRPCRouter({
       const panel = input.panel ?? availablePanels[0] ?? "public";
 
       // Get detailed results using the PDF service function
-      const resultData = await getProductResultsForPdf(productId, panel);
+      const resultData = await getProductResultsForPdf(productId, panel, ctx.locale);
 
       if (!resultData) {
         throw new TRPCError({
@@ -1106,7 +1106,7 @@ export const producerRouter = createTRPCRouter({
         }
 
         // Get detailed results
-        const resultData = await getProductResultsForPdf(productId, input.panel);
+        const resultData = await getProductResultsForPdf(productId, input.panel, ctx.locale);
 
         if (resultData) {
           productsData.push({

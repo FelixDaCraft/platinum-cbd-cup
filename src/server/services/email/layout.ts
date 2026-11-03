@@ -7,7 +7,7 @@
  */
 
 import { ORGANIZATION_NAME } from "~/lib/organization";
-import type { Locale } from "~/i18n/locales";
+import { isLocale, type Locale } from "~/i18n/locales";
 import { translatorFor } from "~/i18n/translator";
 
 import { escapeHtml, safeUrl } from "./escape";
@@ -81,8 +81,18 @@ export function renderParagraph(content: string): string {
 }
 
 /** « Bonjour X, » — le nom est échappé ici, les appelants passent le brut. */
-export function renderGreeting(name: string): string {
-  return renderParagraph(`Bonjour ${escapeHtml(name)},`);
+export function renderGreeting(name: string, locale: Locale = "fr"): string {
+  return renderParagraph(escapeHtml(translatorFor(locale, "emails")("greeting", { name })));
+}
+
+/** Valeur mise en gras dans une phrase traduite : échappée ici. */
+export function strong(value: string): string {
+  return `<strong>${escapeHtml(value)}</strong>`;
+}
+
+/** Langue d'envoi d'un e-mail : celle mémorisée sur le compte, sinon le français. */
+export function recipientLocale(stored: string | null | undefined): Locale {
+  return isLocale(stored) ? stored : "fr";
 }
 
 /** Bouton d'action principal. L'URL est filtrée par `safeUrl`. */

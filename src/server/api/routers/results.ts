@@ -458,7 +458,8 @@ export const resultsRouter = createTRPCRouter({
 
       // Generate PDF
       try {
-        const pdfResult = await generateProducerSynthesisPdf(registrationId);
+        // Téléchargé par le producteur : PDF dans la langue de sa page.
+        const pdfResult = await generateProducerSynthesisPdf(registrationId, { locale: ctx.locale });
 
         return {
           success: true,

@@ -53,6 +53,7 @@ import juryMisc from "./juryMisc.json";
 import juryComparison from "./juryComparison.json";
 import juryProfile from "./juryProfile.json";
 import juryPublicToken from "./juryPublicToken.json";
+import resultsPdf from "./resultsPdf.json";
 
 export const catalog = {
   about,
@@ -106,4 +107,5 @@ export const catalog = {
   juryComparison,
   juryProfile,
   juryPublicToken,
+  resultsPdf,
 };

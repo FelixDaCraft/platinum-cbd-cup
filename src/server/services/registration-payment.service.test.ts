@@ -303,3 +303,30 @@ describe("renderRegistrationConfirmationEmail", () => {
     expect(html).toContain("https://exemple/api/invoices/reg_1");
   });
 });
+
+describe("renderRegistrationConfirmationEmail — langues", () => {
+  const base = {
+    name: "Anna",
+    cupName: "PlatinumCBD CUP 2027",
+    productCount: 2,
+    amountPaid: "400.00 EUR",
+    invoiceNumber: "INV-2026-00003",
+    registrationsUrl: "https://exemple/es/producer/registrations",
+    invoiceUrl: "https://exemple/api/invoices/reg_1",
+  };
+
+  it("rédige l'e-mail en espagnol, quantités et adresse d'envoi comprises", () => {
+    const { subject, html } = renderRegistrationConfirmationEmail({ ...base, locale: "es" });
+    expect(subject).toBe("Inscripción confirmada - PlatinumCBD CUP 2027");
+    expect(html).toContain("Hola, Anna:");
+    expect(html).toContain("2 productos");
+    expect(html).toContain("120 g, cogollos de 1 g a 1,5 g");
+    expect(html).toContain("85220 Coëx");
+    expect(html).toContain('lang="es"');
+  });
+
+  it("accorde le nombre de produits en tchèque (few)", () => {
+    const { html } = renderRegistrationConfirmationEmail({ ...base, productCount: 3, locale: "cs" });
+    expect(html).toContain("3 produkty");
+  });
+});

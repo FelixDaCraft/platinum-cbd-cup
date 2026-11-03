@@ -14,6 +14,8 @@ export {
   renderHighlight,
   renderParagraph,
   renderQuote,
+  recipientLocale,
+  strong,
   type EmailLayoutParams,
 } from "./layout";
 export { sendEmail, type SendEmailParams, type SendEmailResult } from "./send";

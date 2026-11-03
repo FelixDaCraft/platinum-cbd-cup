@@ -1,5 +1,7 @@
 import { eq } from "drizzle-orm";
 
+import { localizePath, type Locale } from "~/i18n/locales";
+import { translatorFor } from "~/i18n/translator";
 import { env } from "~/env";
 import { getTransaction } from "~/lib/viva";
 import { db } from "~/server/db";
@@ -13,6 +15,8 @@ import {
   renderCallout,
   renderEmailLayout,
   renderGreeting,
+  recipientLocale,
+  strong,
   renderHighlight,
   renderParagraph,
   sendEmail,
@@ -239,6 +243,8 @@ export async function confirmPaidRegistration(
       amountPaid: `${(result.amountInCents / 100).toFixed(2)} ${
         registration.currency?.toUpperCase() ?? "EUR"
       }`,
+      // Langue de l'espace producteur d'où le paiement a été lancé.
+      locale: recipientLocale(registration.producer.user.locale),
       invoiceNumber: result.invoiceNumber,
     });
   }
@@ -280,8 +286,9 @@ async function sendRegistrationConfirmationEmail(params: {
   productCount: number;
   amountPaid: string;
   invoiceNumber: string;
+  locale: Locale;
 }) {
-  const { email, name, cupName, registrationId, productCount, amountPaid, invoiceNumber } =
+  const { email, name, cupName, registrationId, productCount, amountPaid, invoiceNumber, locale } =
     params;
 
   try {
@@ -310,8 +317,9 @@ async function sendRegistrationConfirmationEmail(params: {
         productCount,
         amountPaid,
         invoiceNumber,
-        registrationsUrl: `${portalBaseUrl}/producer/registrations`,
+        registrationsUrl: `${portalBaseUrl}${localizePath("/producer/registrations", locale)}`,
         invoiceUrl,
+        locale,
       }),
     });
   } catch (error) {
@@ -326,10 +334,13 @@ async function sendRegistrationConfirmationEmail(params: {
  */
 export const SAMPLE_SHIPPING_ADDRESS = ["Thomas RABAUD", "212 Buron", "85220 Coëx"] as const;
 
-/** Quantités attendues par type de produit, rappelées à la confirmation. */
+/**
+ * Quantités attendues par type de produit, rappelées à la confirmation.
+ * Clés de `emails.registration` : libellé puis quantité.
+ */
 export const SAMPLE_QUANTITIES = [
-  { product: "Fleurs", quantity: "120 g, têtes calibrées de 1 g à 1,5 g" },
-  { product: "Hash", quantity: "40 g, en morceaux de 0,5 g" },
+  { product: "flowers", quantity: "flowersQty" },
+  { product: "hash", quantity: "hashQty" },
 ] as const;
 
 /**
@@ -344,39 +355,43 @@ export function renderRegistrationConfirmationEmail(params: {
   invoiceNumber: string;
   registrationsUrl: string;
   invoiceUrl: string;
+  locale?: Locale;
 }): { subject: string; html: string } {
   const { name, cupName, productCount, amountPaid, invoiceNumber, registrationsUrl, invoiceUrl } =
     params;
+  const locale = params.locale ?? "fr";
+  const t = translatorFor(locale, "emails.registration");
 
   return {
-    subject: `Inscription confirmée - ${cupName}`,
+    subject: t("subject", { cup: cupName }),
     html: renderEmailLayout({
-      title: "Inscription confirmée",
+      locale,
+      title: t("title"),
       body: `
-      ${renderGreeting(name)}
-      ${renderParagraph(`Votre inscription à <strong>${escapeHtml(cupName)}</strong> a été confirmée avec succès.`)}
+      ${renderGreeting(name, locale)}
+      ${renderParagraph(t("intro", { cup: strong(cupName) }))}
       ${renderCallout({
-        content: `<strong>Produits inscrits :</strong> ${productCount} produit(s)
+        content: `<strong>${escapeHtml(t("products"))}</strong> ${escapeHtml(t("productsCount", { count: productCount }))}
             <br />
-            <strong>Montant réglé :</strong> ${escapeHtml(amountPaid)}
+            <strong>${escapeHtml(t("amount"))}</strong> ${escapeHtml(amountPaid)}
             <br />
-            <strong>Facture :</strong> ${escapeHtml(invoiceNumber)}`,
+            <strong>${escapeHtml(t("invoice"))}</strong> ${escapeHtml(invoiceNumber)}`,
         background: "#f0fdf4",
         textColor: "#166534",
         borderColor: "#22c55e",
       })}
-      ${renderParagraph("<strong>Envoi de vos échantillons</strong> — merci de les expédier à l'adresse suivante :")}
+      ${renderParagraph(`<strong>${escapeHtml(t("shipping"))}</strong>`)}
       ${renderHighlight(SAMPLE_SHIPPING_ADDRESS.map(escapeHtml).join("<br />"))}
       ${renderParagraph(
-        `Quantités à envoyer pour chaque produit inscrit :<br />${SAMPLE_QUANTITIES.map(
-          (q) => `• <strong>${escapeHtml(q.product)}</strong> : ${escapeHtml(q.quantity)}`
+        `${escapeHtml(t("quantities"))}<br />${SAMPLE_QUANTITIES.map(
+          (q) => `• <strong>${escapeHtml(t(q.product))}</strong>${locale === "fr" ? " " : ""}: ${escapeHtml(t(q.quantity))}`
         ).join("<br />")}`
       )}
-      ${renderButton(registrationsUrl, "Voir mes inscriptions")}
+      ${renderButton(registrationsUrl, t("button"))}
 
           <div style="text-align: center; margin-bottom: 24px;">
             <a href="${invoiceUrl}" style="color: #d4af37; font-size: 14px; text-decoration: underline;">
-              Télécharger ma facture (PDF)
+              ${escapeHtml(t("downloadInvoice"))}
             </a>
           </div>`,
       footerHtml: "Platinum CBD Cup",

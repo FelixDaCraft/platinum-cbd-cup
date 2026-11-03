@@ -115,7 +115,7 @@ describe("Product Notification Service", () => {
       expect(mockSend).toHaveBeenCalledWith(
         expect.objectContaining({
           to: "producer@example.com",
-          subject: "Test Product - Statut mis a jour",
+          subject: "Test Product - Statut mis à jour",
         })
       );
     });

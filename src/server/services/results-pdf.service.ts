@@ -23,7 +23,12 @@ import { formatScoreForScale, getMaxScoreForScale } from "~/lib/validations/labe
 import { formatTerpeneAroma } from "~/lib/lab-analysis/terpene-sensory";
 import { weightedAverageOrNull } from "./weighted-score";
 import { getProducerCupRegistrationIds, getProductsOfRegistrations } from "./producer-orders";
-import { JURY_PANEL_LABELS, juryPanelEnum, type JuryPanel } from "~/lib/enums";
+import { juryPanelEnum, type JuryPanel } from "~/lib/enums";
+import { formatDate, localizedField, type Locale } from "~/i18n/locales";
+import { translatorFor } from "~/i18n/translator";
+
+/** Traducteur des PDF de résultats (espace `resultsPdf`). */
+type PdfT = ReturnType<typeof translatorFor>;
 import { codeFor, panelColumns, rankFor, scoreFor } from "~/server/db/panel-columns";
 import path from "path";
 import { existsSync } from "fs";
@@ -322,6 +327,8 @@ export interface SynthesisPdfData {
   producerBrand: string | null;
   products: ProductResultData[];
   generatedAt: Date;
+  /** Langue du document (celle du producteur), français par défaut. */
+  locale?: Locale;
 }
 
 /**
@@ -371,7 +378,9 @@ function createProductPage(
   cupName: string,
   introText: string | null,
   logoUrl: string | null,
-  organizationName: string
+  organizationName: string,
+  t: PdfT,
+  locale: Locale
 ) {
   const maxScore = getMaxScoreForScale(product.ratingScale);
 
@@ -407,7 +416,7 @@ function createProductPage(
         React.createElement(
           Text,
           { style: styles.cupSubtitle },
-          `Synthèse des résultats — ${JURY_PANEL_LABELS[product.panel]}`
+          t("title", { panel: product.panel === "pro" ? t("juryPro") : t("juryPublic") })
         )
       )
     ),
@@ -427,7 +436,7 @@ function createProductPage(
       React.createElement(
         Text,
         { style: styles.productCategory },
-        `Catégorie: ${product.categoryName}${product.anonymousCode ? ` • Code: ${product.anonymousCode}` : ""}`
+        `${t("category", { category: product.categoryName })}${product.anonymousCode ? t("code", { code: product.anonymousCode }) : ""}`
       )
     ),
     // Results banner (compact)
@@ -437,7 +446,7 @@ function createProductPage(
       React.createElement(
         View,
         { style: styles.resultBox },
-        React.createElement(Text, { style: styles.resultLabel }, "Score Final"),
+        React.createElement(Text, { style: styles.resultLabel }, t("finalScore")),
         React.createElement(
           Text,
           { style: styles.resultValueAmber },
@@ -445,13 +454,13 @@ function createProductPage(
             ? "—"
             : product.finalScore !== null
               ? formatScoreForScale(product.finalScore, product.ratingScale)
-              : "N/A"
+              : t("na")
         )
       ),
       React.createElement(
         View,
         { style: styles.resultBoxDivider },
-        React.createElement(Text, { style: styles.resultLabel }, "Classement"),
+        React.createElement(Text, { style: styles.resultLabel }, t("ranking")),
         React.createElement(
           Text,
           { style: styles.resultValue },
@@ -459,39 +468,39 @@ function createProductPage(
             ? "—"
             : product.categoryRank !== null
               ? `${product.categoryRank}/${product.totalInCategory}`
-              : "N/A"
+              : t("na")
         )
       ),
       React.createElement(
         View,
         { style: styles.resultBoxDivider },
-        React.createElement(Text, { style: styles.resultLabel }, "Performance"),
+        React.createElement(Text, { style: styles.resultLabel }, t("performance")),
         React.createElement(
           Text,
           { style: styles.resultValue },
           product.disqualified
             ? "—"
             : product.percentile !== null
-              ? `Top ${100 - product.percentile}%`
-              : "N/A"
+              ? t("top", { pct: 100 - product.percentile })
+              : t("na")
         ),
         !product.disqualified && product.percentile !== null
           ? React.createElement(
               Text,
               { style: { fontSize: 6.5, color: "#6b7280", marginTop: 1, textAlign: "center" } },
-              `Surpasse ${product.percentile}% des produits`
+              t("beats", { pct: product.percentile })
             )
           : null
       ),
       React.createElement(
         View,
         { style: styles.resultBoxDivider },
-        React.createElement(Text, { style: styles.resultLabel }, "Label"),
+        React.createElement(Text, { style: styles.resultLabel }, t("label")),
         product.disqualified
           ? React.createElement(
               View,
               { style: [styles.labelBadge, { backgroundColor: "#d71921" }] },
-              React.createElement(Text, { style: styles.labelText }, "DISQUALIFIÉ")
+              React.createElement(Text, { style: styles.labelText }, t("disqualified"))
             )
           : product.label
           ? React.createElement(
@@ -499,21 +508,21 @@ function createProductPage(
               { style: [styles.labelBadge, { backgroundColor: product.label.color }] },
               React.createElement(Text, { style: styles.labelText }, product.label.name)
             )
-          : React.createElement(Text, { style: { fontSize: 9, color: "#9ca3af" } }, "Aucun")
+          : React.createElement(Text, { style: { fontSize: 9, color: "#9ca3af" } }, t("none"))
       )
     ),
     // Details table - single row per criterion
     React.createElement(
       View,
       { style: styles.detailsTable },
-      React.createElement(Text, { style: styles.tableTitle }, "Détail des notes par critère"),
+      React.createElement(Text, { style: styles.tableTitle }, t("detail")),
       React.createElement(
         View,
         { style: styles.tableHeader },
-        React.createElement(Text, { style: [styles.tableHeaderCell, styles.criterionCol] }, "Critère"),
-        React.createElement(Text, { style: [styles.tableHeaderCell, styles.scoreCol] }, "Note"),
-        React.createElement(Text, { style: [styles.tableHeaderCell, styles.avgCol] }, "Moy."),
-        React.createElement(Text, { style: [styles.tableHeaderCell, styles.diffCol] }, "Écart"),
+        React.createElement(Text, { style: [styles.tableHeaderCell, styles.criterionCol] }, t("criterion")),
+        React.createElement(Text, { style: [styles.tableHeaderCell, styles.scoreCol] }, t("score")),
+        React.createElement(Text, { style: [styles.tableHeaderCell, styles.avgCol] }, t("avg")),
+        React.createElement(Text, { style: [styles.tableHeaderCell, styles.diffCol] }, t("gap")),
         React.createElement(Text, { style: [styles.tableHeaderCell, styles.barCol] }, "")
       ),
       ...product.criteriaScores.map((criterion, index) => {
@@ -544,12 +553,12 @@ function createProductPage(
           React.createElement(
             Text,
             { style: [styles.tableCell, styles.scoreCol, { fontWeight: "bold" }] },
-            criterion.productScore !== null ? criterion.productScore.toFixed(1) : "N/A"
+            criterion.productScore !== null ? criterion.productScore.toFixed(1) : t("na")
           ),
           React.createElement(
             Text,
             { style: [styles.tableCell, styles.avgCol] },
-            criterion.categoryAverage !== null ? criterion.categoryAverage.toFixed(1) : "N/A"
+            criterion.categoryAverage !== null ? criterion.categoryAverage.toFixed(1) : t("na")
           ),
           React.createElement(
             Text,
@@ -591,8 +600,8 @@ function createProductPage(
               },
             },
             product.panel === "public"
-              ? "Commentaires du jury public"
-              : `Commentaires des jurys (${product.juryComments.length})`
+              ? t("publicComments")
+              : t("juryComments", { count: product.juryComments.length })
           ),
           // Jury public : un seul paragraphe, sans numérotation ni total.
           ...(product.panel === "public"
@@ -603,7 +612,7 @@ function createProductPage(
                     key: "public-comments",
                     style: { fontSize: 7.5, fontFamily: "Helvetica-Oblique", color: "#374151", lineHeight: 1.4, paddingHorizontal: 6, paddingVertical: 3 },
                   },
-                  product.juryComments.map((comment) => `« ${comment} »`).join("  ·  ")
+                  product.juryComments.map((comment) => t("quote", { text: comment })).join("  ·  ")
                 ),
               ]
             : []),
@@ -622,12 +631,12 @@ function createProductPage(
               React.createElement(
                 Text,
                 { style: { fontSize: 7, fontWeight: "bold", color: "#f59e0b", width: 36 } },
-                `Jury ${index + 1}`
+                t("juror", { n: index + 1 })
               ),
               React.createElement(
                 Text,
                 { style: { fontSize: 7.5, fontFamily: "Helvetica-Oblique", color: "#374151", flex: 1, lineHeight: 1.3 } },
-                `« ${comment} »`
+                t("quote", { text: comment })
               )
             )
           )
@@ -637,11 +646,11 @@ function createProductPage(
     React.createElement(
       View,
       { style: styles.footer },
-      React.createElement(Text, { style: styles.footerText }, "Document généré automatiquement par Platinum CBD Cup"),
+      React.createElement(Text, { style: styles.footerText }, t("footer")),
       React.createElement(
         Text,
         { style: styles.footerText },
-        new Date().toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" })
+        formatDate(new Date(), locale, { day: "2-digit", month: "2-digit", year: "numeric" })
       )
     )
   );
@@ -744,6 +753,8 @@ function createLabAnalysisPage(
   cupName: string,
   logoUrl: string | null,
   organizationName: string,
+  t: PdfT,
+  locale: Locale,
 ) {
   const la = product.labAnalysis;
   if (!la) return null;
@@ -935,7 +946,7 @@ function createLabAnalysisPage(
         React.createElement(
           Text,
           { style: styles.cupSubtitle },
-          "Analyse de laboratoire",
+          t("lab"),
         ),
       ),
     ),
@@ -955,8 +966,8 @@ function createLabAnalysisPage(
         Text,
         { style: styles.productCategory },
         `${product.categoryName} • ${la.labName}${
-          la.analysisNumber ? ` • N° ${la.analysisNumber}` : ""
-        }${la.approvedAt ? ` • Approuvée le ${la.approvedAt}` : ""}`,
+          la.analysisNumber ? t("analysisNo", { number: la.analysisNumber }) : ""
+        }${la.approvedAt ? t("approvedOn", { date: la.approvedAt }) : ""}`,
       ),
     ),
 
@@ -969,7 +980,7 @@ function createLabAnalysisPage(
           marginBottom: 12,
         },
       },
-      createTotalCard("Terpènes total", la.terpenesTotal, true),
+      createTotalCard(t("terpenesTotal"), la.terpenesTotal, true),
     ),
 
     // Pie chart + legend (repartition of the flower's terpenes)
@@ -1035,7 +1046,7 @@ function createLabAnalysisPage(
                   letterSpacing: 0.5,
                 },
               },
-              "Répartition des terpènes",
+              t("distribution"),
             ),
             ...pieSlices.map((slice) =>
               React.createElement(
@@ -1112,7 +1123,7 @@ function createLabAnalysisPage(
           letterSpacing: 0.5,
         },
       },
-      "Profil terpénique détaillé",
+      t("profile"),
     ),
 
     // Terpene bars
@@ -1135,7 +1146,7 @@ function createLabAnalysisPage(
       : React.createElement(
           Text,
           { style: { fontSize: 8, color: "#6b7280", marginBottom: 12 } },
-          "Aucun terpène quantifié.",
+          t("noTerpenes"),
         ),
 
     // Category comparison block — rank + average + delta. No competitor
@@ -1151,7 +1162,7 @@ function createLabAnalysisPage(
       const deltaLabel =
         delta === null
           ? "—"
-          : `${delta >= 0 ? "+" : ""}${delta.toFixed(2)}% vs moyenne`;
+          : t("vsAvg", { delta: `${delta >= 0 ? "+" : ""}${delta.toFixed(2)}` });
 
       return React.createElement(
         View,
@@ -1175,7 +1186,7 @@ function createLabAnalysisPage(
               letterSpacing: 0.5,
             },
           },
-          "Positionnement dans la catégorie",
+          t("positioning"),
         ),
         React.createElement(
           View,
@@ -1186,7 +1197,7 @@ function createLabAnalysisPage(
             React.createElement(
               Text,
               { style: { fontSize: 7, color: "#6b7280" } },
-              "Votre total",
+              t("yourTotal"),
             ),
             React.createElement(
               Text,
@@ -1204,7 +1215,7 @@ function createLabAnalysisPage(
             React.createElement(
               Text,
               { style: { fontSize: 7, color: "#6b7280" } },
-              "Moyenne catégorie",
+              t("categoryAvg"),
             ),
             React.createElement(
               Text,
@@ -1222,7 +1233,7 @@ function createLabAnalysisPage(
             React.createElement(
               Text,
               { style: { fontSize: 7, color: "#6b7280" } },
-              "Rang",
+              t("rank"),
             ),
             React.createElement(
               Text,
@@ -1240,7 +1251,7 @@ function createLabAnalysisPage(
             React.createElement(
               Text,
               { style: { fontSize: 7, color: "#6b7280" } },
-              "Écart à la moyenne",
+              t("gapAvg"),
             ),
             React.createElement(
               Text,
@@ -1261,12 +1272,12 @@ function createLabAnalysisPage(
       React.createElement(
         Text,
         { style: styles.footerText },
-        "Analyse fournie par le laboratoire · Document généré par Platinum CBD Cup",
+        t("labFooter"),
       ),
       React.createElement(
         Text,
         { style: styles.footerText },
-        new Date().toLocaleDateString("fr-FR", {
+        formatDate(new Date(), locale, {
           day: "2-digit",
           month: "2-digit",
           year: "numeric",
@@ -1362,6 +1373,8 @@ function resolveLogoForPdf(url: string | null): string | null {
  * Create the synthesis PDF document
  */
 function createSynthesisDocument(data: SynthesisPdfData) {
+  const locale = data.locale ?? "fr";
+  const t = translatorFor(locale, "resultsPdf");
   // Use pdfLogoUrl if set, otherwise fall back to organization logo
   const logoUrl = resolveLogoForPdf(data.pdfLogoUrl) ?? resolveLogoForPdf(data.organizationLogoUrl);
 
@@ -1376,6 +1389,8 @@ function createSynthesisDocument(data: SynthesisPdfData) {
         data.pdfIntroText,
         logoUrl,
         data.organizationName,
+        t,
+        locale,
       ),
     );
     const labPage = createLabAnalysisPage(
@@ -1383,6 +1398,8 @@ function createSynthesisDocument(data: SynthesisPdfData) {
       data.cupName,
       logoUrl,
       data.organizationName,
+      t,
+      locale,
     );
     if (labPage) pages.push(labPage);
   }
@@ -1417,7 +1434,8 @@ function computeWeightedAvg(
  */
 export async function getProductResultsForPdf(
   productId: string,
-  panel: JuryPanel
+  panel: JuryPanel,
+  locale: Locale = "fr"
 ): Promise<ProductResultData | null> {
   // Get product with all related data
   const product = await db.query.products.findFirst({
@@ -1568,8 +1586,8 @@ export async function getProductResultsForPdf(
         : null;
 
     criteriaScores.push({
-      criterionName: criterion.name,
-      criterionDescription: criterion.description,
+      criterionName: localizedField(criterion, "name", locale),
+      criterionDescription: localizedField(criterion, "description", locale),
       coefficient: criterion.coefficient,
       productScore,
       categoryAverage,
@@ -1763,7 +1781,7 @@ export async function getProductResultsForPdf(
   return {
     productId: product.id,
     productName: product.name,
-    categoryName: product.category.name,
+    categoryName: localizedField(product.category, "name", locale),
     panel,
     anonymousCode: codeFor(product, panel),
     finalScore,
@@ -1776,7 +1794,7 @@ export async function getProductResultsForPdf(
       ? null
       : product.label
       ? {
-          name: product.label.name,
+          name: localizedField(product.label, "name", locale),
           color: product.label.color ?? "#888888",
         }
       : null,
@@ -1793,7 +1811,8 @@ export async function getProductResultsForPdf(
  * le premier bloc, pour ne pas imprimer deux fois la même page.
  */
 export async function getProductResultsForAllPanels(
-  productId: string
+  productId: string,
+  locale: Locale = "fr"
 ): Promise<ProductResultData[]> {
   const product = await db.query.products.findFirst({
     where: eq(schema.products.id, productId),
@@ -1821,7 +1840,7 @@ export async function getProductResultsForAllPanels(
 
   const results: ProductResultData[] = [];
   for (const panel of panels) {
-    const data = await getProductResultsForPdf(productId, panel);
+    const data = await getProductResultsForPdf(productId, panel, locale);
     if (data) {
       results.push(results.length === 0 ? data : { ...data, labAnalysis: null });
     }
@@ -1837,9 +1856,12 @@ function round2(n: number): number {
  * Generate a synthesis PDF for a single product
  */
 export async function generateProductSynthesisPdf(
-  productId: string
+  productId: string,
+  options: { locale?: Locale } = {}
 ): Promise<{ buffer: Buffer; filename: string }> {
-  const panelsData = await getProductResultsForAllPanels(productId);
+  const locale = options.locale ?? "fr";
+  const t = translatorFor(locale, "resultsPdf");
+  const panelsData = await getProductResultsForAllPanels(productId, locale);
   const productData = panelsData[0];
 
   if (!productData) {
@@ -1873,10 +1895,11 @@ export async function generateProductSynthesisPdf(
     pdfLogoUrl: cup.pdfLogoUrl,
     organizationLogoUrl: null,
     pdfIntroText: cup.pdfIntroText,
-    producerName: producer.companyName ?? "Producteur",
+    producerName: producer.companyName ?? t("producer"),
     producerBrand: producer.brandName,
     products: panelsData,
     generatedAt: new Date(),
+    locale,
   };
 
   const pdfDocument = createSynthesisDocument(pdfData);
@@ -1888,7 +1911,7 @@ export async function generateProductSynthesisPdf(
 
   return {
     buffer: Buffer.from(buffer),
-    filename: `synthese-${sanitizedName}-${new Date().toISOString().split("T")[0]}.pdf`,
+    filename: `${t("fileName")}-${sanitizedName}-${new Date().toISOString().split("T")[0]}.pdf`,
   };
 }
 
@@ -1896,8 +1919,11 @@ export async function generateProductSynthesisPdf(
  * Generate a synthesis PDF for all products of a producer in a cup
  */
 export async function generateProducerSynthesisPdf(
-  registrationId: string
+  registrationId: string,
+  options: { locale?: Locale } = {}
 ): Promise<{ buffer: Buffer; filename: string }> {
+  const locale = options.locale ?? "fr";
+  const t = translatorFor(locale, "resultsPdf");
   // Get registration with all products (single-tenant)
   const registration = await db.query.registrations.findFirst({
     where: eq(schema.registrations.id, registrationId),
@@ -1928,7 +1954,7 @@ export async function generateProducerSynthesisPdf(
   // Get detailed data for each product
   const productsData: ProductResultData[] = [];
   for (const product of orderProducts) {
-    productsData.push(...(await getProductResultsForAllPanels(product.id)));
+    productsData.push(...(await getProductResultsForAllPanels(product.id, locale)));
   }
 
   if (productsData.length === 0) {
@@ -1942,10 +1968,11 @@ export async function generateProducerSynthesisPdf(
     pdfLogoUrl: registration.cup.pdfLogoUrl,
     organizationLogoUrl: null,
     pdfIntroText: registration.cup.pdfIntroText,
-    producerName: registration.producer.companyName ?? "Producteur",
+    producerName: registration.producer.companyName ?? t("producer"),
     producerBrand: registration.producer.brandName,
     products: productsData,
     generatedAt: new Date(),
+    locale,
   };
 
   const pdfDocument = createSynthesisDocument(pdfData);
@@ -1957,6 +1984,6 @@ export async function generateProducerSynthesisPdf(
 
   return {
     buffer: Buffer.from(buffer),
-    filename: `synthese-${sanitizedName}-${new Date().toISOString().split("T")[0]}.pdf`,
+    filename: `${t("fileName")}-${sanitizedName}-${new Date().toISOString().split("T")[0]}.pdf`,
   };
 }

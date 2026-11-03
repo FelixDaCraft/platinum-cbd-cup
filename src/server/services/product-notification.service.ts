@@ -9,6 +9,8 @@
  *   await notifyProductStatusChange(productId, oldStatus, newStatus);
  */
 
+import { localizePath } from "~/i18n/locales";
+import { translatorFor } from "~/i18n/translator";
 import { eq } from "drizzle-orm";
 import { db } from "~/server/db";
 import * as schema from "~/server/db/schema";
@@ -20,20 +22,18 @@ import {
   renderCallout,
   renderEmailLayout,
   renderGreeting,
+  recipientLocale,
+  strong,
   renderParagraph,
   sendEmail,
 } from "./email";
 
-/**
- * Product status labels for display in emails
- * NOTE: Using ASCII-only characters (no accents) for maximum email client compatibility
- * "Recu" instead of "Reçu", "Note" instead of "Noté", etc.
- */
-const productStatusLabels: Record<string, { label: string; color: string }> = {
-  pending: { label: "En attente", color: "#f59e0b" },
-  received: { label: "Recu", color: "#3b82f6" },
-  rating: { label: "En notation", color: "#8b5cf6" },
-  rated: { label: "Note", color: "#22c55e" },
+/** Couleur de chaque statut ; le libellé vient de `emails.productStatus`. */
+const productStatusColors: Record<string, string> = {
+  pending: "#f59e0b",
+  received: "#3b82f6",
+  rating: "#8b5cf6",
+  rated: "#22c55e",
 };
 
 /**
@@ -80,9 +80,15 @@ export async function notifyProductStatusChange(
       return { success: true, skipped: true };
     }
 
-    // Get status labels
-    const oldStatusInfo = productStatusLabels[oldStatus] ?? { label: oldStatus, color: "#6b7280" };
-    const newStatusInfo = productStatusLabels[newStatus] ?? { label: newStatus, color: "#6b7280" };
+    // Langue mémorisée sur le compte du producteur.
+    const locale = recipientLocale(user.locale);
+    const t = translatorFor(locale, "emails.productStatus");
+    const statusInfo = (status: string) => ({
+      label: status in productStatusColors ? t(status) : status,
+      color: productStatusColors[status] ?? "#6b7280",
+    });
+    const oldStatusInfo = statusInfo(oldStatus);
+    const newStatusInfo = statusInfo(newStatus);
 
     // Log in dev mode
     if (env.NODE_ENV === "development") {
@@ -101,13 +107,13 @@ export async function notifyProductStatusChange(
       scope: "Product Notification",
       ref: `product ${productId}`,
       to: user.email,
-      subject: `${product.name} - Statut mis a jour`,
+      subject: t("subject", { product: product.name }),
       html: renderEmailLayout({
-        title: "Mise a jour du statut de votre produit",
+        locale,
+        title: t("title"),
         body: `
-      ${renderGreeting(user.name ?? "Producteur")}
-      ${renderParagraph(`Le statut de votre produit <strong>${escapeHtml(product.name)}</strong> inscrit a la competition
-            <strong>${escapeHtml(cup.name)}</strong> a ete mis a jour.`)}
+      ${renderGreeting(user.name ?? translatorFor(locale, "emails")("defaultProducer"), locale)}
+      ${renderParagraph(t("intro", { product: strong(product.name), cup: strong(cup.name) }))}
 
           <div style="background-color: #f9fafb; border-radius: 8px; padding: 24px; margin-bottom: 24px;">
             <div style="display: flex; align-items: center; justify-content: center; gap: 16px;">
@@ -125,13 +131,13 @@ export async function notifyProductStatusChange(
             </div>
           </div>
 
-          ${getStatusExplanation(newStatus)}
+          ${getStatusExplanation(newStatus, t)}
 
-          ${renderButton(`${portalBaseUrl}/producer/registrations`, "Voir mes inscriptions")}`,
-        footerHtml: `Vous recevez cet email car vous avez active les notifications pour vos produits.
+          ${renderButton(`${portalBaseUrl}${localizePath("/producer/registrations", locale)}`, t("button"))}`,
+        footerHtml: `${escapeHtml(t("footer"))}
             <br />
-            <a href="${portalBaseUrl}/producer/profile" style="color: #d4af37;">
-              Gerer mes preferences de notification
+            <a href="${portalBaseUrl}${localizePath("/producer/profile", locale)}" style="color: #d4af37;">
+              ${escapeHtml(t("preferences"))}
             </a>`,
       }),
     });
@@ -151,28 +157,28 @@ export async function notifyProductStatusChange(
 /**
  * Get explanation text for the new status
  */
-function getStatusExplanation(status: string): string {
+function getStatusExplanation(status: string, t: ReturnType<typeof translatorFor>): string {
   switch (status) {
     case "received":
       return renderCallout({
-        content: `<strong>Echantillon recu</strong><br />
-            L'organisateur a confirme la reception de votre echantillon. Il sera bientot evalue par les jurys.`,
+        content: `<strong>${escapeHtml(t("receivedTitle"))}</strong><br />
+            ${escapeHtml(t("receivedText"))}`,
         background: "#eff6ff",
         textColor: "#1e40af",
         borderColor: "#3b82f6",
       });
     case "rating":
       return renderCallout({
-        content: `<strong>En cours de notation</strong><br />
-            Votre produit est actuellement en train d'etre evalue par les jurys. Les resultats seront disponibles une fois la notation terminee.`,
+        content: `<strong>${escapeHtml(t("ratingTitle"))}</strong><br />
+            ${escapeHtml(t("ratingText"))}`,
         background: "#f5f3ff",
         textColor: "#5b21b6",
         borderColor: "#8b5cf6",
       });
     case "rated":
       return renderCallout({
-        content: `<strong>Notation terminee</strong><br />
-            La notation de votre produit est terminee. Connectez-vous pour consulter vos resultats detailles.`,
+        content: `<strong>${escapeHtml(t("ratedTitle"))}</strong><br />
+            ${escapeHtml(t("ratedText"))}`,
         background: "#f0fdf4",
         textColor: "#166534",
         borderColor: "#22c55e",

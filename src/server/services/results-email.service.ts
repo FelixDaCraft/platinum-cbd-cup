@@ -21,8 +21,12 @@ import {
   renderGreeting,
   renderParagraph,
   renderQuote,
+  recipientLocale,
   sendEmail,
+  strong,
 } from "./email";
+import { localizePath, localizedField, type Locale } from "~/i18n/locales";
+import { translatorFor } from "~/i18n/translator";
 import { hasAnyResult, scoreFor } from "~/server/db/panel-columns";
 import {
   getProducerCupRegistrationIds,
@@ -123,6 +127,9 @@ export async function sendResultsEmail(
     const producer = registration.producer;
     const cup = registration.cup;
     const user = producer.user;
+    // Langue mémorisée sur le compte (celle de l'espace producteur consulté).
+    const locale = recipientLocale(user.locale);
+    const te = translatorFor(locale, "emails");
 
     // Un e-mail par producteur : ses produits de toutes ses commandes sur la
     // cup (première inscription et commandes complémentaires).
@@ -143,7 +150,7 @@ export async function sendResultsEmail(
     let pdfBuffer: Buffer;
     let filename: string;
     try {
-      const pdfResult = await generateProducerSynthesisPdf(registrationId);
+      const pdfResult = await generateProducerSynthesisPdf(registrationId, { locale });
       pdfBuffer = pdfResult.buffer;
       filename = pdfResult.filename;
     } catch (error) {
@@ -159,10 +166,12 @@ export async function sendResultsEmail(
       score !== null ? formatScoreForScale(score, cup.ratingScale as RatingScale) : "-";
     const productSummary = productsWithResults.map((p) => ({
       name: p.name,
-      category: p.category?.name ?? "Sans catégorie",
+      category: p.category
+        ? localizedField(p.category, "name", locale)
+        : translatorFor(locale, "producerSpace")("uncategorized"),
       scorePro: formatPanelScore(scoreFor(p, "pro")),
       scorePublic: formatPanelScore(scoreFor(p, "public")),
-      label: p.label?.name ?? null,
+      label: p.label ? localizedField(p.label, "name", locale) : null,
     }));
 
     // Log in dev mode
@@ -186,14 +195,16 @@ export async function sendResultsEmail(
       scope: "Results Email",
       ref: `registration ${registrationId}`,
       to: user.email,
-      subject: `Vos resultats - ${cup.name}`,
+      subject: te("results.subject", { cup: cup.name }),
       html: buildResultsEmailHtml({
-        producerName: producer.companyName ?? user.name ?? "Producteur",
+        producerName: producer.companyName ?? user.name ?? te("defaultProducer"),
         cupName: cup.name,
         organizerName: ORGANIZER_NAME,
         customMessage,
         productSummary,
-        producerPortalUrl: `${portalBaseUrl}/producer/cups/${cup.id}`,
+        // `/producer/cups/:id` n'existe pas : le lien menait à une 404.
+        producerPortalUrl: `${portalBaseUrl}${localizePath("/producer/results", locale)}`,
+        locale,
       }),
       attachments: [
         {
@@ -363,6 +374,7 @@ interface ResultsEmailParams {
     label: string | null;
   }>;
   producerPortalUrl: string;
+  locale: Locale;
 }
 
 function buildResultsEmailHtml(params: ResultsEmailParams): string {
@@ -373,7 +385,9 @@ function buildResultsEmailHtml(params: ResultsEmailParams): string {
     customMessage,
     productSummary,
     producerPortalUrl,
+    locale,
   } = params;
+  const t = translatorFor(locale, "emails.results");
 
   // Build product table HTML
   const productTableHtml = productSummary
@@ -396,33 +410,36 @@ function buildResultsEmailHtml(params: ResultsEmailParams): string {
     )
     .join("");
 
+  const th = (label: string, align: "left" | "center") =>
+    `<th style="padding: 12px; text-align: ${align}; font-weight: 600; color: #374151;">${escapeHtml(label)}</th>`;
+
   return renderEmailLayout({
-    title: "Vos resultats sont disponibles !",
+    locale,
+    title: t("title"),
     body: `
-      ${renderGreeting(producerName)}
-      ${renderParagraph(`<strong>${escapeHtml(organizerName)}</strong> a le plaisir de vous communiquer les resultats
-        de vos produits pour la competition <strong>${escapeHtml(cupName)}</strong>.`)}
+      ${renderGreeting(producerName, locale)}
+      ${renderParagraph(t("intro", { organizer: strong(organizerName), cup: strong(cupName) }))}
       ${customMessage ? renderQuote(customMessage) : ""}
       ${renderCallout({
-        content: `<strong>Felicitations !</strong>
+        content: `<strong>${escapeHtml(t("congrats"))}</strong>
           <br />
-          Retrouvez en piece jointe votre synthese detaillee avec graphiques.`,
+          ${escapeHtml(t("attachment"))}`,
         background: "#fef3c7",
         textColor: "#92400e",
       })}
 
       <div style="margin-bottom: 24px;">
         <p style="color: #374151; margin: 0 0 16px 0; font-size: 14px; font-weight: 600;">
-          Resume de vos resultats :
+          ${escapeHtml(t("summary"))}
         </p>
         <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
           <thead>
             <tr style="background-color: #f3f4f6;">
-              <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151;">Produit</th>
-              <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151;">Categorie</th>
-              <th style="padding: 12px; text-align: center; font-weight: 600; color: #374151;">Jury pro</th>
-              <th style="padding: 12px; text-align: center; font-weight: 600; color: #374151;">Jury public</th>
-              <th style="padding: 12px; text-align: center; font-weight: 600; color: #374151;">Label</th>
+              ${th(t("colProduct"), "left")}
+              ${th(t("colCategory"), "left")}
+              ${th(t("colPro"), "center")}
+              ${th(t("colPublic"), "center")}
+              ${th(t("colLabel"), "center")}
             </tr>
           </thead>
           <tbody>
@@ -431,11 +448,10 @@ function buildResultsEmailHtml(params: ResultsEmailParams): string {
         </table>
       </div>
 
-      ${renderButton(producerPortalUrl, "Voir mes resultats detailles")}
+      ${renderButton(producerPortalUrl, t("button"))}
 
       <p style="color: #9ca3af; font-size: 14px; line-height: 1.5; margin-top: 32px;">
-        Le document PDF en piece jointe contient une analyse detaillee de vos resultats,
-        incluant des graphiques radar et votre positionnement par rapport a la moyenne de votre categorie.
+        ${escapeHtml(t("pdfNote"))}
       </p>`,
   });
 }
