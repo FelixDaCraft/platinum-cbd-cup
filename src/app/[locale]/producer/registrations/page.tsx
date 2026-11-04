@@ -566,6 +566,7 @@ export default function ProducerRegistrationsPage() {
                         carrier={registration.shippingCarrier}
                         trackingNumber={registration.trackingNumber}
                         productStatuses={registration.products.map((p) => p.status)}
+                        samplesDeadline={registration.cup.samplesDeadline}
                         onChanged={() => void refetch()}
                       />
 

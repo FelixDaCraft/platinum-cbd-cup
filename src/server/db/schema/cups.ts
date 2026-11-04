@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, integer, jsonb, check } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, date, integer, jsonb, check } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 import { generateId } from "./id";
 import { categories } from "./categories";
@@ -69,6 +69,11 @@ export const cups = pgTable(
     registrationCloseAt: timestamp("registration_close_at", { withTimezone: true }), // When registrations close
     ratingStartAt: timestamp("rating_start_at", { withTimezone: true }),            // When rating phase begins
     ratingEndAt: timestamp("rating_end_at", { withTimezone: true }),                // When rating phase ends
+    // Date limite de réception des colis d'échantillons, jour civil à Paris
+    // ("2027-01-09" : jusqu'à 23:59 ce jour-là). Null = pas d'échéance
+    // annoncée : ni état « En retard » ni date affichée. En chaîne, elle
+    // traverse le cache JSON du portail sans conversion.
+    samplesDeadline: date("samples_deadline", { mode: "string" }),
     // Manual lock timestamp - Story 7.11
     // When set, all ratings are locked regardless of ratingEndAt
     ratingsLockedAt: timestamp("ratings_locked_at", { withTimezone: true }),

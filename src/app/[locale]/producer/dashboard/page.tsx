@@ -4,6 +4,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { Link } from "~/i18n/navigation";
 import { formatDate, type Locale } from "~/i18n/locales";
 import { api } from "~/trpc/react";
+import { samplesDeadlineEnd } from "~/lib/parcel-shipment";
 import { useOrganization, usePortalTheme } from "~/lib/portal/context";
 
 export default function ProducerDashboardPage() {
@@ -279,6 +280,13 @@ export default function ProducerDashboardPage() {
                         <div className="n-label" style={{ color: "var(--n-text-disabled)" }}>
                           {t("productsEntered", { count: reg.productsCount })}
                         </div>
+                        {reg.samplesDueBy && (
+                          <div className="n-label mt-1" style={{ color: "var(--n-warning)" }}>
+                            {t("samplesDueBy", {
+                              date: formatDate(samplesDeadlineEnd(reg.samplesDueBy)!, locale),
+                            })}
+                          </div>
+                        )}
                       </div>
                       <div className="shrink-0 text-right">
                         <div className="n-font-data text-xs" style={{ color: "var(--n-text-disabled)" }}>

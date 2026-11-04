@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest";
 
-import { declareShipmentSchema, TRACKING_NUMBER_MAX } from "./registration";
+import {
+  CARRIER_REQUIRED_MESSAGE,
+  declareShipmentSchema,
+  TRACKING_NUMBER_MAX,
+} from "./registration";
+import { samplesDeadlineSchema } from "./phases";
 
 const valid = { registrationId: "reg-1" };
 
@@ -31,18 +36,19 @@ describe("declareShipmentSchema", () => {
 
   it("limite la longueur du numéro de suivi", () => {
     const tooLong = "A".repeat(TRACKING_NUMBER_MAX + 1);
-    expect(declareShipmentSchema.safeParse({ ...valid, trackingNumber: tooLong }).success).toBe(
+    const withCarrier = { ...valid, carrier: "ups" };
+    expect(declareShipmentSchema.safeParse({ ...withCarrier, trackingNumber: tooLong }).success).toBe(
       false
     );
     expect(
-      declareShipmentSchema.safeParse({ ...valid, trackingNumber: "A".repeat(TRACKING_NUMBER_MAX) })
+      declareShipmentSchema.safeParse({ ...withCarrier, trackingNumber: "A".repeat(TRACKING_NUMBER_MAX) })
         .success
     ).toBe(true);
   });
 
   it("refuse les caractères hors lettres, chiffres et tirets dans le numéro", () => {
     expect(
-      declareShipmentSchema.safeParse({ ...valid, trackingNumber: "<script>" }).success
+      declareShipmentSchema.safeParse({ ...valid, carrier: "ups", trackingNumber: "<script>" }).success
     ).toBe(false);
   });
 
@@ -59,5 +65,55 @@ describe("declareShipmentSchema", () => {
     expect(declareShipmentSchema.parse({ ...valid, shippedAt: yesterday }).shippedAt).toEqual(
       yesterday
     );
+  });
+});
+
+describe("declareShipmentSchema : transporteur obligatoire avec un numéro de suivi", () => {
+  it("refuse un numéro de suivi sans transporteur, en signalant le champ transporteur", () => {
+    const result = declareShipmentSchema.safeParse({ ...valid, trackingNumber: "6A12345678" });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.path).toEqual(["carrier"]);
+    expect(result.error?.issues[0]?.message).toBe(CARRIER_REQUIRED_MESSAGE);
+  });
+
+  it("un transporteur vide ou en espaces ne compte pas", () => {
+    expect(
+      declareShipmentSchema.safeParse({ ...valid, carrier: "   ", trackingNumber: "6A123" }).success
+    ).toBe(false);
+    expect(
+      declareShipmentSchema.safeParse({ ...valid, carrier: null, trackingNumber: "6A123" }).success
+    ).toBe(false);
+  });
+
+  it("un numéro réduit à des espaces vaut « pas de numéro » : transporteur facultatif", () => {
+    expect(declareShipmentSchema.safeParse({ ...valid, trackingNumber: "   " }).success).toBe(true);
+  });
+
+  it("accepte un transporteur seul, ou un transporteur avec son numéro", () => {
+    expect(declareShipmentSchema.safeParse({ ...valid, carrier: "dpd" }).success).toBe(true);
+    expect(
+      declareShipmentSchema.safeParse({ ...valid, carrier: "Coursier local", trackingNumber: "AB-1" })
+        .success
+    ).toBe(true);
+  });
+});
+
+describe("samplesDeadlineSchema", () => {
+  it("accepte un jour civil AAAA-MM-JJ, ou null pour retirer la date", () => {
+    expect(samplesDeadlineSchema.parse({ cupId: "c", samplesDeadline: "2027-01-09" })).toEqual({
+      cupId: "c",
+      samplesDeadline: "2027-01-09",
+    });
+    expect(samplesDeadlineSchema.parse({ cupId: "c", samplesDeadline: null }).samplesDeadline).toBeNull();
+  });
+
+  it("une saisie vide vaut « pas de date limite »", () => {
+    expect(samplesDeadlineSchema.parse({ cupId: "c", samplesDeadline: "" }).samplesDeadline).toBeNull();
+  });
+
+  it("refuse un autre format ou une date impossible", () => {
+    for (const bad of ["09/01/2027", "2027-1-9", "2027-02-30", "demain"]) {
+      expect(samplesDeadlineSchema.safeParse({ cupId: "c", samplesDeadline: bad }).success).toBe(false);
+    }
   });
 });

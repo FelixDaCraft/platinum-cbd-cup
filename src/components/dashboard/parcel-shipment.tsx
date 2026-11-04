@@ -16,8 +16,9 @@ import {
 import { api } from "~/trpc/react";
 import {
   carrierLabel,
+  isCarrierMissing,
   isKnownCarrier,
-  SAMPLES_RECEPTION_DEADLINE,
+  LATE_WARNING_DAYS,
   SHIPPING_CARRIERS,
   trackingUrl,
   type ParcelState,
@@ -55,7 +56,7 @@ export const parcelStateConfig: Record<
   },
   late: {
     label: "En retard",
-    hint: `Non reçu à l'approche du ${format(SAMPLES_RECEPTION_DEADLINE, "dd/MM/yyyy")}`,
+    hint: `Non expédié à ${LATE_WARNING_DAYS} jours de la date limite de réception, ou non reçu après`,
     color: "#ffffff",
     bg: "#ef4444",
   },
@@ -139,6 +140,7 @@ export function ParcelCell({ shipment }: { shipment: RegistrationShipment }) {
 
 const OTHER = "other";
 const NONE = "none";
+const CARRIER_REQUIRED_HINT = "Précisez le transporteur : il est obligatoire avec un numéro de suivi.";
 
 /**
  * Saisie de l'expédition par l'organisation, quand le producteur prévient
@@ -158,6 +160,7 @@ export function OrganizerShipmentForm({
   const [otherCarrier, setOtherCarrier] = useState("");
   const [tracking, setTracking] = useState("");
   const [date, setDate] = useState("");
+  const [submitted, setSubmitted] = useState(false);
 
   const declare = api.registration.declareShipmentByOrganizer.useMutation({
     onSuccess: () => {
@@ -186,10 +189,15 @@ export function OrganizerShipmentForm({
     }
     setTracking(shipment.trackingNumber ?? "");
     setDate(format(shipment.shippedAt ? new Date(shipment.shippedAt) : new Date(), "yyyy-MM-dd"));
+    setSubmitted(false);
     setEditing(true);
   };
 
   const busy = declare.isPending || clear.isPending;
+  const chosenCarrier =
+    carrierChoice === OTHER ? otherCarrier : carrierChoice === NONE ? null : carrierChoice;
+  const carrierMissing = isCarrierMissing(chosenCarrier, tracking);
+  const showCarrierError = submitted && carrierMissing;
 
   if (!editing) {
     return (
@@ -217,9 +225,11 @@ export function OrganizerShipmentForm({
       className="space-y-3"
       onSubmit={(event) => {
         event.preventDefault();
+        setSubmitted(true);
+        if (carrierMissing) return;
         declare.mutate({
           registrationId,
-          carrier: carrierChoice === OTHER ? otherCarrier : carrierChoice === NONE ? null : carrierChoice,
+          carrier: chosenCarrier,
           trackingNumber: tracking,
           shippedAt: new Date(`${date}T12:00:00`),
         });
@@ -242,11 +252,26 @@ export function OrganizerShipmentForm({
               <SelectItem value={OTHER}>Autre</SelectItem>
             </SelectContent>
           </Select>
+          {showCarrierError && carrierChoice !== OTHER && (
+            <span className="n-label" role="alert" style={{ color: "#ef4444" }}>
+              {CARRIER_REQUIRED_HINT}
+            </span>
+          )}
         </label>
         {carrierChoice === OTHER && (
           <label className="space-y-1">
             <span className="n-label" style={{ color: "var(--n-text-secondary)" }}>NOM DU TRANSPORTEUR</span>
-            <Input value={otherCarrier} maxLength={CARRIER_MAX} onChange={(e) => setOtherCarrier(e.target.value)} />
+            <Input
+              value={otherCarrier}
+              maxLength={CARRIER_MAX}
+              aria-invalid={showCarrierError}
+              onChange={(e) => setOtherCarrier(e.target.value)}
+            />
+            {showCarrierError && (
+              <span className="n-label" role="alert" style={{ color: "#ef4444" }}>
+                {CARRIER_REQUIRED_HINT}
+              </span>
+            )}
           </label>
         )}
         <label className="space-y-1">
@@ -265,7 +290,7 @@ export function OrganizerShipmentForm({
         </label>
       </div>
       <div className="flex flex-wrap gap-2">
-        <Button type="submit" size="sm" disabled={busy}>
+        <Button type="submit" size="sm" disabled={busy || showCarrierError}>
           {declare.isPending ? "Enregistrement…" : "Enregistrer"}
         </Button>
         <Button type="button" variant="ghost" size="sm" onClick={() => setEditing(false)}>

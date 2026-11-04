@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isCarrierMissing } from "~/lib/parcel-shipment";
 
 /**
  * Registration status enum values
@@ -76,11 +77,13 @@ export const listByCupSchema = z.object({
 
 export const CARRIER_MAX = 40;
 export const TRACKING_NUMBER_MAX = 40;
+export const CARRIER_REQUIRED_MESSAGE = "Transporteur requis avec un numéro de suivi";
 
 /**
  * Déclaration d'expédition du colis d'échantillons, par le producteur ou par
  * l'organisation à sa place. Le numéro de suivi est rangé sans espaces et en
- * majuscules, comme les transporteurs l'impriment.
+ * majuscules, comme les transporteurs l'impriment. Avec un numéro, le
+ * transporteur est obligatoire (`isCarrierMissing`).
  */
 export const declareShipmentSchema = z.object({
   registrationId: z.string().min(1, "Registration ID requis"),
@@ -110,6 +113,9 @@ export const declareShipmentSchema = z.object({
       message: "La date d'expédition ne peut pas être dans le futur",
     })
     .optional(),
+}).refine((data) => !isCarrierMissing(data.carrier, data.trackingNumber), {
+  message: CARRIER_REQUIRED_MESSAGE,
+  path: ["carrier"],
 });
 
 export const clearShipmentSchema = z.object({

@@ -7,7 +7,8 @@ import { loginUserWithTimeout } from "../support/fixtures/auth.fixture";
  *
  * Ce que ces specs supposent de l'environnement : un producteur de recette
  * dont une inscription payée a ses produits encore « à envoyer » et aucune
- * expédition déclarée, et un organisateur. Les comptes viennent de
+ * expédition déclarée, un organisateur, et une cup publiée dont la date
+ * limite de réception des échantillons est le 9 janvier 2027. Les comptes viennent de
  * l'environnement (`E2E_COLIS_*`) ; sans eux, les specs sont ignorées.
  *
  * Écriture : la spec producteur déclare puis annule l'expédition de SA
@@ -30,8 +31,17 @@ test.describe("Colis d'échantillons", () => {
     await expect(colis).toContainText("9 janvier 2027");
 
     await colis.getByRole("button", { name: "J'AI EXPÉDIÉ MON COLIS" }).click();
-    await colis.getByLabel("TRANSPORTEUR (FACULTATIF)").selectOption("colissimo");
+
+    // Un numéro de suivi sans transporteur est refusé avant l'envoi.
     await colis.getByLabel("NUMÉRO DE SUIVI (FACULTATIF)").fill("6a 1234 5678");
+    await colis.getByRole("button", { name: "ENREGISTRER" }).click();
+    await expect(colis.getByRole("alert")).toHaveText(
+      "Choisissez le transporteur : sans lui, le numéro de suivi ne peut pas être suivi."
+    );
+    await expect(colis.getByRole("button", { name: "ENREGISTRER" })).toBeDisabled();
+
+    await colis.getByLabel("TRANSPORTEUR (FACULTATIF)").selectOption("colissimo");
+    await expect(colis.getByRole("alert")).toHaveCount(0);
     await colis.getByRole("button", { name: "ENREGISTRER" }).click();
 
     await expect(colis.getByText(/^EXPÉDIÉ LE \d{2}\/\d{2}$/)).toBeVisible();
@@ -64,5 +74,29 @@ test.describe("Colis d'échantillons", () => {
     for (const row of await rows.all()) {
       await expect(row).toContainText(/Expédié le \d{2}\/\d{2}/);
     }
+  });
+
+  test("@P1 la date limite de réception figure sur la page publique de l'édition", async ({ page }) => {
+    test.skip(!CUP_ID, "Cup de recette non fournie");
+
+    await page.goto(`/cups/${CUP_ID}`);
+    const calendrier = page.getByRole("region", { name: /Calendrier de l'édition/ });
+    await expect(calendrier).toContainText("Réception des échantillons");
+    await expect(calendrier).toContainText("Au plus tard le 9 janvier 2027");
+
+    await page.goto(`/en/cups/${CUP_ID}`);
+    await expect(page.getByRole("region", { name: /edition calendar/ })).toContainText(
+      "By 9 January 2027 at the latest"
+    );
+  });
+
+  test("@P1 l'organisateur règle la date limite dans Phases & Dates", async ({ page }) => {
+    test.skip(!ORGANISATEUR || !PASSWORD || !CUP_ID, "Compte organisateur de recette non fourni");
+
+    await loginUserWithTimeout(page, ORGANISATEUR!, PASSWORD!);
+    await page.goto(`/dashboard/cups/${CUP_ID}/config/phases`);
+
+    await expect(page.getByText("Réception des échantillons", { exact: true })).toBeVisible();
+    await expect(page.locator("#samplesDeadline")).toContainText("9 janvier 2027");
   });
 });

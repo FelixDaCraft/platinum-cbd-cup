@@ -1,5 +1,21 @@
 import { z } from "zod";
 import type { CupStatus } from "~/server/db/schema/cups";
+import { samplesDeadlineEnd } from "~/lib/parcel-shipment";
+
+/**
+ * Date limite de réception des échantillons : un jour civil (« 2027-01-09 »),
+ * réglé à part des transitions de phase. Vide ou null : pas de date limite.
+ */
+export const samplesDeadlineSchema = z.object({
+  cupId: z.string().min(1, "Cup ID requis"),
+  samplesDeadline: z
+    .string()
+    .nullable()
+    .transform((value) => value || null)
+    .refine((value) => value === null || samplesDeadlineEnd(value) !== null, {
+      message: "Date limite de réception invalide",
+    }),
+});
 
 /**
  * Schema for updating phase dates on a cup

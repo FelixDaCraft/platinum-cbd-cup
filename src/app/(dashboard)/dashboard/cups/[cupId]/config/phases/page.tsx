@@ -1,11 +1,12 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { Calendar, Clock, CalendarCheck, CalendarClock, Settings2 } from "lucide-react";
+import { Clock, CalendarCheck, CalendarClock, Package, Settings2 } from "lucide-react";
 
 import {
   PhaseTimelinePreview,
   PhaseDatesForm,
+  SamplesDeadlineForm,
 } from "~/components/features/phases";
 import { api } from "~/trpc/react";
 
@@ -165,6 +166,33 @@ export default function PhasesPage() {
               ratingEndAt: phaseDates.ratingEndAt,
             }}
             editableDates={phaseDates.editableDates}
+            onSuccess={handleSuccess}
+          />
+        </div>
+      </div>
+
+      {/* Date limite de réception des échantillons */}
+      <div className="n-card" style={{ padding: "0" }}>
+        <div
+          className="flex items-center gap-2 px-6 py-4"
+          style={{ borderBottom: "1px solid var(--n-border)" }}
+        >
+          <Package className="h-4 w-4" style={{ color: "var(--n-text-secondary)" }} />
+          <div>
+            <span style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: "12px", letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--n-text-display)", fontWeight: 700 }}>
+              Réception des échantillons
+            </span>
+            <p className="n-label mt-0.5">
+              Date limite d&apos;arrivée des colis, utilisée par le suivi des colis
+            </p>
+          </div>
+        </div>
+        <div className="p-6">
+          <SamplesDeadlineForm
+            key={phaseDates.samplesDeadline ?? "none"}
+            cupId={cupId}
+            initialValue={phaseDates.samplesDeadline}
+            disabled={phaseDates.cupStatus === "completed"}
             onSuccess={handleSuccess}
           />
         </div>

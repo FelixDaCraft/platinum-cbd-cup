@@ -7,12 +7,33 @@
  * bord. Sans dépendance serveur : partagé par l'API et les deux interfaces.
  */
 
+const TZ = "Europe/Paris";
+
+/** Décalage de Paris sur l'UTC à cet instant, en minutes (+60 l'hiver, +120 l'été). */
+function parisOffsetMinutes(at: Date): number {
+  const name = new Intl.DateTimeFormat("en-US", { timeZone: TZ, timeZoneName: "longOffset" })
+    .formatToParts(at)
+    .find((part) => part.type === "timeZoneName")?.value;
+  const match = /GMT([+-])(\d{2}):(\d{2})/.exec(name ?? "");
+  if (!match) return 0;
+  return (match[1] === "-" ? -1 : 1) * (Number(match[2]) * 60 + Number(match[3]));
+}
+
 /**
- * Date limite de réception des échantillons de l'édition 2027 : le
- * 9 janvier, fin de journée à Paris. Pas de colonne en base tant qu'il n'y a
- * qu'une édition à suivre.
+ * Fin de la date limite de réception des échantillons (`cups.samples_deadline`,
+ * jour civil « AAAA-MM-JJ ») : 23:59:59 ce jour-là à Paris. Null quand la cup
+ * n'en annonce pas, ou que la valeur n'est pas une date réelle : aucune
+ * échéance n'est alors inventée.
  */
-export const SAMPLES_RECEPTION_DEADLINE = new Date("2027-01-09T23:59:59+01:00");
+export function samplesDeadlineEnd(day: string | null | undefined): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day ?? "");
+  if (!match) return null;
+  const [year, month, date] = [Number(match[1]), Number(match[2]), Number(match[3])];
+  const utc = Date.UTC(year, month - 1, date, 23, 59, 59);
+  const check = new Date(utc);
+  if (check.getUTCMonth() !== month - 1 || check.getUTCDate() !== date) return null;
+  return new Date(utc - parisOffsetMinutes(check) * 60_000);
+}
 
 /** Fenêtre avant l'échéance où un colis non expédié passe « en retard ». */
 export const LATE_WARNING_DAYS = 7;
@@ -33,10 +54,14 @@ export function isParcelInHands(productStatuses: string[]): boolean {
   return productStatuses.some((status) => status !== "pending");
 }
 
+/**
+ * `deadline` : fin de la date limite de la cup (`samplesDeadlineEnd`). Sans
+ * date limite, un colis n'est jamais « en retard ».
+ */
 export function parcelState(
   facts: ParcelFacts,
-  now: Date = new Date(),
-  deadline: Date = SAMPLES_RECEPTION_DEADLINE
+  deadline: Date | null,
+  now: Date = new Date()
 ): ParcelState {
   if (!facts.competing || facts.productStatuses.length === 0) return "none";
 
@@ -44,9 +69,11 @@ export function parcelState(
   // laisse l'état d'expédition, pour que le manque reste visible.
   if (facts.productStatuses.every((status) => status !== "pending")) return "received";
 
-  if (now > deadline) return "late";
-  if (!facts.shippedAt && now.getTime() >= deadline.getTime() - LATE_WARNING_DAYS * DAY_MS) {
-    return "late";
+  if (deadline) {
+    if (now > deadline) return "late";
+    if (!facts.shippedAt && now.getTime() >= deadline.getTime() - LATE_WARNING_DAYS * DAY_MS) {
+      return "late";
+    }
   }
 
   return facts.shippedAt ? "shipped" : "none";
@@ -112,4 +139,28 @@ export function trackingUrl(
 ): string | null {
   if (!trackingNumber || !isKnownCarrier(carrier)) return null;
   return CARRIERS[carrier].url(encodeURIComponent(trackingNumber));
+}
+
+/**
+ * Un numéro de suivi ne sert à rien sans le transporteur qui l'a émis : dès
+ * qu'un numéro est saisi, le transporteur devient obligatoire. Sans numéro,
+ * il reste facultatif. Partagé par la validation serveur et les formulaires.
+ */
+export function isCarrierMissing(
+  carrier: string | null | undefined,
+  trackingNumber: string | null | undefined
+): boolean {
+  return !!trackingNumber?.trim() && !carrier?.trim();
+}
+
+/**
+ * Date limite à rappeler au producteur sur son tableau de bord : inscription
+ * payée, colis ni déclaré ni reçu, et date annoncée par la cup. Sinon null.
+ */
+export function samplesReminder(
+  facts: ParcelFacts & { samplesDeadline: string | null }
+): string | null {
+  if (!facts.competing || facts.productStatuses.length === 0) return null;
+  if (facts.shippedAt || isParcelInHands(facts.productStatuses)) return null;
+  return samplesDeadlineEnd(facts.samplesDeadline) ? facts.samplesDeadline : null;
 }

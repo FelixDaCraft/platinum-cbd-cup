@@ -6,8 +6,8 @@
       "open": "Inscriptions ouvertes", "closedRatingFrom": "Inscriptions closes · notation dès le {date}",
       "closed": "Inscriptions closes", "rating": "Notation à l'aveugle en cours", "done": "Édition terminée"
     },
-    "range": { "between": "Du {start} au {end}", "until": "Jusqu'au {date}", "from": "À partir du {date}", "on": "Le {date}", "onAt": "Le {date}, {place}" },
-    "steps": { "registration": "Inscriptions", "rating": "Notation à l'aveugle", "ceremony": "Cérémonie et palmarès" },
+    "range": { "between": "Du {start} au {end}", "until": "Jusqu'au {date}", "by": "Au plus tard le {date}", "from": "À partir du {date}", "on": "Le {date}", "onAt": "Le {date}, {place}" },
+    "steps": { "registration": "Inscriptions", "samples": "Réception des échantillons", "rating": "Notation à l'aveugle", "ceremony": "Cérémonie et palmarès" },
     "stepTag": { "done": "Terminé", "current": "En cours", "next": "À venir" },
     "calendarAria": "Calendrier de l'édition {year}",
     "places": {
@@ -28,8 +28,8 @@
       "open": "Entries open", "closedRatingFrom": "Entries closed · judging starts on {date}",
       "closed": "Entries closed", "rating": "Blind judging under way", "done": "Edition completed"
     },
-    "range": { "between": "From {start} to {end}", "until": "Until {date}", "from": "From {date}", "on": "On {date}", "onAt": "On {date}, {place}" },
-    "steps": { "registration": "Entries", "rating": "Blind judging", "ceremony": "Ceremony and winners" },
+    "range": { "between": "From {start} to {end}", "until": "Until {date}", "by": "By {date} at the latest", "from": "From {date}", "on": "On {date}", "onAt": "On {date}, {place}" },
+    "steps": { "registration": "Entries", "samples": "Sample delivery", "rating": "Blind judging", "ceremony": "Ceremony and winners" },
     "stepTag": { "done": "Completed", "current": "Under way", "next": "Coming up" },
     "calendarAria": "{year} edition calendar",
     "places": {
@@ -50,8 +50,8 @@
       "open": "Iscrizioni aperte", "closedRatingFrom": "Iscrizioni chiuse · valutazione dal {date}",
       "closed": "Iscrizioni chiuse", "rating": "Valutazione alla cieca in corso", "done": "Edizione conclusa"
     },
-    "range": { "between": "Dal {start} al {end}", "until": "Fino al {date}", "from": "Dal {date}", "on": "Il {date}", "onAt": "Il {date}, {place}" },
-    "steps": { "registration": "Iscrizioni", "rating": "Valutazione alla cieca", "ceremony": "Cerimonia e albo d'oro" },
+    "range": { "between": "Dal {start} al {end}", "until": "Fino al {date}", "by": "Entro il {date}", "from": "Dal {date}", "on": "Il {date}", "onAt": "Il {date}, {place}" },
+    "steps": { "registration": "Iscrizioni", "samples": "Ricezione dei campioni", "rating": "Valutazione alla cieca", "ceremony": "Cerimonia e albo d'oro" },
     "stepTag": { "done": "Concluso", "current": "In corso", "next": "Prossimamente" },
     "calendarAria": "Calendario dell'edizione {year}",
     "places": {
@@ -72,8 +72,8 @@
       "open": "Anmeldung offen", "closedRatingFrom": "Anmeldung geschlossen · Bewertung ab dem {date}",
       "closed": "Anmeldung geschlossen", "rating": "Blindbewertung läuft", "done": "Ausgabe abgeschlossen"
     },
-    "range": { "between": "Vom {start} bis zum {end}", "until": "Bis zum {date}", "from": "Ab dem {date}", "on": "Am {date}", "onAt": "Am {date}, {place}" },
-    "steps": { "registration": "Anmeldung", "rating": "Blindbewertung", "ceremony": "Preisverleihung und Gewinner" },
+    "range": { "between": "Vom {start} bis zum {end}", "until": "Bis zum {date}", "by": "Spätestens am {date}", "from": "Ab dem {date}", "on": "Am {date}", "onAt": "Am {date}, {place}" },
+    "steps": { "registration": "Anmeldung", "samples": "Eingang der Proben", "rating": "Blindbewertung", "ceremony": "Preisverleihung und Gewinner" },
     "stepTag": { "done": "Abgeschlossen", "current": "Läuft", "next": "Demnächst" },
     "calendarAria": "Kalender der Ausgabe {year}",
     "places": {
@@ -94,8 +94,8 @@
       "open": "Přihlášky otevřeny", "closedRatingFrom": "Přihlášky uzavřeny · hodnocení od {date}",
       "closed": "Přihlášky uzavřeny", "rating": "Probíhá hodnocení naslepo", "done": "Ročník ukončen"
     },
-    "range": { "between": "Od {start} do {end}", "until": "Do {date}", "from": "Od {date}", "on": "{date}", "onAt": "{date}, {place}" },
-    "steps": { "registration": "Přihlášky", "rating": "Hodnocení naslepo", "ceremony": "Slavnostní vyhlášení" },
+    "range": { "between": "Od {start} do {end}", "until": "Do {date}", "by": "Nejpozději do {date}", "from": "Od {date}", "on": "{date}", "onAt": "{date}, {place}" },
+    "steps": { "registration": "Přihlášky", "samples": "Příjem vzorků", "rating": "Hodnocení naslepo", "ceremony": "Slavnostní vyhlášení" },
     "stepTag": { "done": "Ukončeno", "current": "Probíhá", "next": "Připravujeme" },
     "calendarAria": "Kalendář ročníku {year}",
     "places": {
@@ -116,8 +116,8 @@
       "open": "Inschrijving open", "closedRatingFrom": "Inschrijving gesloten · beoordeling vanaf {date}",
       "closed": "Inschrijving gesloten", "rating": "Blinde beoordeling loopt", "done": "Editie afgelopen"
     },
-    "range": { "between": "Van {start} tot {end}", "until": "Tot {date}", "from": "Vanaf {date}", "on": "Op {date}", "onAt": "Op {date}, {place}" },
-    "steps": { "registration": "Inschrijving", "rating": "Blinde beoordeling", "ceremony": "Prijsuitreiking en winnaars" },
+    "range": { "between": "Van {start} tot {end}", "until": "Tot {date}", "by": "Uiterlijk op {date}", "from": "Vanaf {date}", "on": "Op {date}", "onAt": "Op {date}, {place}" },
+    "steps": { "registration": "Inschrijving", "samples": "Ontvangst van de stalen", "rating": "Blinde beoordeling", "ceremony": "Prijsuitreiking en winnaars" },
     "stepTag": { "done": "Afgerond", "current": "Loopt", "next": "Binnenkort" },
     "calendarAria": "Kalender van de editie {year}",
     "places": {
@@ -138,8 +138,8 @@
       "open": "Inscripciones abiertas", "closedRatingFrom": "Inscripciones cerradas · evaluación a partir del {date}",
       "closed": "Inscripciones cerradas", "rating": "Evaluación a ciegas en curso", "done": "Edición finalizada"
     },
-    "range": { "between": "Del {start} al {end}", "until": "Hasta el {date}", "from": "A partir del {date}", "on": "El {date}", "onAt": "El {date}, {place}" },
-    "steps": { "registration": "Inscripciones", "rating": "Evaluación a ciegas", "ceremony": "Ceremonia y palmarés" },
+    "range": { "between": "Del {start} al {end}", "until": "Hasta el {date}", "by": "A más tardar el {date}", "from": "A partir del {date}", "on": "El {date}", "onAt": "El {date}, {place}" },
+    "steps": { "registration": "Inscripciones", "samples": "Recepción de las muestras", "rating": "Evaluación a ciegas", "ceremony": "Ceremonia y palmarés" },
     "stepTag": { "done": "Finalizado", "current": "En curso", "next": "Próximamente" },
     "calendarAria": "Calendario de la edición {year}",
     "places": {

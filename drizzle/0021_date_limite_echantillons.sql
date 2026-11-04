@@ -1,0 +1,1 @@
+ALTER TABLE "cups" ADD COLUMN "samples_deadline" date;

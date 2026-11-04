@@ -36,6 +36,8 @@ import {
 import { getMaxScoreForScale } from "~/lib/validations/labels";
 import { calculateWeightedScore } from "~/lib/validations/criteria";
 import { criteriaOfPanel } from "~/lib/criteria-panels";
+import { samplesReminder } from "~/lib/parcel-shipment";
+import { checkoutState, isCompeting } from "~/lib/registration-checkout";
 
 const getProducerIdByUser = async (ctx: AuthedContext) => {
   const producer = await ctx.db.query.producers.findFirst({
@@ -351,11 +353,13 @@ export const producerRouter = createTRPCRouter({
               name: true,
               status: true,
               resultsPublishedAt: true,
+              samplesDeadline: true,
             },
           },
           products: {
             columns: {
               id: true,
+              status: true,
               finalScorePro: true,
               finalScorePublic: true,
               labelId: true,
@@ -380,6 +384,13 @@ export const producerRouter = createTRPCRouter({
         hasLabels: reg.products.some((p) => p.labelId !== null),
         createdAt: reg.createdAt,
         resultsPublishedAt: reg.cup.resultsPublishedAt,
+        // Date limite à rappeler tant que le colis n'est ni parti ni reçu.
+        samplesDueBy: samplesReminder({
+          competing: isCompeting(checkoutState({ ...reg, productCount: reg.products.length })),
+          shippedAt: reg.shippedAt,
+          productStatuses: reg.products.map((p) => p.status),
+          samplesDeadline: reg.cup.samplesDeadline,
+        }),
       }));
     }),
 

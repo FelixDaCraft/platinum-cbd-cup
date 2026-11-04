@@ -9,9 +9,10 @@ import { formatDate, type Locale } from "~/i18n/locales";
 import { api } from "~/trpc/react";
 import {
   carrierLabel,
+  isCarrierMissing,
   isKnownCarrier,
   isParcelInHands,
-  SAMPLES_RECEPTION_DEADLINE,
+  samplesDeadlineEnd,
   SHIPPING_CARRIERS,
   trackingUrl,
 } from "~/lib/parcel-shipment";
@@ -23,6 +24,8 @@ export interface ParcelShipmentPanelProps {
   carrier: string | null;
   trackingNumber: string | null;
   productStatuses: string[];
+  /** Date limite de réception de la cup (« AAAA-MM-JJ »), null si non annoncée. */
+  samplesDeadline: string | null;
   /** Appelé après un enregistrement ou une annulation. */
   onChanged: () => void;
 }
@@ -52,8 +55,10 @@ function todayInput(): string {
 
 /**
  * Colis d'échantillons d'une inscription payée : le producteur déclare son
- * envoi (transporteur et numéro de suivi facultatifs), puis peut corriger ou
- * annuler tant que l'organisation n'a rien reçu.
+ * envoi (transporteur et numéro de suivi facultatifs, mais un numéro exige
+ * son transporteur), puis peut corriger ou annuler tant que l'organisation
+ * n'a rien reçu. La date limite vient de la cup ; sans elle, rien n'est
+ * annoncé.
  */
 export function ParcelShipmentPanel({
   registrationId,
@@ -61,6 +66,7 @@ export function ParcelShipmentPanel({
   carrier,
   trackingNumber,
   productStatuses,
+  samplesDeadline,
   onChanged,
 }: ParcelShipmentPanelProps) {
   const t = useTranslations("producerRegistrations.parcel");
@@ -73,9 +79,13 @@ export function ParcelShipmentPanel({
   const [otherCarrier, setOtherCarrier] = useState("");
   const [tracking, setTracking] = useState("");
   const [date, setDate] = useState(todayInput);
+  // L'erreur « transporteur manquant » n'apparaît qu'après une tentative
+  // d'envoi, puis suit la saisie.
+  const [submitted, setSubmitted] = useState(false);
 
   const received = isParcelInHands(productStatuses);
-  const deadline = formatDate(SAMPLES_RECEPTION_DEADLINE, locale);
+  const deadlineEnd = samplesDeadlineEnd(samplesDeadline);
+  const deadline = deadlineEnd ? formatDate(deadlineEnd, locale) : null;
 
   const declare = api.registration.declareShipment.useMutation({
     onSuccess: () => {
@@ -106,18 +116,24 @@ export function ParcelShipmentPanel({
     setTracking(trackingNumber ?? "");
     setDate(shippedAt ? new Date(shippedAt).toISOString().slice(0, 10) : todayInput());
     setConfirmCancel(false);
+    setSubmitted(false);
     setEditing(true);
   };
 
   const trackingValid = /^[A-Za-z0-9\s-]*$/.test(tracking) &&
     tracking.replace(/\s+/g, "").length <= TRACKING_NUMBER_MAX;
 
+  const chosenCarrier = carrierChoice === OTHER ? otherCarrier : carrierChoice;
+  const carrierMissing = isCarrierMissing(chosenCarrier, tracking);
+  const showCarrierError = submitted && carrierMissing;
+
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
-    if (!trackingValid) return;
+    setSubmitted(true);
+    if (!trackingValid || carrierMissing) return;
     declare.mutate({
       registrationId,
-      carrier: carrierChoice === OTHER ? otherCarrier : carrierChoice,
+      carrier: chosenCarrier,
       trackingNumber: tracking,
       // Midi : la date choisie reste la même quel que soit le fuseau.
       shippedAt: new Date(`${date}T12:00:00`),
@@ -137,7 +153,7 @@ export function ParcelShipmentPanel({
         <span className="n-label" style={{ color: "var(--n-text-disabled)" }}>
           {t("title")}
         </span>
-        {!received && (
+        {!received && deadline && (
           <span className="text-xs" style={{ color: "var(--n-text-secondary)" }}>
             {t("deadline", { date: deadline })}
           </span>
@@ -162,6 +178,8 @@ export function ParcelShipmentPanel({
             <select
               value={carrierChoice}
               onChange={(e) => setCarrierChoice(e.target.value)}
+              aria-invalid={showCarrierError && carrierChoice !== OTHER}
+              aria-describedby={showCarrierError ? `${registrationId}-carrier-error` : undefined}
               className="n-font-data"
               style={fieldStyle}
             >
@@ -173,6 +191,11 @@ export function ParcelShipmentPanel({
               ))}
               <option value={OTHER}>{t("carrierOther")}</option>
             </select>
+            {showCarrierError && carrierChoice !== OTHER && (
+              <span id={`${registrationId}-carrier-error`} className="text-xs" role="alert" style={{ color: "var(--n-accent)" }}>
+                {t("carrierRequired")}
+              </span>
+            )}
           </label>
           {carrierChoice === OTHER && (
             <label className="block">
@@ -183,9 +206,16 @@ export function ParcelShipmentPanel({
                 value={otherCarrier}
                 onChange={(e) => setOtherCarrier(e.target.value)}
                 maxLength={CARRIER_MAX}
+                aria-invalid={showCarrierError}
+                aria-describedby={showCarrierError ? `${registrationId}-carrier-error` : undefined}
                 className="n-font-data"
                 style={fieldStyle}
               />
+              {showCarrierError && (
+                <span id={`${registrationId}-carrier-error`} className="text-xs" role="alert" style={{ color: "var(--n-accent)" }}>
+                  {t("carrierRequired")}
+                </span>
+              )}
             </label>
           )}
           <label className="block">
@@ -222,7 +252,7 @@ export function ParcelShipmentPanel({
             />
           </label>
           <div className="flex flex-wrap gap-2 sm:col-span-2">
-            <button type="submit" className="n-btn-primary text-xs" disabled={busy || !trackingValid}>
+            <button type="submit" className="n-btn-primary text-xs" disabled={busy || !trackingValid || showCarrierError}>
               {declare.isPending ? "[...]" : t("save")}
             </button>
             <button type="button" className="n-btn-ghost text-xs" onClick={() => setEditing(false)}>

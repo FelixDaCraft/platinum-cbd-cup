@@ -4,7 +4,8 @@ import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { Link, useRouter } from "~/i18n/navigation";
-import { formatPrice, intlLocale, localizePath, type Locale } from "~/i18n/locales";
+import { formatDate, formatPrice, intlLocale, localizePath, type Locale } from "~/i18n/locales";
+import { samplesDeadlineEnd } from "~/lib/parcel-shipment";
 import { useServerError } from "~/i18n/server-error";
 
 import { useSession } from "~/lib/auth-client";
@@ -448,6 +449,9 @@ export default function RegisterPage() {
     </div>
   );
 
+  const samplesDeadlineAt = samplesDeadlineEnd(cupData.cup.samplesDeadline);
+  const samplesDeadline = samplesDeadlineAt ? formatDate(samplesDeadlineAt, locale) : null;
+
   return (
     <div className="pg page-enter reg-flow" data-step={step}>
       {/* ── EN-TÊTE ───────────────────────────────────────────────────────── */}
@@ -455,6 +459,9 @@ export default function RegisterPage() {
         <Eyebrow>{t("eyebrow", { cup: cupData.cup.name })}</Eyebrow>
         <h1 className="display">{t("title")}</h1>
         <p className="pg-lede">{t("lede")}</p>
+        {samplesDeadline && (
+          <div className="notice is-info">{t("samplesDeadline", { date: samplesDeadline })}</div>
+        )}
         {getOrCreate.data?.isSupplement && (
           <div className="notice is-info">
             {t.rich("supplement", {

@@ -153,10 +153,30 @@ describe("registration.declareShipment (producteur)", () => {
     const caller = await callerAs("producer", base);
 
     const error = await errorOf(() =>
-      caller.declareShipment({ registrationId: "reg-1", trackingNumber: "A".repeat(41) })
+      caller.declareShipment({ registrationId: "reg-1", carrier: "ups", trackingNumber: "A".repeat(41) })
     );
     expect(error.code).toBe("BAD_REQUEST");
     expect(updates).toHaveLength(0);
+  });
+
+  it("refuse un numéro de suivi sans transporteur", async () => {
+    const caller = await callerAs("producer", base);
+
+    const error = await errorOf(() =>
+      caller.declareShipment({ registrationId: "reg-1", trackingNumber: "6A12345678" })
+    );
+    expect(error.code).toBe("BAD_REQUEST");
+    expect(error.message).toContain("Transporteur requis");
+    expect(updates).toHaveLength(0);
+    expect(mockLog).not.toHaveBeenCalled();
+  });
+
+  it("sans numéro de suivi, le transporteur reste facultatif", async () => {
+    const caller = await callerAs("producer", base);
+
+    await caller.declareShipment({ registrationId: "reg-1", carrier: "", trackingNumber: "" });
+
+    expect(updates[0]).toMatchObject({ shippingCarrier: null, trackingNumber: null });
   });
 });
 
@@ -232,6 +252,16 @@ describe("registration.declareShipmentByOrganizer", () => {
         metadata: expect.objectContaining({ kind: "shipment_declared", by: "organizer" }),
       })
     );
+  });
+
+  it("refuse aussi à l'organisation un numéro de suivi sans transporteur", async () => {
+    const caller = await callerAs("organizer", base);
+
+    const error = await errorOf(() =>
+      caller.declareShipmentByOrganizer({ registrationId: "reg-1", carrier: null, trackingNumber: "XY-99" })
+    );
+    expect(error.code).toBe("BAD_REQUEST");
+    expect(updates).toHaveLength(0);
   });
 
   it("l'organisation peut effacer une déclaration", async () => {

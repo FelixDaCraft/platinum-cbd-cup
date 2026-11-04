@@ -17,6 +17,7 @@ import {
   getRatingScaleValues,
 } from "~/lib/validations/cup";
 import {
+  samplesDeadlineSchema,
   updatePhaseDatesSchema,
   getPhaseStatus,
   getEditableDates,
@@ -170,10 +171,44 @@ export const cupRouter = createTRPCRouter({
         registrationCloseAt: cup.registrationCloseAt,
         ratingStartAt: cup.ratingStartAt,
         ratingEndAt: cup.ratingEndAt,
+        samplesDeadline: cup.samplesDeadline,
         status: resolvePhaseStatus(cup),
         cupStatus: cup.status,
         editableDates: getEditableDates(cup.status),
       };
+    }),
+
+  /**
+   * Date limite de réception des colis d'échantillons (jour civil, null pour
+   * la retirer). À part des dates de phases : ce n'est pas une transition,
+   * et elle reste modifiable pendant la notation, si un report est accordé.
+   */
+  updateSamplesDeadline: organizerProcedure
+    .input(samplesDeadlineSchema)
+    .mutation(async ({ ctx, input }) => {
+      const existingCup = await requireCup(ctx, input.cupId);
+
+      if (existingCup.status === "completed") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Les dates ne peuvent pas être modifiées sur une cup terminée",
+        });
+      }
+
+      const [updatedCup] = await ctx.db
+        .update(schema.cups)
+        .set({ samplesDeadline: input.samplesDeadline, updatedAt: new Date() })
+        .where(eq(schema.cups.id, input.cupId))
+        .returning();
+
+      if (!updatedCup) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Erreur lors de la mise à jour des dates",
+        });
+      }
+
+      return { samplesDeadline: updatedCup.samplesDeadline };
     }),
 
   /**
@@ -675,6 +710,7 @@ export const cupRouter = createTRPCRouter({
           registrationCloseAt: cup.registrationCloseAt,
           ratingStartAt: cup.ratingStartAt,
           ratingEndAt: cup.ratingEndAt,
+          samplesDeadline: cup.samplesDeadline,
           bannerUrl: cup.bannerUrl,
           pdfLogoUrl: cup.pdfLogoUrl,
           publicPageDescription: cup.publicPageDescription,

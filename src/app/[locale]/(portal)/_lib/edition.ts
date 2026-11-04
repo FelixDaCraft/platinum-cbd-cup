@@ -14,6 +14,7 @@ import { groupCriteriaByPanel } from "~/lib/criteria-panels";
 import type { CupStatus } from "~/server/db/schema/cups";
 import { getCategoryOccupancy } from "~/server/services/category-quota.service";
 import { intlLocale, localizedField, type Locale } from "~/i18n/locales";
+import { samplesDeadlineEnd } from "~/lib/parcel-shipment";
 
 const TZ = "Europe/Paris";
 
@@ -23,6 +24,11 @@ const TZ = "Europe/Paris";
  * et ne dépendent pas de next-intl.
  */
 export type Translate = (key: string, values?: Record<string, string | number>) => string;
+
+/** Date limite de réception des échantillons, en millisecondes, ou null. */
+export function samplesDeadlineMs(day: string | null): number | null {
+  return samplesDeadlineEnd(day)?.getTime() ?? null;
+}
 
 export function formatDay(ms: number, locale: Locale): string {
   return new Intl.DateTimeFormat(intlLocale(locale), {
@@ -110,6 +116,8 @@ export interface EditionDetails {
   ratingEndAt: number | null;
   eventDate: number | null;
   eventLocation: string | null;
+  /** Date limite de réception des échantillons, jour civil « AAAA-MM-JJ ». */
+  samplesDeadline: string | null;
   resultsPublished: boolean;
   categories: EditionCategory[];
   labels: LabelTier[];
@@ -152,6 +160,7 @@ export async function getEditionDetails(
     ratingEndAt: ms(cup.ratingEndAt),
     eventDate: ms(cup.eventDate),
     eventLocation: cup.eventLocation,
+    samplesDeadline: cup.samplesDeadline,
     resultsPublished: cup.resultsPublishedAt != null,
     categories: cup.categories.map((cat) => ({
       id: cat.id,
@@ -272,6 +281,7 @@ export function stepsOf(
     | "ratingEndAt"
     | "eventDate"
     | "eventLocation"
+    | "samplesDeadline"
   >,
   t: Translate,
   locale: Locale,
@@ -297,6 +307,18 @@ export function stepsOf(
       state: stateOf(ed.registrationOpenAt, ed.registrationCloseAt),
       start: ed.registrationOpenAt,
       end: ed.registrationCloseAt,
+    });
+  }
+  // Échantillons : à envoyer dès l'ouverture des inscriptions, jusqu'à la
+  // date limite de la cup. Sans date limite, pas d'étape.
+  const samplesEnd = samplesDeadlineMs(ed.samplesDeadline);
+  if (samplesEnd != null) {
+    steps.push({
+      title: t("steps.samples"),
+      when: t("range.by", { date: formatDay(samplesEnd, locale) }),
+      state: stateOf(ed.registrationOpenAt, samplesEnd),
+      start: null,
+      end: samplesEnd,
     });
   }
   if (ed.ratingStartAt != null || ed.ratingEndAt != null) {

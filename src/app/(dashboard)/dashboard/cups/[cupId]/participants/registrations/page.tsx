@@ -511,6 +511,11 @@ export default function CupRegistrationsPage() {
                       <p style={{ fontSize: "12px", color: "var(--n-text-secondary)" }}>
                         {parcelStateConfig[selectedRegistration.shipment.state].hint}
                       </p>
+                      <p className="n-label" style={{ color: "var(--n-text-disabled)" }}>
+                        {cup?.samplesDeadline
+                          ? `Date limite de réception : ${format(new Date(`${cup.samplesDeadline}T12:00:00`), "dd/MM/yyyy")}`
+                          : "Aucune date limite de réception (Phases & Dates) : pas d'état « En retard »"}
+                      </p>
                       <OrganizerShipmentForm
                         key={selectedRegistration.id}
                         registrationId={selectedRegistration.id}

@@ -30,7 +30,7 @@ import {
   clearShipmentSchema,
   type DeclareShipmentInput,
 } from "~/lib/validations/registration";
-import { carrierLabel, isParcelInHands, parcelState } from "~/lib/parcel-shipment";
+import { carrierLabel, isParcelInHands, parcelState, samplesDeadlineEnd } from "~/lib/parcel-shipment";
 import { anonymizeRegistrationProducts } from "~/server/services/anonymization.service";
 import { assertJurorMayCompete } from "~/server/api/helpers/jury";
 import { checkoutState, isCompeting, isFailureEventId } from "~/lib/registration-checkout";
@@ -907,6 +907,7 @@ export const registrationRouter = createTRPCRouter({
             status: true,
             resultsPublishedAt: true,
             ratingScale: true,
+            samplesDeadline: true,
           },
         },
         products: {
@@ -1642,6 +1643,7 @@ export const registrationRouter = createTRPCRouter({
 
       // Return registrations with computed fields
       const now = new Date();
+      const deadline = samplesDeadlineEnd(cup.samplesDeadline);
       return filteredRegistrations.map((reg) => {
         const state = checkoutState({ ...reg, productCount: reg.products.length });
         return {
@@ -1663,6 +1665,7 @@ export const registrationRouter = createTRPCRouter({
               shippedAt: reg.shippedAt,
               productStatuses: reg.products.map((p) => p.status),
             },
+            deadline,
             now
           ),
           shippedAt: reg.shippedAt,

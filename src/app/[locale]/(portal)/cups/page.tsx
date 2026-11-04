@@ -10,6 +10,7 @@ import {
   editionOrdinal,
   editionYear,
   formatDay,
+  samplesDeadlineMs,
   formatPrice,
   getEditionDetails,
   phaseOf,
@@ -157,6 +158,13 @@ export default async function CupsPage() {
                       <li>
                         <b>{t("categoryCount", { count: ed.categories.length })}</b>
                         {price ? ` · ${price}` : ""}
+                      </li>
+                    )}
+                    {samplesDeadlineMs(ed.samplesDeadline) != null && (
+                      <li>
+                        {t("samplesBy", {
+                          date: formatDay(samplesDeadlineMs(ed.samplesDeadline)!, locale),
+                        })}
                       </li>
                     )}
                     {ed.ratingStartAt != null && (
