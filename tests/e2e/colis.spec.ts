@@ -99,4 +99,50 @@ test.describe("Colis d'échantillons", () => {
     await expect(page.getByText("Réception des échantillons", { exact: true })).toBeVisible();
     await expect(page.locator("#samplesDeadline")).toContainText("9 janvier 2027");
   });
+
+  test("@P1 un seul colis pour deux inscriptions, puis détachement d'une seule", async ({ page, browser }) => {
+    test.skip(!PRODUCTEUR || !PASSWORD || !ORGANISATEUR || !CUP_ID, "Comptes de recette non fournis");
+    // Suppose un producteur avec deux inscriptions payées, rien d'expédié.
+
+    await loginUserWithTimeout(page, PRODUCTEUR!, PASSWORD!);
+    await page.goto("/producer/registrations");
+    const colis = page.getByRole("region", { name: "COLIS D'ÉCHANTILLONS" });
+    await expect(colis).toHaveCount(2);
+    const [premier, second] = [colis.nth(0), colis.nth(1)];
+
+    await premier.getByRole("button", { name: "J'AI EXPÉDIÉ MON COLIS" }).click();
+    const aussi = premier.getByRole("group", { name: "CE COLIS CONTIENT AUSSI (FACULTATIF)" });
+    const caseAutre = aussi.getByRole("checkbox");
+    await expect(caseAutre).toHaveCount(1);
+    await expect(caseAutre).not.toBeChecked();
+    await caseAutre.check();
+    await premier.getByLabel("TRANSPORTEUR (FACULTATIF)").selectOption("ups");
+    await premier.getByRole("button", { name: "ENREGISTRER" }).click();
+
+    for (const bloc of [premier, second]) {
+      await expect(bloc.getByText(/^EXPÉDIÉ LE \d{2}\/\d{2}$/)).toBeVisible();
+      await expect(bloc).toContainText("UPS");
+      await expect(bloc).toContainText(/Même colis que l'inscription du \d{2}\/\d{2}/);
+    }
+
+    // Côté organisateur : la mention sur les deux lignes.
+    const orga = await browser.newContext();
+    const orgaPage = await orga.newPage();
+    await loginUserWithTimeout(orgaPage, ORGANISATEUR!, PASSWORD!);
+    await orgaPage.goto(`/dashboard/cups/${CUP_ID}/participants/registrations`);
+    await expect(orgaPage.locator("tbody tr").filter({ hasText: /Même colis que l'inscription du/ })).toHaveCount(2);
+    await orga.close();
+
+    // Annuler une seule inscription la détache, l'autre reste expédiée.
+    await second.getByRole("button", { name: "ANNULER LA DÉCLARATION" }).click();
+    await second.getByRole("button", { name: "CONFIRMER L'ANNULATION" }).click();
+    await expect(second.getByRole("button", { name: "J'AI EXPÉDIÉ MON COLIS" })).toBeVisible();
+    await expect(premier).toContainText("UPS");
+    await expect(premier).not.toContainText("Même colis");
+
+    // Remise en état.
+    await premier.getByRole("button", { name: "ANNULER LA DÉCLARATION" }).click();
+    await premier.getByRole("button", { name: "CONFIRMER L'ANNULATION" }).click();
+    await expect(premier.getByRole("button", { name: "J'AI EXPÉDIÉ MON COLIS" })).toBeVisible();
+  });
 });

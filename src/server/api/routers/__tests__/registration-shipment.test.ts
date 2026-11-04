@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { TRPCError } from "@trpc/server";
+import { PgDialect } from "drizzle-orm/pg-core";
+import type { SQL } from "drizzle-orm";
 
 /**
  * Déclaration d'expédition du colis d'échantillons. Le producteur ne touche
@@ -26,30 +28,44 @@ vi.mock("~/lib/viva", () => ({
   getTransaction: vi.fn(),
 }));
 
-const { mockLog, updates } = vi.hoisted(() => ({
+const { mockLog, updates, wheres, selectRows } = vi.hoisted(() => ({
   mockLog: vi.fn(),
   updates: [] as Record<string, unknown>[],
+  /** Condition de chaque UPDATE, dans le même ordre que `updates`. */
+  wheres: [] as unknown[],
+  /** Lignes rendues par les SELECT (inscriptions restantes d'un ancien colis commun). */
+  selectRows: [] as { id: string }[][],
 }));
 
 vi.mock("~/server/services/activity-logger", () => ({ logActivity: mockLog }));
 
-vi.mock("~/server/db", () => ({
-  db: {
+vi.mock("~/server/db", () => {
+  const db = {
     query: {
       users: { findFirst: vi.fn() },
       producers: { findFirst: vi.fn() },
-      registrations: { findFirst: vi.fn() },
+      registrations: { findFirst: vi.fn(), findMany: vi.fn() },
     },
     update: () => ({
       set: (values: Record<string, unknown>) => ({
-        where: () => {
+        where: (condition: unknown) => {
           updates.push(values);
+          wheres.push(condition);
           return Promise.resolve(undefined);
         },
       }),
     }),
-  },
-}));
+    select: () => ({
+      from: () => ({ where: () => Promise.resolve(selectRows.shift() ?? []) }),
+    }),
+    transaction: (fn: (tx: unknown) => Promise<unknown>) => fn(db),
+  };
+  return { db };
+});
+
+/** Identifiants visés par la condition d'un UPDATE. */
+const dialect = new PgDialect();
+const idsOf = (condition: unknown) => dialect.sqlToQuery(condition as SQL).params;
 
 const base = {
   id: "reg-1",
@@ -57,6 +73,7 @@ const base = {
   producerId: "prod-1",
   status: "confirmed",
   shippedAt: null,
+  shipmentGroupId: null as string | null,
   cup: { name: "Cup 2027" },
   producer: { brandName: "Marque" },
   products: [{ status: "pending" }, { status: "pending" }],
@@ -64,7 +81,7 @@ const base = {
 
 type Role = "producer" | "organizer";
 
-async function callerAs(role: Role, registration: unknown) {
+async function callerAs(role: Role, registration: unknown, others: unknown[] = []) {
   const { auth } = await import("~/lib/auth");
   const { db } = await import("~/server/db");
   vi.mocked(auth.api.getSession).mockResolvedValue({
@@ -76,6 +93,7 @@ async function callerAs(role: Role, registration: unknown) {
   );
   vi.mocked(db.query.producers.findFirst).mockResolvedValue({ id: "prod-1", userId: "user-1" } as never);
   vi.mocked(db.query.registrations.findFirst).mockResolvedValue(registration as never);
+  vi.mocked(db.query.registrations.findMany).mockResolvedValue(others as never);
   const { registrationRouter } = await import("../registration");
   return registrationRouter.createCaller({ headers: new Headers(), db } as never);
 }
@@ -94,6 +112,8 @@ describe("registration.declareShipment (producteur)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     updates.length = 0;
+    wheres.length = 0;
+    selectRows.length = 0;
   });
 
   it("enregistre l'expédition et la trace dans le journal", async () => {
@@ -184,6 +204,8 @@ describe("registration.clearShipment (producteur)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     updates.length = 0;
+    wheres.length = 0;
+    selectRows.length = 0;
   });
 
   it("annule la déclaration tant que le colis n'est pas reçu", async () => {
@@ -218,6 +240,8 @@ describe("registration.declareShipmentByOrganizer", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     updates.length = 0;
+    wheres.length = 0;
+    selectRows.length = 0;
   });
 
   it("refusé à un producteur", async () => {
@@ -279,5 +303,113 @@ describe("registration.declareShipmentByOrganizer", () => {
       caller.clearShipmentByOrganizer({ registrationId: "reg-x" })
     );
     expect(error.code).toBe("NOT_FOUND");
+  });
+});
+
+describe("colis commun à plusieurs inscriptions", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    updates.length = 0;
+    wheres.length = 0;
+    selectRows.length = 0;
+  });
+
+  const second = { ...base, id: "reg-2", createdAt: new Date("2026-11-04T10:00:00Z") };
+
+  it("le producteur applique la même expédition à ses deux inscriptions, reliées par un même colis", async () => {
+    const caller = await callerAs("producer", base, [second]);
+
+    const result = await caller.declareShipment({
+      registrationId: "reg-1",
+      carrier: "colissimo",
+      trackingNumber: "6A123",
+      alsoRegistrationIds: ["reg-2"],
+    });
+
+    expect(updates).toHaveLength(1);
+    expect(idsOf(wheres[0])).toEqual(["reg-1", "reg-2"]);
+    expect(updates[0]).toMatchObject({ shippingCarrier: "colissimo", trackingNumber: "6A123" });
+    expect(updates[0]!.shipmentGroupId).toEqual(expect.any(String));
+    expect(result.registrationIds).toEqual(["reg-1", "reg-2"]);
+    expect(mockLog).toHaveBeenCalledTimes(2);
+  });
+
+  it("refuse une inscription d'un autre producteur, sans rien écrire", async () => {
+    const caller = await callerAs("producer", base, [{ ...second, producerId: "prod-2" }]);
+
+    const error = await errorOf(() =>
+      caller.declareShipment({ registrationId: "reg-1", alsoRegistrationIds: ["reg-2"] })
+    );
+    expect(error.code).toBe("NOT_FOUND");
+    expect(updates).toHaveLength(0);
+  });
+
+  it("refuse une inscription d'une autre cup", async () => {
+    const caller = await callerAs("producer", base, [{ ...second, cupId: "cup-2" }]);
+
+    const error = await errorOf(() =>
+      caller.declareShipment({ registrationId: "reg-1", alsoRegistrationIds: ["reg-2"] })
+    );
+    expect(error.code).toBe("NOT_FOUND");
+    expect(updates).toHaveLength(0);
+  });
+
+  it("refuse une inscription introuvable", async () => {
+    const caller = await callerAs("producer", base, []);
+
+    const error = await errorOf(() =>
+      caller.declareShipment({ registrationId: "reg-1", alsoRegistrationIds: ["reg-9"] })
+    );
+    expect(error.code).toBe("NOT_FOUND");
+    expect(updates).toHaveLength(0);
+  });
+
+  it("le producteur ne peut pas y joindre une inscription déjà reçue", async () => {
+    const caller = await callerAs("producer", base, [{ ...second, products: [{ status: "received" }] }]);
+
+    const error = await errorOf(() =>
+      caller.declareShipment({ registrationId: "reg-1", alsoRegistrationIds: ["reg-2"] })
+    );
+    expect(error.code).toBe("PRECONDITION_FAILED");
+    expect(updates).toHaveLength(0);
+  });
+
+  it("l'organisation a la même possibilité, avec les mêmes vérifications", async () => {
+    const caller = await callerAs("organizer", base, [second]);
+
+    await caller.declareShipmentByOrganizer({ registrationId: "reg-1", alsoRegistrationIds: ["reg-2"] });
+    expect(idsOf(wheres[0])).toEqual(["reg-1", "reg-2"]);
+
+    const other = await callerAs("organizer", base, [{ ...second, producerId: "prod-2" }]);
+    const error = await errorOf(() =>
+      other.declareShipmentByOrganizer({ registrationId: "reg-1", alsoRegistrationIds: ["reg-2"] })
+    );
+    expect(error.code).toBe("NOT_FOUND");
+  });
+
+  it("corriger une seule inscription la détache du colis commun, sans toucher aux autres", async () => {
+    // reg-1 et reg-2 partageaient le colis g1 ; seule reg-2 y reste.
+    selectRows.push([{ id: "reg-2" }]);
+    const caller = await callerAs("producer", { ...base, shipmentGroupId: "g1", shippedAt: new Date() });
+
+    await caller.declareShipment({ registrationId: "reg-1", carrier: "ups" });
+
+    expect(idsOf(wheres[0])).toEqual(["reg-1"]);
+    expect(updates[0]).toMatchObject({ shippingCarrier: "ups", shipmentGroupId: null });
+    // reg-2 garde son expédition ; seul le lien d'un colis réduit à elle-même tombe.
+    expect(updates[1]).toEqual({ shipmentGroupId: null });
+    expect(idsOf(wheres[1])).toEqual(["reg-2"]);
+  });
+
+  it("annuler une seule inscription la détache aussi", async () => {
+    selectRows.push([{ id: "reg-2" }, { id: "reg-3" }]);
+    const caller = await callerAs("producer", { ...base, shipmentGroupId: "g1", shippedAt: new Date() });
+
+    await caller.clearShipment({ registrationId: "reg-1" });
+
+    expect(idsOf(wheres[0])).toEqual(["reg-1"]);
+    expect(updates[0]).toMatchObject({ shippedAt: null, shipmentGroupId: null });
+    // Il reste deux inscriptions dans le colis g1 : elles restent liées.
+    expect(updates).toHaveLength(1);
   });
 });

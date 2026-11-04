@@ -7,6 +7,9 @@ import {
   parcelState,
   samplesDeadlineEnd,
   samplesReminder,
+  sameParcelRegistrations,
+  shipmentCandidates,
+  type RegistrationParcelFacts,
   trackingUrl,
   type ParcelFacts,
 } from "./parcel-shipment";
@@ -195,5 +198,48 @@ describe("samplesReminder (tableau de bord producteur)", () => {
 
   it("pas de date limite sur la cup : pas de rappel", () => {
     expect(samplesReminder({ ...reg, samplesDeadline: null })).toBeNull();
+  });
+});
+
+describe("colis commun à plusieurs inscriptions", () => {
+  const reg = (id: string, over: Partial<RegistrationParcelFacts> = {}): RegistrationParcelFacts => ({
+    id,
+    producerId: "prod-1",
+    cupId: "cup-1",
+    competing: true,
+    productStatuses: ["pending"],
+    shipmentGroupId: null,
+    createdAt: at("2026-11-03T10:00:00Z"),
+    ...over,
+  });
+
+  it("propose les autres inscriptions payées et non reçues du producteur sur la cup", () => {
+    const self = reg("a");
+    const all = [
+      self,
+      reg("b"),
+      reg("c", { productStatuses: ["received", "pending"] }), // déjà (en partie) reçue
+      reg("d", { competing: false }), // non payée
+      reg("e", { cupId: "cup-2" }), // autre cup
+      reg("f", { producerId: "prod-2" }), // autre producteur
+      reg("g", { productStatuses: [] }), // sans produit
+    ];
+    expect(shipmentCandidates(self, all).map((r) => r.id)).toEqual(["b"]);
+  });
+
+  it("une seule inscription payée : rien à proposer", () => {
+    const self = reg("a");
+    expect(shipmentCandidates(self, [self])).toEqual([]);
+  });
+
+  it("même colis : les autres inscriptions du même groupe, jamais elle-même", () => {
+    const self = reg("a", { shipmentGroupId: "g1" });
+    const all = [self, reg("b", { shipmentGroupId: "g1" }), reg("c", { shipmentGroupId: "g2" }), reg("d")];
+    expect(sameParcelRegistrations(self, all).map((r) => r.id)).toEqual(["b"]);
+  });
+
+  it("sans groupe : aucune inscription liée", () => {
+    const self = reg("a");
+    expect(sameParcelRegistrations(self, [self, reg("b")])).toEqual([]);
   });
 });

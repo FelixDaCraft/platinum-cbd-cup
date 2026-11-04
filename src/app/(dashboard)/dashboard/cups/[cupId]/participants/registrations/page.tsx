@@ -526,6 +526,7 @@ export default function CupRegistrationsPage() {
                       <OrganizerParcelReceipt
                         registrationId={selectedRegistration.id}
                         products={selectedRegistration.products}
+                        sameParcel={selectedRegistration.shipment.sameParcel}
                         onSaved={() => void handleShipmentSaved(selectedRegistration.id)}
                       />
                     </div>

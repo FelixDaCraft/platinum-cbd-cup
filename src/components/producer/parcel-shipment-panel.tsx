@@ -18,6 +18,12 @@ import {
 } from "~/lib/parcel-shipment";
 import { CARRIER_MAX, TRACKING_NUMBER_MAX } from "~/lib/validations/registration";
 
+export interface LinkedRegistration {
+  id: string;
+  createdAt: Date | string;
+  productCount: number;
+}
+
 export interface ParcelShipmentPanelProps {
   registrationId: string;
   shippedAt: Date | string | null;
@@ -26,6 +32,10 @@ export interface ParcelShipmentPanelProps {
   productStatuses: string[];
   /** Date limite de réception de la cup (« AAAA-MM-JJ »), null si non annoncée. */
   samplesDeadline: string | null;
+  /** Autres inscriptions payées et non reçues sur la cup, que ce colis peut aussi contenir. */
+  candidates: LinkedRegistration[];
+  /** Inscriptions du même colis commun. */
+  sameParcel: LinkedRegistration[];
   /** Appelé après un enregistrement ou une annulation. */
   onChanged: () => void;
 }
@@ -67,6 +77,8 @@ export function ParcelShipmentPanel({
   trackingNumber,
   productStatuses,
   samplesDeadline,
+  candidates,
+  sameParcel,
   onChanged,
 }: ParcelShipmentPanelProps) {
   const t = useTranslations("producerRegistrations.parcel");
@@ -82,6 +94,7 @@ export function ParcelShipmentPanel({
   // L'erreur « transporteur manquant » n'apparaît qu'après une tentative
   // d'envoi, puis suit la saisie.
   const [submitted, setSubmitted] = useState(false);
+  const [alsoIds, setAlsoIds] = useState<string[]>([]);
 
   const received = isParcelInHands(productStatuses);
   const deadlineEnd = samplesDeadlineEnd(samplesDeadline);
@@ -117,6 +130,8 @@ export function ParcelShipmentPanel({
     setDate(shippedAt ? new Date(shippedAt).toISOString().slice(0, 10) : todayInput());
     setConfirmCancel(false);
     setSubmitted(false);
+    // Non cochées par défaut : corriger une inscription la détache du colis commun.
+    setAlsoIds([]);
     setEditing(true);
   };
 
@@ -137,8 +152,15 @@ export function ParcelShipmentPanel({
       trackingNumber: tracking,
       // Midi : la date choisie reste la même quel que soit le fuseau.
       shippedAt: new Date(`${date}T12:00:00`),
+      alsoRegistrationIds: alsoIds,
     });
   };
+
+  const dayMonth = (d: Date | string) => formatDate(d, locale, { day: "2-digit", month: "2-digit" });
+  const sameParcelText =
+    sameParcel.length > 0
+      ? t("sameParcel", { count: sameParcel.length, dates: sameParcel.map((r) => dayMonth(r.createdAt)).join(", ") })
+      : null;
 
   const url = trackingUrl(carrier, trackingNumber);
   const busy = declare.isPending || clear.isPending;
@@ -251,6 +273,29 @@ export function ParcelShipmentPanel({
               style={fieldStyle}
             />
           </label>
+          {candidates.length > 0 && (
+            <fieldset className="sm:col-span-2">
+              <legend className="n-label mb-2" style={{ color: "var(--n-text-disabled)" }}>
+                {t("alsoContains")}
+              </legend>
+              <div className="flex flex-col gap-2">
+                {candidates.map((r) => (
+                  <label key={r.id} className="flex items-center gap-3 text-sm" style={{ color: "var(--n-text-primary)" }}>
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4"
+                      style={{ accentColor: "var(--n-interactive)" }}
+                      checked={alsoIds.includes(r.id)}
+                      onChange={(e) =>
+                        setAlsoIds((ids) => (e.target.checked ? [...ids, r.id] : ids.filter((id) => id !== r.id)))
+                      }
+                    />
+                    {t("alsoItem", { date: dayMonth(r.createdAt), count: r.productCount })}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          )}
           <div className="flex flex-wrap gap-2 sm:col-span-2">
             <button type="submit" className="n-btn-primary text-xs" disabled={busy || !trackingValid || showCarrierError}>
               {declare.isPending ? "[...]" : t("save")}
@@ -269,6 +314,11 @@ export function ParcelShipmentPanel({
             {(carrier ?? trackingNumber) && (
               <p className="n-font-data text-xs mt-2 [overflow-wrap:anywhere]" style={{ color: "var(--n-text-secondary)" }}>
                 {[carrierLabel(carrier), trackingNumber].filter(Boolean).join(" · ")}
+              </p>
+            )}
+            {sameParcelText && (
+              <p className="text-xs mt-1" style={{ color: "var(--n-text-secondary)" }}>
+                {sameParcelText}
               </p>
             )}
           </div>

@@ -5,7 +5,7 @@
  */
 
 import { nanoid } from "nanoid";
-import { and, eq, notExists, sql } from "drizzle-orm";
+import { and, eq, inArray, notExists, sql } from "drizzle-orm";
 
 import { activityLogs, productRatings, products } from "~/server/db/schema";
 import type { ProductStatus } from "~/server/db/schema/products";
@@ -17,9 +17,12 @@ export function productStatusChange(status: ProductStatus, now: Date = new Date(
     : { status, updatedAt: now };
 }
 
-/** Produits d'une inscription encore « à envoyer » : ceux qu'un colis reçu fait passer « reçus ». */
-export function parcelReceivableWhere(registrationId: string) {
-  return and(eq(products.registrationId, registrationId), eq(products.status, "pending"));
+/**
+ * Produits encore « à envoyer » des inscriptions d'un colis (une seule, ou
+ * toutes celles d'un colis commun) : ceux que sa réception fait passer « reçus ».
+ */
+export function parcelReceivableWhere(registrationIds: string[]) {
+  return and(inArray(products.registrationId, registrationIds), eq(products.status, "pending"));
 }
 
 /**

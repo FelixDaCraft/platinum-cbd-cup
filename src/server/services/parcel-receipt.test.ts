@@ -28,10 +28,15 @@ describe("productStatusChange", () => {
 
 describe("conditions des mises à jour groupées", () => {
   it("réception : uniquement les produits encore « à envoyer » de l'inscription", () => {
-    const { sql, params } = toSql(parcelReceivableWhere("reg-1")!);
-    expect(sql).toContain('"products"."registration_id" = $1');
+    const { sql, params } = toSql(parcelReceivableWhere(["reg-1"])!);
+    expect(sql).toContain('"products"."registration_id" in ($1)');
     expect(sql).toContain('"products"."status" = $2');
     expect(params).toEqual(["reg-1", "pending"]);
+  });
+
+  it("réception d'un colis commun : les produits de toutes ses inscriptions", () => {
+    const { params } = toSql(parcelReceivableWhere(["reg-1", "reg-2"])!);
+    expect(params).toEqual(["reg-1", "reg-2", "pending"]);
   });
 
   it("annulation : uniquement les produits « reçus », sans aucune note commencée", () => {

@@ -22,6 +22,11 @@ import { QRCodeDisplay } from "~/components/features/products/qr-code-display";
 import { CoaControl } from "~/components/features/products/coa-control";
 import { ParcelShipmentPanel } from "~/components/producer/parcel-shipment-panel";
 import {
+  sameParcelRegistrations,
+  shipmentCandidates,
+  type RegistrationParcelFacts,
+} from "~/lib/parcel-shipment";
+import {
   convertScoreToScale,
 } from "~/lib/validations/labels";
 import type { RatingScale } from "~/server/db/schema/cups";
@@ -79,6 +84,34 @@ function formatDate(date: Date | string | null | undefined, locale: Locale): str
     year: "numeric",
   });
 }
+
+/** Une inscription vue du colis commun : payée, de la même cup, rien de reçu. */
+function parcelFactsOf(reg: {
+  id: string;
+  status: string;
+  createdAt: Date | string;
+  shipmentGroupId: string | null;
+  cup: { id: string };
+  products: { status: string }[];
+}): RegistrationParcelFacts & { productCount: number } {
+  return {
+    id: reg.id,
+    // Toutes les inscriptions de la page sont celles du producteur connecté.
+    producerId: "self",
+    cupId: reg.cup.id,
+    competing: reg.status === "confirmed",
+    productStatuses: reg.products.map((p) => p.status),
+    shipmentGroupId: reg.shipmentGroupId,
+    createdAt: reg.createdAt,
+    productCount: reg.products.length,
+  };
+}
+
+const linkedOf = (r: { id: string; createdAt: Date | string; productCount: number }) => ({
+  id: r.id,
+  createdAt: r.createdAt,
+  productCount: r.productCount,
+});
 
 function calculateProgress(
   products: Array<{ status: string; finalScore?: string | null }>
@@ -567,6 +600,8 @@ export default function ProducerRegistrationsPage() {
                         trackingNumber={registration.trackingNumber}
                         productStatuses={registration.products.map((p) => p.status)}
                         samplesDeadline={registration.cup.samplesDeadline}
+                        candidates={shipmentCandidates(parcelFactsOf(registration), (registrations ?? []).map(parcelFactsOf)).map(linkedOf)}
+                        sameParcel={sameParcelRegistrations(parcelFactsOf(registration), (registrations ?? []).map(parcelFactsOf)).map(linkedOf)}
                         onChanged={() => void refetch()}
                       />
 

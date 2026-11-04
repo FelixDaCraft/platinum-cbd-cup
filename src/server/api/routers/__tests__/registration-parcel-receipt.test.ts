@@ -30,7 +30,9 @@ vi.mock("~/lib/viva", () => ({
 const { tx, notify, state } = vi.hoisted(() => {
   const state = {
     /** Lignes rendues par l'UPDATE ... RETURNING de la transaction. */
-    returning: [] as { id: string; name: string }[],
+    returning: [] as { id: string; name: string; registrationId?: string }[],
+    /** Inscriptions du même colis rendues par le SELECT. */
+    siblings: [] as { id: string }[],
     updates: [] as Record<string, unknown>[],
     inserts: [] as Record<string, unknown>[],
     committed: false,
@@ -46,6 +48,7 @@ const { tx, notify, state } = vi.hoisted(() => {
         }),
       }),
     }),
+    select: () => ({ from: () => ({ where: () => Promise.resolve(state.siblings) }) }),
     insert: () => ({
       values: (rows: Record<string, unknown> | Record<string, unknown>[]) => {
         state.inserts.push(...(Array.isArray(rows) ? rows : [rows]));
@@ -83,12 +86,13 @@ const registration = {
   producerId: "prod-1",
   status: "confirmed",
   shippedAt: null,
+  shipmentGroupId: null as string | null,
   cup: { name: "Cup 2027" },
   producer: { brandName: "Marque" },
   products: [{ status: "pending" }, { status: "pending" }],
 };
 
-async function callerAs(role: "producer" | "organizer") {
+async function callerAs(role: "producer" | "organizer", row: unknown = registration) {
   const { auth } = await import("~/lib/auth");
   const { db } = await import("~/server/db");
   vi.mocked(auth.api.getSession).mockResolvedValue({
@@ -97,7 +101,7 @@ async function callerAs(role: "producer" | "organizer") {
   } as never);
   vi.mocked(db.query.users.findFirst).mockResolvedValue({ isAdmin: false, role } as never);
   vi.mocked(db.query.producers.findFirst).mockResolvedValue({ id: "prod-1", userId: "user-1" } as never);
-  vi.mocked(db.query.registrations.findFirst).mockResolvedValue(registration as never);
+  vi.mocked(db.query.registrations.findFirst).mockResolvedValue(row as never);
   const { registrationRouter } = await import("../registration");
   return registrationRouter.createCaller({ headers: new Headers(), db } as never);
 }
@@ -116,6 +120,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   notify.mockResolvedValue({ success: true });
   state.returning = [];
+  state.siblings = [];
   state.updates.length = 0;
   state.inserts.length = 0;
   state.committed = false;
@@ -131,7 +136,7 @@ describe("registration.markParcelReceived", () => {
 
     const result = await caller.markParcelReceived({ registrationId: "reg-1" });
 
-    expect(result).toEqual({ registrationId: "reg-1", changed: 2 });
+    expect(result).toEqual({ registrationId: "reg-1", registrationIds: ["reg-1"], changed: 2 });
     expect(state.committed).toBe(true);
     expect(state.updates[0]).toMatchObject({ status: "received" });
     expect(state.updates[0]!.receivedAt).toBeInstanceOf(Date);
@@ -194,6 +199,35 @@ describe("registration.markParcelReceived", () => {
   });
 });
 
+describe("registration.markParcelReceived : colis commun", () => {
+  it("marque aussi les inscriptions du même colis quand l'organisation le demande", async () => {
+    state.siblings = [{ id: "reg-2" }];
+    state.returning = [
+      { id: "p1", name: "Fleur", registrationId: "reg-1" },
+      { id: "p3", name: "Ice", registrationId: "reg-2" },
+    ];
+    const caller = await callerAs("organizer", { ...registration, shipmentGroupId: "g1" });
+
+    const result = await caller.markParcelReceived({ registrationId: "reg-1", includeSameParcel: true });
+
+    expect(result).toEqual({ registrationId: "reg-1", registrationIds: ["reg-1", "reg-2"], changed: 2 });
+    expect(JSON.parse(state.inserts[1]!.metadata as string)).toMatchObject({
+      productId: "p3",
+      registrationId: "reg-2",
+    });
+  });
+
+  it("par défaut, seule l'inscription choisie", async () => {
+    state.siblings = [{ id: "reg-2" }];
+    state.returning = [{ id: "p1", name: "Fleur", registrationId: "reg-1" }];
+    const caller = await callerAs("organizer", { ...registration, shipmentGroupId: "g1" });
+
+    const result = await caller.markParcelReceived({ registrationId: "reg-1" });
+
+    expect(result.registrationIds).toEqual(["reg-1"]);
+  });
+});
+
 describe("registration.cancelParcelReceipt", () => {
   it("remet « à envoyer » les produits reçus et efface received_at", async () => {
     state.returning = [{ id: "p1", name: "Fleur" }];
@@ -201,7 +235,7 @@ describe("registration.cancelParcelReceipt", () => {
 
     const result = await caller.cancelParcelReceipt({ registrationId: "reg-1" });
 
-    expect(result).toEqual({ registrationId: "reg-1", changed: 1 });
+    expect(result).toEqual({ registrationId: "reg-1", registrationIds: ["reg-1"], changed: 1 });
     expect(state.committed).toBe(true);
     expect(state.updates[0]).toMatchObject({ status: "pending", receivedAt: null });
     expect(state.inserts[0]).toMatchObject({ action: "other" });

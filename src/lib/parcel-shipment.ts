@@ -164,3 +164,38 @@ export function samplesReminder(
   if (facts.shippedAt || isParcelInHands(facts.productStatuses)) return null;
   return samplesDeadlineEnd(facts.samplesDeadline) ? facts.samplesDeadline : null;
 }
+
+/** Une inscription vue du suivi des colis, pour le colis commun. */
+export interface RegistrationParcelFacts {
+  id: string;
+  producerId: string;
+  cupId: string;
+  /** Payée ou importée. */
+  competing: boolean;
+  productStatuses: string[];
+  shipmentGroupId: string | null;
+  createdAt: Date | string;
+}
+
+/**
+ * Inscriptions qu'un colis peut aussi contenir : les autres inscriptions
+ * payées du même producteur sur la même cup, avec des produits, dont rien
+ * n'est encore reçu.
+ */
+export function shipmentCandidates<T extends RegistrationParcelFacts>(self: RegistrationParcelFacts, all: T[]): T[] {
+  return all.filter(
+    (r) =>
+      r.id !== self.id &&
+      r.producerId === self.producerId &&
+      r.cupId === self.cupId &&
+      r.competing &&
+      r.productStatuses.length > 0 &&
+      !isParcelInHands(r.productStatuses)
+  );
+}
+
+/** Autres inscriptions du même colis commun. */
+export function sameParcelRegistrations<T extends RegistrationParcelFacts>(self: RegistrationParcelFacts, all: T[]): T[] {
+  if (!self.shipmentGroupId) return [];
+  return all.filter((r) => r.id !== self.id && r.shipmentGroupId === self.shipmentGroupId);
+}

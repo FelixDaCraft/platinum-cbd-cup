@@ -70,6 +70,12 @@ export const registrations = pgTable(
     shippedAt: timestamp("shipped_at", { withTimezone: true }),
     shippingCarrier: text("shipping_carrier"),
     trackingNumber: text("tracking_number"),
+    // Colis commun à plusieurs inscriptions du même producteur sur la même
+    // cup (première commande + complémentaires) : les champs d'expédition
+    // sont copiés sur chacune, et cet identifiant les relie. Null = colis
+    // propre à l'inscription. Corriger ou annuler une inscription l'en
+    // détache, sans toucher aux autres.
+    shipmentGroupId: text("shipment_group_id"),
     // Legacy: payments taken through Stripe before the switch to Viva.com.
     // Kept read-only so old registrations keep their audit trail; nothing
     // writes to it any more.
@@ -96,6 +102,8 @@ export const registrations = pgTable(
       .where(sql`${table.status} = 'pending_payment'`),
     // Toutes les lectures « inscriptions d'un producteur sur une cup ».
     index("registrations_cup_producer_idx").on(table.cupId, table.producerId),
+    // Inscriptions d'un même colis.
+    index("registrations_shipment_group_idx").on(table.shipmentGroupId),
     // L'unique ci-dessus ne couvre que cup_id : le tableau de bord producteur
     // et la suppression en cascade d'un producteur filtrent par producer_id.
     index("registrations_producer_id_idx").on(table.producerId),

@@ -16,6 +16,7 @@ import {
   AlertDialogTrigger,
 } from "~/components/ui/alert-dialog";
 import { Button } from "~/components/ui/button";
+import { Checkbox } from "~/components/ui/checkbox";
 import { Input } from "~/components/ui/input";
 import {
   Select,
@@ -36,11 +37,33 @@ import {
 } from "~/lib/parcel-shipment";
 import { CARRIER_MAX, TRACKING_NUMBER_MAX } from "~/lib/validations/registration";
 
+/** Autre inscription du même producteur sur la cup (colis commun). */
+export interface LinkedRegistration {
+  id: string;
+  createdAt: Date | string;
+  productCount: number;
+}
+
 export interface RegistrationShipment {
   state: ParcelState;
   shippedAt: Date | null;
   carrier: string | null;
   trackingNumber: string | null;
+  groupId: string | null;
+  /** Inscriptions du même colis commun. */
+  sameParcel: LinkedRegistration[];
+  /** Inscriptions qu'un colis peut aussi contenir (payées, rien de reçu). */
+  candidates: LinkedRegistration[];
+}
+
+const dayMonth = (date: Date | string) => format(new Date(date), "dd/MM");
+
+/** « Même colis que l'inscription du 03/11 » (ou « du 03/11 et du 04/11 »). */
+export function sameParcelLabel(linked: LinkedRegistration[]): string | null {
+  if (linked.length === 0) return null;
+  const dates = linked.map((r) => `du ${dayMonth(r.createdAt)}`);
+  const list = dates.length === 1 ? dates[0] : `${dates.slice(0, -1).join(", ")} et ${dates.at(-1)}`;
+  return `Même colis que l'inscription${linked.length > 1 ? "s" : ""} ${list}`;
 }
 
 export const parcelStateConfig: Record<
@@ -145,6 +168,11 @@ export function ParcelCell({ shipment }: { shipment: RegistrationShipment }) {
         </div>
       )}
       {state !== "received" && <TrackingLine shipment={shipment} />}
+      {sameParcelLabel(shipment.sameParcel) && (
+        <div className="n-label" style={{ color: "var(--n-text-secondary)", marginTop: "2px" }}>
+          {sameParcelLabel(shipment.sameParcel)}
+        </div>
+      )}
     </div>
   );
 }
@@ -172,6 +200,7 @@ export function OrganizerShipmentForm({
   const [tracking, setTracking] = useState("");
   const [date, setDate] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const [alsoIds, setAlsoIds] = useState<string[]>([]);
 
   const declare = api.registration.declareShipmentByOrganizer.useMutation({
     onSuccess: () => {
@@ -201,6 +230,8 @@ export function OrganizerShipmentForm({
     setTracking(shipment.trackingNumber ?? "");
     setDate(format(shipment.shippedAt ? new Date(shipment.shippedAt) : new Date(), "yyyy-MM-dd"));
     setSubmitted(false);
+    // Non cochées par défaut : corriger une inscription la détache du colis commun.
+    setAlsoIds([]);
     setEditing(true);
   };
 
@@ -243,6 +274,7 @@ export function OrganizerShipmentForm({
           carrier: chosenCarrier,
           trackingNumber: tracking,
           shippedAt: new Date(`${date}T12:00:00`),
+          alsoRegistrationIds: alsoIds,
         });
       }}
     >
@@ -300,6 +332,24 @@ export function OrganizerShipmentForm({
           <Input type="date" required value={date} max={format(new Date(), "yyyy-MM-dd")} onChange={(e) => setDate(e.target.value)} />
         </label>
       </div>
+      {shipment.candidates.length > 0 && (
+        <fieldset className="space-y-2">
+          <legend className="n-label" style={{ color: "var(--n-text-secondary)" }}>
+            CE COLIS CONTIENT AUSSI (FACULTATIF)
+          </legend>
+          {shipment.candidates.map((r) => (
+            <label key={r.id} className="flex items-center gap-2 text-sm" style={{ color: "var(--n-text-primary)" }}>
+              <Checkbox
+                checked={alsoIds.includes(r.id)}
+                onCheckedChange={(checked) =>
+                  setAlsoIds((ids) => (checked ? [...ids, r.id] : ids.filter((id) => id !== r.id)))
+                }
+              />
+              Inscription du {dayMonth(r.createdAt)} · {r.productCount} produit{r.productCount > 1 ? "s" : ""}
+            </label>
+          ))}
+        </fieldset>
+      )}
       <div className="flex flex-wrap gap-2">
         <Button type="submit" size="sm" disabled={busy || showCarrierError}>
           {declare.isPending ? "Enregistrement…" : "Enregistrer"}
@@ -321,14 +371,19 @@ export function OrganizerShipmentForm({
 export function OrganizerParcelReceipt({
   registrationId,
   products,
+  sameParcel,
   onSaved,
 }: {
   registrationId: string;
   products: { status: string }[];
+  /** Inscriptions du même colis commun, proposées à la réception. */
+  sameParcel: LinkedRegistration[];
   onSaved: () => void;
 }) {
   const pending = products.filter((p) => p.status === "pending").length;
   const received = products.filter((p) => p.status === "received").length;
+  // Arrivées dans le même carton : proposées, cochées par défaut.
+  const [includeSameParcel, setIncludeSameParcel] = useState(true);
 
   const markReceived = api.registration.markParcelReceived.useMutation({
     onSuccess: ({ changed }) => {
@@ -371,14 +426,31 @@ export function OrganizerParcelReceipt({
                 Marquer le colis comme reçu ?
               </AlertDialogTitle>
               <AlertDialogDescription className="n-label" style={{ color: "var(--n-text-secondary)" }}>
-                {pending} produit{pending > 1 ? "s" : ""} « à envoyer » passer{pending > 1 ? "ont" : "a"} « reçu »,
+                {pending} produit{pending > 1 ? "s" : ""} « à envoyer » de cette inscription passer{pending > 1 ? "ont" : "a"} « reçu »,
                 avec la date de réception d&apos;aujourd&apos;hui. Le producteur est prévenu par e-mail
                 s&apos;il l&apos;a accepté. Aucune déclaration d&apos;expédition n&apos;est nécessaire.
               </AlertDialogDescription>
             </AlertDialogHeader>
+            {sameParcel.length > 0 && (
+              <label className="flex items-center gap-2 text-sm" style={{ color: "var(--n-text-primary)" }}>
+                <Checkbox
+                  checked={includeSameParcel}
+                  onCheckedChange={(checked) => setIncludeSameParcel(checked === true)}
+                />
+                Marquer aussi {sameParcel.length > 1 ? "les inscriptions" : "l'inscription"}{" "}
+                {sameParcel.map((r) => `du ${dayMonth(r.createdAt)}`).join(", ")} (même colis)
+              </label>
+            )}
             <AlertDialogFooter>
               <AlertDialogCancel className="n-label">Annuler</AlertDialogCancel>
-              <AlertDialogAction onClick={() => markReceived.mutate({ registrationId })}>
+              <AlertDialogAction
+                onClick={() =>
+                  markReceived.mutate({
+                    registrationId,
+                    includeSameParcel: sameParcel.length > 0 && includeSameParcel,
+                  })
+                }
+              >
                 Confirmer la réception
               </AlertDialogAction>
             </AlertDialogFooter>

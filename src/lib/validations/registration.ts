@@ -77,6 +77,7 @@ export const listByCupSchema = z.object({
 
 export const CARRIER_MAX = 40;
 export const TRACKING_NUMBER_MAX = 40;
+export const SHARED_PARCEL_MAX = 20;
 export const CARRIER_REQUIRED_MESSAGE = "Transporteur requis avec un numéro de suivi";
 
 /**
@@ -113,13 +114,30 @@ export const declareShipmentSchema = z.object({
       message: "La date d'expédition ne peut pas être dans le futur",
     })
     .optional(),
-}).refine((data) => !isCarrierMissing(data.carrier, data.trackingNumber), {
-  message: CARRIER_REQUIRED_MESSAGE,
-  path: ["carrier"],
-});
+  // Colis commun : autres inscriptions du même producteur sur la même cup que
+  // ce colis contient aussi (le serveur vérifie qu'elles lui appartiennent).
+  alsoRegistrationIds: z
+    .array(z.string().min(1))
+    .max(SHARED_PARCEL_MAX, "Trop d'inscriptions pour un même colis")
+    .default([]),
+})
+  .transform((data) => ({
+    ...data,
+    alsoRegistrationIds: [...new Set(data.alsoRegistrationIds)].filter((id) => id !== data.registrationId),
+  }))
+  .refine((data) => !isCarrierMissing(data.carrier, data.trackingNumber), {
+    message: CARRIER_REQUIRED_MESSAGE,
+    path: ["carrier"],
+  });
 
 export const clearShipmentSchema = z.object({
   registrationId: z.string().min(1, "Registration ID requis"),
+});
+
+/** Réception d'un colis par l'organisation ; `includeSameParcel` : tout le colis commun. */
+export const markParcelReceivedSchema = z.object({
+  registrationId: z.string().min(1, "Registration ID requis"),
+  includeSameParcel: z.boolean().default(false),
 });
 
 // Type exports

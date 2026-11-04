@@ -15,6 +15,7 @@ describe("declareShipmentSchema", () => {
       registrationId: "reg-1",
       carrier: null,
       trackingNumber: null,
+      alsoRegistrationIds: [],
     });
   });
 
@@ -115,5 +116,24 @@ describe("samplesDeadlineSchema", () => {
     for (const bad of ["09/01/2027", "2027-1-9", "2027-02-30", "demain"]) {
       expect(samplesDeadlineSchema.safeParse({ cupId: "c", samplesDeadline: bad }).success).toBe(false);
     }
+  });
+});
+
+describe("declareShipmentSchema : colis commun", () => {
+  it("sans autre inscription : liste vide par défaut", () => {
+    expect(declareShipmentSchema.parse(valid).alsoRegistrationIds).toEqual([]);
+  });
+
+  it("dédoublonne et retire l'inscription elle-même", () => {
+    const parsed = declareShipmentSchema.parse({
+      ...valid,
+      alsoRegistrationIds: ["reg-2", "reg-2", "reg-1", "reg-3"],
+    });
+    expect(parsed.alsoRegistrationIds).toEqual(["reg-2", "reg-3"]);
+  });
+
+  it("limite le nombre d'inscriptions d'un même colis", () => {
+    const many = Array.from({ length: 21 }, (_, i) => `reg-${i + 10}`);
+    expect(declareShipmentSchema.safeParse({ ...valid, alsoRegistrationIds: many }).success).toBe(false);
   });
 });

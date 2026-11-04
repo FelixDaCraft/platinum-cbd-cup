@@ -2,7 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { localizeRow } from "~/i18n/locales";
 import { nanoid } from "nanoid";
-import { and as drizzleAnd, eq, gte, lte, sql } from "drizzle-orm";
+import { and as drizzleAnd, eq, gte, inArray, lte, sql } from "drizzle-orm";
 
 import {
   createTRPCRouter,
@@ -28,10 +28,18 @@ import {
   listByCupSchema,
   declareShipmentSchema,
   clearShipmentSchema,
+  markParcelReceivedSchema,
   type DeclareShipmentInput,
 } from "~/lib/validations/registration";
 import { notifyProductStatusChange } from "~/server/services/product-notification.service";
-import { carrierLabel, isParcelInHands, parcelState, samplesDeadlineEnd } from "~/lib/parcel-shipment";
+import {
+  carrierLabel,
+  isParcelInHands,
+  parcelState,
+  sameParcelRegistrations,
+  samplesDeadlineEnd,
+  shipmentCandidates,
+} from "~/lib/parcel-shipment";
 import { anonymizeRegistrationProducts } from "~/server/services/anonymization.service";
 import { assertJurorMayCompete } from "~/server/api/helpers/jury";
 import { checkoutState, isCompeting, isFailureEventId } from "~/lib/registration-checkout";
@@ -316,6 +324,20 @@ async function applyRecalculatedTotal(
  * requête filtre sur son propre profil : l'inscription d'un autre est
  * introuvable, au même titre qu'un identifiant inventé.
  */
+const SHIPMENT_REGISTRATION_COLUMNS = {
+  id: true,
+  cupId: true,
+  producerId: true,
+  status: true,
+  shippedAt: true,
+  shipmentGroupId: true,
+} as const;
+const SHIPMENT_REGISTRATION_WITH = {
+  cup: { columns: { name: true } },
+  producer: { columns: { brandName: true } },
+  products: { columns: { status: true } },
+} as const;
+
 async function findShipmentRegistration(
   ctx: ProtectedContext,
   registrationId: string,
@@ -328,12 +350,8 @@ async function findShipmentRegistration(
           eq(schema.registrations.producerId, producerId)
         )
       : eq(schema.registrations.id, registrationId),
-    columns: { id: true, cupId: true, producerId: true, status: true, shippedAt: true },
-    with: {
-      cup: { columns: { name: true } },
-      producer: { columns: { brandName: true } },
-      products: { columns: { status: true } },
-    },
+    columns: SHIPMENT_REGISTRATION_COLUMNS,
+    with: SHIPMENT_REGISTRATION_WITH,
   });
 
   if (!registration) {
@@ -374,31 +392,85 @@ async function saveShipment(
     shippingCarrier: input?.carrier ?? null,
     trackingNumber: input?.trackingNumber ?? null,
   };
+  const alsoIds = input?.alsoRegistrationIds ?? [];
 
-  await ctx.db
-    .update(schema.registrations)
-    .set({ ...shipment, updatedAt: new Date() })
-    .where(eq(schema.registrations.id, registration.id));
+  const { targets, shipmentGroupId } = await ctx.db.transaction(async (tx) => {
+    // Colis commun : chaque autre inscription doit être du même producteur et
+    // de la même cup ; sinon rien n'est écrit (pas d'existence révélée).
+    const others = alsoIds.length
+      ? await tx.query.registrations.findMany({
+          where: inArray(schema.registrations.id, alsoIds),
+          columns: SHIPMENT_REGISTRATION_COLUMNS,
+          with: SHIPMENT_REGISTRATION_WITH,
+        })
+      : [];
+    const sameOwner = others.filter(
+      (o) => o.producerId === registration.producerId && o.cupId === registration.cupId
+    );
+    if (sameOwner.length !== alsoIds.length) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "Inscription non trouvée" });
+    }
+    if (by === "producer") sameOwner.forEach(assertProducerMayEditShipment);
+
+    const targets = [registration, ...sameOwner];
+    const groupId = sameOwner.length > 0 ? nanoid() : null;
+
+    // Copie de l'expédition sur chaque inscription du colis. Corriger ou
+    // annuler une seule inscription la sort de son ancien colis commun.
+    await tx
+      .update(schema.registrations)
+      .set({ ...shipment, shipmentGroupId: groupId, updatedAt: new Date() })
+      .where(inArray(schema.registrations.id, targets.map((t) => t.id)));
+
+    // Un ancien colis commun réduit à une seule inscription n'en est plus un :
+    // son lien tombe, son expédition reste.
+    const previousGroups = new Set(
+      targets.map((t) => t.shipmentGroupId).filter((g): g is string => !!g && g !== groupId)
+    );
+    for (const previous of previousGroups) {
+      const left = await tx
+        .select({ id: schema.registrations.id })
+        .from(schema.registrations)
+        .where(eq(schema.registrations.shipmentGroupId, previous));
+      if (left.length === 1) {
+        await tx
+          .update(schema.registrations)
+          .set({ shipmentGroupId: null })
+          .where(inArray(schema.registrations.id, [left[0]!.id]));
+      }
+    }
+
+    return { targets, shipmentGroupId: groupId };
+  });
 
   const who = by === "organizer" ? " (saisi par l'organisation)" : "";
   const carrier = carrierLabel(shipment.shippingCarrier);
-  void logActivity({
-    userId: ctx.userId,
-    action: "other",
-    description: input
-      ? `Colis déclaré expédié : ${registration.producer.brandName} — ${registration.cup.name}${carrier ? ` (${carrier})` : ""}${who}`
-      : `Déclaration d'expédition annulée : ${registration.producer.brandName} — ${registration.cup.name}${who}`,
-    metadata: {
-      kind: input ? "shipment_declared" : "shipment_cleared",
-      by,
-      registrationId: registration.id,
-      cupId: registration.cupId,
-      producerId: registration.producerId,
-      ...shipment,
-    },
-  });
+  const shared = targets.length > 1 ? ` — colis commun à ${targets.length} inscriptions` : "";
+  for (const target of targets) {
+    void logActivity({
+      userId: ctx.userId,
+      action: "other",
+      description: input
+        ? `Colis déclaré expédié : ${target.producer.brandName} — ${target.cup.name}${carrier ? ` (${carrier})` : ""}${shared}${who}`
+        : `Déclaration d'expédition annulée : ${target.producer.brandName} — ${target.cup.name}${who}`,
+      metadata: {
+        kind: input ? "shipment_declared" : "shipment_cleared",
+        by,
+        registrationId: target.id,
+        cupId: target.cupId,
+        producerId: target.producerId,
+        shipmentGroupId,
+        ...shipment,
+      },
+    });
+  }
 
-  return { registrationId: registration.id, ...shipment };
+  return {
+    registrationId: registration.id,
+    registrationIds: targets.map((t) => t.id),
+    shipmentGroupId,
+    ...shipment,
+  };
 }
 
 export const registrationRouter = createTRPCRouter({
@@ -904,6 +976,7 @@ export const registrationRouter = createTRPCRouter({
         shippedAt: true,
         shippingCarrier: true,
         trackingNumber: true,
+        shipmentGroupId: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -1588,24 +1661,53 @@ export const registrationRouter = createTRPCRouter({
    * ou sans expédition déclarée (colis arrivé sans prévenir).
    */
   markParcelReceived: organizerProcedure
-    .input(clearShipmentSchema)
+    .input(markParcelReceivedSchema)
     .mutation(async ({ ctx, input }) => {
       const registration = await findShipmentRegistration(ctx, input.registrationId);
 
-      const received = await ctx.db.transaction(async (tx) => {
+      const { registrationIds, received } = await ctx.db.transaction(async (tx) => {
+        // Colis commun : sur demande, ses autres inscriptions (même producteur,
+        // même cup) sont reçues en même temps.
+        const siblings =
+          input.includeSameParcel && registration.shipmentGroupId
+            ? await tx
+                .select({ id: schema.registrations.id })
+                .from(schema.registrations)
+                .where(
+                  drizzleAnd(
+                    eq(schema.registrations.shipmentGroupId, registration.shipmentGroupId),
+                    eq(schema.registrations.producerId, registration.producerId),
+                    eq(schema.registrations.cupId, registration.cupId)
+                  )
+                )
+            : [];
+        const registrationIds = [
+          registration.id,
+          ...siblings.map((s) => s.id).filter((id) => id !== registration.id),
+        ];
+
         const rows = await tx
           .update(schema.products)
           .set(productStatusChange("received"))
-          .where(parcelReceivableWhere(registration.id))
-          .returning({ id: schema.products.id, name: schema.products.name });
+          .where(parcelReceivableWhere(registrationIds))
+          .returning({
+            id: schema.products.id,
+            name: schema.products.name,
+            registrationId: schema.products.registrationId,
+          });
         if (rows.length > 0) {
           await tx.insert(schema.activityLogs).values(
             rows.map((product) =>
-              productReceivedLog({ userId: ctx.userId, product, registration, via: "parcel" })
+              productReceivedLog({
+                userId: ctx.userId,
+                product,
+                registration: { ...registration, id: product.registrationId ?? registration.id },
+                via: "parcel",
+              })
             )
           );
         }
-        return rows;
+        return { registrationIds, received: rows };
       });
 
       // Comme `product.updateStatus` : notification après l'écriture, hors
@@ -1614,7 +1716,7 @@ export const registrationRouter = createTRPCRouter({
         await notifyProductStatusChange(product.id, "pending", "received");
       }
 
-      return { registrationId: registration.id, changed: received.length };
+      return { registrationId: registration.id, registrationIds, changed: received.length };
     }),
 
   /**
@@ -1644,7 +1746,7 @@ export const registrationRouter = createTRPCRouter({
         await notifyProductStatusChange(product.id, "received", "pending");
       }
 
-      return { registrationId: registration.id, changed: reverted.length };
+      return { registrationId: registration.id, registrationIds: [registration.id], changed: reverted.length };
     }),
 
   listByCup: organizerProcedure
@@ -1717,8 +1819,26 @@ export const registrationRouter = createTRPCRouter({
       // Return registrations with computed fields
       const now = new Date();
       const deadline = samplesDeadlineEnd(cup.samplesDeadline);
+      // Colis commun : calculé sur toutes les inscriptions de la cup, avant le
+      // filtre par catégorie, pour ne pas perdre une inscription liée.
+      const parcelFacts = registrations.map((reg) => ({
+        id: reg.id,
+        producerId: reg.producerId,
+        cupId: reg.cupId,
+        competing: isCompeting(checkoutState({ ...reg, productCount: reg.products.length })),
+        productStatuses: reg.products.map((p) => p.status),
+        shipmentGroupId: reg.shipmentGroupId,
+        createdAt: reg.createdAt,
+        productCount: reg.products.length,
+      }));
+      const linked = (r: (typeof parcelFacts)[number]) => ({
+        id: r.id,
+        createdAt: r.createdAt,
+        productCount: r.productCount,
+      });
       return filteredRegistrations.map((reg) => {
         const state = checkoutState({ ...reg, productCount: reg.products.length });
+        const facts = parcelFacts.find((f) => f.id === reg.id)!;
         return {
         id: reg.id,
         status: reg.status,
@@ -1744,6 +1864,9 @@ export const registrationRouter = createTRPCRouter({
           shippedAt: reg.shippedAt,
           carrier: reg.shippingCarrier,
           trackingNumber: reg.trackingNumber,
+          groupId: reg.shipmentGroupId,
+          sameParcel: sameParcelRegistrations(facts, parcelFacts).map(linked),
+          candidates: shipmentCandidates(facts, parcelFacts).map(linked),
         },
         totalAmount: reg.totalAmount,
         currency: reg.currency,
