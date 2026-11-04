@@ -53,6 +53,7 @@ import {
   ParcelCell,
   parcelFilters,
   parcelStateConfig,
+  OrganizerParcelReceipt,
   type RegistrationShipment,
 } from "~/components/dashboard/parcel-shipment";
 
@@ -520,6 +521,11 @@ export default function CupRegistrationsPage() {
                         key={selectedRegistration.id}
                         registrationId={selectedRegistration.id}
                         shipment={selectedRegistration.shipment}
+                        onSaved={() => void handleShipmentSaved(selectedRegistration.id)}
+                      />
+                      <OrganizerParcelReceipt
+                        registrationId={selectedRegistration.id}
+                        products={selectedRegistration.products}
                         onSaved={() => void handleShipmentSaved(selectedRegistration.id)}
                       />
                     </div>

@@ -30,6 +30,7 @@ import {
   clearShipmentSchema,
   type DeclareShipmentInput,
 } from "~/lib/validations/registration";
+import { notifyProductStatusChange } from "~/server/services/product-notification.service";
 import { carrierLabel, isParcelInHands, parcelState, samplesDeadlineEnd } from "~/lib/parcel-shipment";
 import { anonymizeRegistrationProducts } from "~/server/services/anonymization.service";
 import { assertJurorMayCompete } from "~/server/api/helpers/jury";
@@ -59,6 +60,13 @@ import {
   PAYMENT_ORDER_TIMEOUT_SECONDS,
   PAYMENT_RESERVATION_MS,
 } from "~/server/services/category-quota.service";
+import {
+  parcelCancellableWhere,
+  parcelReceivableWhere,
+  productReceivedLog,
+  productStatusChange,
+  receiptCancelledLog,
+} from "~/server/services/parcel-receipt";
 
 type ProtectedContext = {
   db: typeof db;
@@ -1572,6 +1580,71 @@ export const registrationRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const registration = await findShipmentRegistration(ctx, input.registrationId);
       return saveShipment(ctx, registration, null, "organizer");
+    }),
+
+  /**
+   * L'organisation marque le colis d'une inscription comme reçu : tous les
+   * produits encore « à envoyer » passent « reçus », en une transaction, avec
+   * ou sans expédition déclarée (colis arrivé sans prévenir).
+   */
+  markParcelReceived: organizerProcedure
+    .input(clearShipmentSchema)
+    .mutation(async ({ ctx, input }) => {
+      const registration = await findShipmentRegistration(ctx, input.registrationId);
+
+      const received = await ctx.db.transaction(async (tx) => {
+        const rows = await tx
+          .update(schema.products)
+          .set(productStatusChange("received"))
+          .where(parcelReceivableWhere(registration.id))
+          .returning({ id: schema.products.id, name: schema.products.name });
+        if (rows.length > 0) {
+          await tx.insert(schema.activityLogs).values(
+            rows.map((product) =>
+              productReceivedLog({ userId: ctx.userId, product, registration, via: "parcel" })
+            )
+          );
+        }
+        return rows;
+      });
+
+      // Comme `product.updateStatus` : notification après l'écriture, hors
+      // transaction (le service relit le produit sur sa propre connexion).
+      for (const product of received) {
+        await notifyProductStatusChange(product.id, "pending", "received");
+      }
+
+      return { registrationId: registration.id, changed: received.length };
+    }),
+
+  /**
+   * Annule la réception : seuls les produits « reçus » repassent « à
+   * envoyer », jamais ceux dont la notation a commencé.
+   */
+  cancelParcelReceipt: organizerProcedure
+    .input(clearShipmentSchema)
+    .mutation(async ({ ctx, input }) => {
+      const registration = await findShipmentRegistration(ctx, input.registrationId);
+
+      const reverted = await ctx.db.transaction(async (tx) => {
+        const rows = await tx
+          .update(schema.products)
+          .set({ ...productStatusChange("pending"), receivedAt: null })
+          .where(parcelCancellableWhere(registration.id))
+          .returning({ id: schema.products.id, name: schema.products.name });
+        if (rows.length > 0) {
+          await tx.insert(schema.activityLogs).values(
+            rows.map((product) => receiptCancelledLog({ userId: ctx.userId, product, registration }))
+          );
+        }
+        return rows;
+      });
+
+      for (const product of reverted) {
+        await notifyProductStatusChange(product.id, "received", "pending");
+      }
+
+      return { registrationId: registration.id, changed: reverted.length };
     }),
 
   listByCup: organizerProcedure

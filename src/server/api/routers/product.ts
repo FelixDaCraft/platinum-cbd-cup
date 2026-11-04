@@ -17,7 +17,8 @@ import {
   generateBatchQRCodes,
   type QRCodeType,
 } from "~/server/services/qrcode.service";
-import { products, labAnalyses } from "~/server/db/schema";
+import { products, labAnalyses, activityLogs } from "~/server/db/schema";
+import { productReceivedLog, productStatusChange } from "~/server/services/parcel-receipt";
 import { notifyProductStatusChange } from "~/server/services/product-notification.service";
 import type { StoredCompoundRow } from "~/server/db/schema/lab-analyses";
 import { juryPanelEnum } from "~/lib/enums";
@@ -545,7 +546,16 @@ export const productRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const product = await ctx.db.query.products.findFirst({
         where: (p, { eq: eqFn }) => eqFn(p.id, input.productId),
-        columns: { id: true, status: true },
+        columns: { id: true, name: true, status: true },
+        with: {
+          registration: {
+            columns: { id: true, cupId: true, producerId: true },
+            with: {
+              cup: { columns: { name: true } },
+              producer: { columns: { brandName: true } },
+            },
+          },
+        },
       });
 
       if (!product) {
@@ -555,26 +565,26 @@ export const productRouter = createTRPCRouter({
         });
       }
 
-      // 3. Update product status
-      const updateData: {
-        status: typeof input.status;
-        updatedAt: Date;
-        receivedAt?: Date;
-      } = {
-        status: input.status,
-        updatedAt: new Date(),
-      };
-
-      // Set receivedAt timestamp when marking as received
-      if (input.status === "received") {
-        updateData.receivedAt = new Date();
-      }
-
-      const [updated] = await ctx.db
-        .update(products)
-        .set(updateData)
-        .where(eq(products.id, input.productId))
-        .returning();
+      // Statut (et date de réception) et journal dans la même transaction :
+      // même logique que la réception d'un colis entier (parcel-receipt).
+      const updated = await ctx.db.transaction(async (tx) => {
+        const [row] = await tx
+          .update(products)
+          .set(productStatusChange(input.status))
+          .where(eq(products.id, input.productId))
+          .returning();
+        if (input.status === "received" && product.status !== "received") {
+          await tx.insert(activityLogs).values(
+            productReceivedLog({
+              userId: ctx.userId,
+              product,
+              registration: product.registration,
+              via: "product",
+            })
+          );
+        }
+        return row;
+      });
 
       // Notification au producteur, hors transaction et après l'écriture :
       // le service relit le produit sur sa propre connexion (il verrait encore

@@ -4,6 +4,17 @@ import { useState } from "react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "~/components/ui/alert-dialog";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import {
@@ -298,5 +309,108 @@ export function OrganizerShipmentForm({
         </Button>
       </div>
     </form>
+  );
+}
+
+/**
+ * Réception du colis entier par l'organisation, quand il arrive (déclaré ou
+ * non) : tous les produits encore « à envoyer » passent « reçus ».
+ * L'annulation ne remet « à envoyer » que les produits reçus dont la
+ * notation n'a pas commencé (le serveur en décide).
+ */
+export function OrganizerParcelReceipt({
+  registrationId,
+  products,
+  onSaved,
+}: {
+  registrationId: string;
+  products: { status: string }[];
+  onSaved: () => void;
+}) {
+  const pending = products.filter((p) => p.status === "pending").length;
+  const received = products.filter((p) => p.status === "received").length;
+
+  const markReceived = api.registration.markParcelReceived.useMutation({
+    onSuccess: ({ changed }) => {
+      toast.success(
+        changed > 0
+          ? `Colis reçu : ${changed} produit${changed > 1 ? "s" : ""} marqué${changed > 1 ? "s" : ""} reçu${changed > 1 ? "s" : ""}`
+          : "Aucun produit à recevoir"
+      );
+      onSaved();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+  const cancelReceipt = api.registration.cancelParcelReceipt.useMutation({
+    onSuccess: ({ changed }) => {
+      toast.success(
+        changed > 0
+          ? `Réception annulée : ${changed} produit${changed > 1 ? "s" : ""} remis « à envoyer »`
+          : "Rien à annuler : la notation a commencé pour ces produits"
+      );
+      onSaved();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const busy = markReceived.isPending || cancelReceipt.isPending;
+  if (pending === 0 && received === 0) return null;
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {pending > 0 && (
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button size="sm" disabled={busy}>
+              {markReceived.isPending ? "Enregistrement…" : "Marquer le colis comme reçu"}
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="n-font-body font-bold" style={{ color: "var(--n-text-display)" }}>
+                Marquer le colis comme reçu ?
+              </AlertDialogTitle>
+              <AlertDialogDescription className="n-label" style={{ color: "var(--n-text-secondary)" }}>
+                {pending} produit{pending > 1 ? "s" : ""} « à envoyer » passer{pending > 1 ? "ont" : "a"} « reçu »,
+                avec la date de réception d&apos;aujourd&apos;hui. Le producteur est prévenu par e-mail
+                s&apos;il l&apos;a accepté. Aucune déclaration d&apos;expédition n&apos;est nécessaire.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel className="n-label">Annuler</AlertDialogCancel>
+              <AlertDialogAction onClick={() => markReceived.mutate({ registrationId })}>
+                Confirmer la réception
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
+      {received > 0 && (
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button variant="ghost" size="sm" disabled={busy} style={{ color: "var(--n-text-secondary)" }}>
+              {cancelReceipt.isPending ? "Annulation…" : "Annuler la réception"}
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="n-font-body font-bold" style={{ color: "var(--n-text-display)" }}>
+                Annuler la réception du colis ?
+              </AlertDialogTitle>
+              <AlertDialogDescription className="n-label" style={{ color: "var(--n-text-secondary)" }}>
+                Les produits « reçus » repassent « à envoyer » et perdent leur date de réception. Les produits
+                dont la notation a commencé ne sont pas touchés.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel className="n-label">Garder la réception</AlertDialogCancel>
+              <AlertDialogAction onClick={() => cancelReceipt.mutate({ registrationId })}>
+                Annuler la réception
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
+    </div>
   );
 }
